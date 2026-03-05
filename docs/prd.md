@@ -198,7 +198,8 @@ Phase 4:
 
 - ワークフローとActivityの単体テスト可能
 - テスト用モックActivity実行環境
-- testcontainersでPostgreSQL起動（adapter/postgres/, adapter/grpc/ の両パッケージで使用）
+- testcontainersでPostgreSQL起動（adapter/postgres/, adapter/grpc/, test/e2e/ の各パッケージで使用）
+- E2Eテスト: bufconn経由の実gRPCスタックでワーカー動作をシミュレートし、全主要シナリオを検証
 - CI: GitHub Actions（go vet, go build, go test -race, アーキテクチャ制約チェック）
 
 ### 多言語対応

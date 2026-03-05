@@ -215,19 +215,55 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 - [x] `go list -f '{{ join .Imports "\n" }}' ./internal/adapter/grpc/` に engine がないことを確認
 - [x] CI設定が正しいYAML構造であることを確認
 
+### E2Eテスト（サーバー単体）
+
+ステータス: `完了`
+
+ゴール: Go SDK未完成の段階で、生gRPCクライアントによるワーカーシミュレーションでサーバーMVPの全主要シナリオをE2E検証する
+
+ブランチ: `feature/e2e`
+
+設計判断:
+
+- bufconn使用: `google.golang.org/grpc/test/bufconn` でポート競合なし・高速なgRPCスタック経由テスト（既存インテグレーションテストはハンドラ直接呼び出し）
+- BackgroundWorker高速化: timeout_checker=500ms, task_recovery=2s（本番は5s/10s）
+- テスト分離: 各テストで `truncateAll()` 実行、Sequential実行（t.Parallel()不使用）
+- ワーカーシミュレーション: `pollWorkflowTaskUntil` / `pollActivityTaskUntil` ヘルパーで共通化
+
+タスク:
+
+- [x] test/e2e/setup_test.go — TestMain（testcontainers postgres + bufconn gRPCサーバー + BackgroundWorker）、ヘルパー関数群
+- [x] test/e2e/sequential_activity_test.go（シナリオ1,2）
+  - TestE2E_ThreeStepSequentialActivity: 3ステップActivity順次実行 → COMPLETED、8イベント検証
+  - TestE2E_ResultRetrieval: CompleteWorkflow結果が DescribeWorkflow で取得できること
+- [x] test/e2e/terminate_test.go（シナリオ8,9）
+  - TestE2E_TerminateRunningWorkflow: Activity中のTerminate → TERMINATED + 履歴イベント確認
+  - TestE2E_TerminatedActivityResultDiscarded: Terminate後のActivity完了が破棄、WT再発行なし
+- [x] test/e2e/nondeterminism_test.go（シナリオ10）
+  - TestE2E_NonDeterminismFailWorkflowTask: replay時FailWorkflowTask → FAILED + WorkflowExecutionFailed イベント
+- [x] test/e2e/retry_test.go（シナリオ5,6）
+  - TestE2E_ActivityRetry: 3回リトライ（attempt 1,2 fail → attempt 3 complete） → COMPLETED
+  - TestE2E_NonRetryableFailure: non_retryable=true で即座にActivityTaskFailed → FailWorkflow → FAILED
+- [x] test/e2e/replay_test.go（シナリオ3）
+  - TestE2E_WorkerRestartReplay: WT取得後未完了 → ロック失効 → RunTaskRecovery回復 → 別ワーカーがreplay（全履歴確認） → COMPLETED
+- [x] test/e2e/concurrent_poll_test.go（シナリオ4）
+  - TestE2E_MultipleWorkersNoDuplicate: 5ワークフロー × 3ワーカー並行Poll → 重複なし（SKIP LOCKED検証）
+- [x] test/e2e/timeout_test.go（シナリオ7）
+  - TestE2E_ActivityTimeout: start_to_close_timeout=1s → Activity未完了 → BackgroundWorkerがActivityTaskTimedOut検知 → 新WT発行
+
+完了条件:
+
+- [x] `go test -v -race -count=1 ./test/e2e/...` — 10テスト全通過
+- [x] `go test -v -race ./...` — 既存テスト含め全通過（engine 35 + postgres 41 + grpc 18 + e2e 10 = 104テスト）
+- [x] `go build ./cmd/dandori` — ビルド成功
+- [x] `go vet ./...` — クリーン
+
 ### E2E検証（Go SDKリポジトリと合同）
 
-Sprint 5完了後、Go SDKリポジトリの開発と合わせてE2E検証を実施する:
+Go SDKリポジトリの開発完了後、SDK経由でのE2E検証を実施する:
 
-- サーバー + ワーカー起動でサンプルワークフロー（3ステップ順次Activity）が完了する
 - client.ExecuteWorkflow → WorkflowRun.Get() で結果が取得できる
-- ワーカー強制停止 → 再起動でreplayが正しく動作する
-- 複数ワーカー起動でタスク重複実行が起きない
-- Activity失敗時のリトライが正しく動作する（non_retryable=trueで即座に失敗）
-- Activityタイムアウトが検知されてワークフローに通知される
-- TerminateWorkflowで実行中ワークフローが即座に終了する
-- TERMINATED後のActivity完了が正しく破棄される
-- ワークフロー関数変更後のreplayで非決定性エラーがFailWorkflowTaskで報告される
+- SDK経由のdeterministic replayが正しく動作する
 
 ---
 

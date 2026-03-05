@@ -115,6 +115,16 @@ dandori/
 │   └── port/                                 # ポート定義（インターフェース）
 │       ├── service.go                        # Inbound Port: 役割別インターフェース
 │       └── repository.go                     # Outbound Port: 各Repository, TxManager
+├── test/
+│   └── e2e/                                  # E2Eテスト（bufconn gRPC + testcontainers）
+│       ├── setup_test.go                     # TestMain, bufconn server, helpers
+│       ├── sequential_activity_test.go       # 3ステップActivity + 結果取得
+│       ├── replay_test.go                    # ワーカー再起動replay
+│       ├── concurrent_poll_test.go           # 複数ワーカー重複なし
+│       ├── retry_test.go                     # リトライ + non_retryable
+│       ├── timeout_test.go                   # Activityタイムアウト
+│       ├── terminate_test.go                 # Terminate + 結果破棄
+│       └── nondeterminism_test.go            # 非決定性エラー
 ├── docker-compose.yml
 └── go.mod
 ```
@@ -1470,6 +1480,7 @@ MVPではDescribeWorkflowのポーリングで実現する。
 | ユニットテスト | adapter/grpc (grpc_test) | モックサービスによるハンドラ・エラーマッピング検証 | 11 |
 | インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 41 |
 | インテグレーションテスト | adapter/grpc (grpc_test) | testcontainers + Engine + PostgreSQL Storeの実スタック検証 | 7 |
+| E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + testcontainers + BackgroundWorker による全主要シナリオ検証 | 10 |
 
 ### テストパターン
 
@@ -1491,7 +1502,11 @@ adapter/postgres/ と adapter/grpc/ の両方でTestMainを使い、postgres:16-
 
 **gRPCテストのアプローチ:**
 
-bufconn（gRPCトランスポート層テスト）は不使用。ハンドラメソッドを直接呼び出すことで、トランスポート層のオーバーヘッドなしにビジネスロジックの検証に集中する。全テストを `grpc_test` 外部テストパッケージに統一し、TestMainを1つに保つ。domainErrorToGRPC（unexported）はハンドラメソッド経由で間接テストする。
+adapter/grpc/ のインテグレーションテストではbufconn不使用。ハンドラメソッドを直接呼び出すことで、トランスポート層のオーバーヘッドなしにビジネスロジックの検証に集中する。全テストを `grpc_test` 外部テストパッケージに統一し、TestMainを1つに保つ。domainErrorToGRPC（unexported）はハンドラメソッド経由で間接テストする。
+
+**E2Eテストのアプローチ:**
+
+test/e2e/ では `google.golang.org/grpc/test/bufconn` を使い、実際のgRPCトランスポートスタック（シリアライズ/デシリアライズ、ステータスコード変換）を経由してテストする。Go SDK未完成の段階で、生gRPCクライアント（`apiv1.DandoriServiceClient`）によるワーカー動作シミュレーションで全主要シナリオを検証する。BackgroundWorker（timeout_checker=500ms, task_recovery=2s）もgoroutineで起動し、タイムアウト検知やタスク回復も含めた統合動作を確認する。各テストは `truncateAll()` でテーブルを初期化し、Sequential実行で分離する。
 
 **Advisory Lockテスト:**
 
@@ -1503,7 +1518,7 @@ bufconn（gRPCトランスポート層テスト）は不使用。ハンドラメ
 # .github/workflows/ci.yml
 - go vet ./...          # 静的解析
 - go build ./cmd/dandori # ビルド確認
-- go test -v -race -count=1 ./...  # 全テスト（race detector有効）
+- go test -v -race -count=1 ./...  # 全テスト（ユニット + インテグレーション + E2E、race detector有効）
 - アーキテクチャ制約チェック: adapter/grpc/ が engine/ をimportしていないことを検証
 ```
 
@@ -1518,7 +1533,8 @@ bufconn（gRPCトランスポート層テスト）は不使用。ハンドラメ
 5. engine/: Engine（3つのInbound Port実装）、CommandProcessor、BackgroundWorker（別構造体）
 6. adapter/grpc/: gRPCハンドラ（役割別インターフェース受取、domainErrorToGRPC）
 7. cmd/dandori/: DI、サーバー起動、BackgroundWorker起動、graceful shutdown
-8. テスト
+8. ユニットテスト + インテグレーションテスト
+9. E2Eテスト: bufconn gRPC + testcontainers + BackgroundWorkerによる全主要シナリオ検証（10テスト）
 
 ### Go SDK
 
