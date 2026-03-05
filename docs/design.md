@@ -1460,7 +1460,54 @@ Workflow Task処理完了時にcontextをcancelし、goroutineを適切に終了
 
 MVPではDescribeWorkflowのポーリングで実現する。
 
-## 10. Phase 1 MVPの実装ステップ
+## 10. テスト戦略
+
+### テスト構成
+
+| テスト層 | パッケージ | テスト内容 | テスト数 |
+|---------|-----------|-----------|---------|
+| ユニットテスト | engine | モック構造体によるビジネスロジック検証 | 35 |
+| ユニットテスト | adapter/grpc (grpc_test) | モックサービスによるハンドラ・エラーマッピング検証 | 11 |
+| インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 41 |
+| インテグレーションテスト | adapter/grpc (grpc_test) | testcontainers + Engine + PostgreSQL Storeの実スタック検証 | 7 |
+
+### テストパターン
+
+**モック構造体（関数フィールド型）:**
+
+engine/ と adapter/grpc/ の両方で同一パターンを使用する。インターフェースの各メソッドに対応する関数フィールドを持ち、nil時はデフォルト値を返す。
+
+```go
+type mockClientService struct {
+    StartWorkflowFn    func(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error)
+    DescribeWorkflowFn func(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
+    // ...
+}
+```
+
+**testcontainersパターン:**
+
+adapter/postgres/ と adapter/grpc/ の両方でTestMainを使い、postgres:16-alpineコンテナを起動する。adapter/grpc/ のTestMainでは postgres.RunMigrations() を再利用し、newTestHandler() で postgres.New → engine.New → grpc.NewHandler のDIを組み立てる。
+
+**gRPCテストのアプローチ:**
+
+bufconn（gRPCトランスポート層テスト）は不使用。ハンドラメソッドを直接呼び出すことで、トランスポート層のオーバーヘッドなしにビジネスロジックの検証に集中する。全テストを `grpc_test` 外部テストパッケージに統一し、TestMainを1つに保つ。domainErrorToGRPC（unexported）はハンドラメソッド経由で間接テストする。
+
+**Advisory Lockテスト:**
+
+同一ワークフローのWorkflow Task処理が直列化されることを、並行goroutine + time.Sleep(200ms) + タイムスタンプ比較で検証する。異なるワークフローのtaskが並行実行可能なことは総実行時間で検証する。
+
+### CI（GitHub Actions）
+
+```yaml
+# .github/workflows/ci.yml
+- go vet ./...          # 静的解析
+- go build ./cmd/dandori # ビルド確認
+- go test -v -race -count=1 ./...  # 全テスト（race detector有効）
+- アーキテクチャ制約チェック: adapter/grpc/ が engine/ をimportしていないことを検証
+```
+
+## 11. Phase 1 MVPの実装ステップ
 
 ### サーバー
 

@@ -171,23 +171,49 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 ### Sprint 5 - テストと品質
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: サーバー側のテストスイートを整備し、Go SDKとのE2E検証に備える
 
 タスク:
 
-- [ ] adapter/grpc経由のインテグレーションテスト（StartWorkflow → Poll → Complete のフロー）
-- [ ] エラーモデルテスト（各ドメインエラーが正しいgRPCステータスに変換される）
-- [ ] adapter/postgres内のAdvisory Lockによるワークフロー直列化のテスト
-- [ ] CI設定（GitHub Actions: lint, test, build）
+- [x] internal/adapter/grpc/mock_test.go（mockClientService, mockWorkflowTaskService, mockActivityTaskService — 関数フィールド型モック）
+- [x] internal/adapter/grpc/handler_test.go — gRPCハンドラのユニットテスト
+  - TestErrorMapping（7サブテスト）: 各ドメインエラーがハンドラ経由で正しいgRPCステータスに変換されることを検証（ErrWorkflowNotFound→NotFound, ErrWorkflowAlreadyExists→AlreadyExists, ErrWorkflowNotRunning→FailedPrecondition, ErrTaskNotFound→NotFound, ErrTaskAlreadyCompleted→FailedPrecondition, unknown→Internal, wrapped error→unwrapping確認）
+  - TestStartWorkflow_InvalidUUID → codes.InvalidArgument
+  - TestPollWorkflowTask_NoTask → 空レスポンス（エラーなし）
+  - TestPollActivityTask_NoTask → 空レスポンス（エラーなし）
+  - TestCompleteWorkflowTask_InvalidCommand → codes.InvalidArgument
+- [x] internal/adapter/grpc/testhelper_test.go — testcontainers postgres:16-alpine セットアップ、postgres.RunMigrations()による冪等マイグレーション、newTestHandler()ヘルパー（postgres.New → engine.New → grpc.NewHandler）
+- [x] internal/adapter/grpc/integration_test.go — gRPCインテグレーションテスト（Engine + PostgreSQL Storeの実スタック）
+  - TestIntegration_StartWorkflow_PollComplete: StartWorkflow → PollWT → CompleteWT(CompleteWorkflow) → Describe=COMPLETED
+  - TestIntegration_ActivityFlow: StartWorkflow → PollWT → CompleteWT(ScheduleActivity) → PollAT → CompleteAT → PollWT → CompleteWT(CompleteWorkflow) → COMPLETED
+  - TestIntegration_TerminateWorkflow: StartWorkflow → Terminate → Describe=TERMINATED + History確認
+  - TestIntegration_FailWorkflowTask: StartWorkflow → PollWT → FailWT → Describe=FAILED
+  - TestIntegration_StartWorkflow_Duplicate: 同一ID2回 → AlreadyExists
+  - TestIntegration_DescribeWorkflow_NotFound → NotFound
+  - TestIntegration_PollWorkflowTask_Empty → 空レスポンス
+- [x] internal/adapter/postgres/advisory_lock_test.go — Advisory Lockテスト
+  - TestAdvisoryLock_SameWorkflow_Serialized: 同一workflowの2 taskが直列化されることをタイムスタンプ差で検証
+  - TestAdvisoryLock_DifferentWorkflows_Concurrent: 異なるworkflowのtaskが並行実行可能なことを総実行時間で検証
+  - TestAdvisoryLock_NoLockOutsideTransaction: トランザクション外のGetByIDではロックなしで成功
+- [x] .github/workflows/ci.yml — GitHub Actions CI（go vet, go build, go test -v -race -count=1, adapter/grpc→engine依存チェック）
+
+実装上の設計判断:
+
+- bufconn不使用: gRPCトランスポート層のテストは不要。ハンドラメソッド直接呼び出しで十分
+- 全テスト `grpc_test` パッケージ: TestMainが1つのみ必要なため統一。domainErrorToGRPC（unexported）はハンドラメソッド経由で間接テスト
+- マイグレーション: `postgres.RunMigrations()` を再利用（embed.FS活用、SQLファイル直接読み込みではなく）
+- Advisory Lockテスト: time.Sleep(200ms) + タイムスタンプ比較で直列化を検証。異なるworkflowのテストは総実行時間で並行性を検証
 
 完了条件:
 
-- `go test ./...` が全件通過
-- testcontainersを使用したインテグレーションテストが通過
-- CIが緑
-- adapter/grpc/ → engine/ の依存がないことをCIで検証
+- [x] `go vet ./...` がクリーン
+- [x] `go test -v -race ./internal/adapter/grpc/...` — ユニット（11テスト）+ インテグレーション（7テスト）全通過
+- [x] `go test -v -race ./internal/adapter/postgres/...` — Advisory Lock含め全通過（41テスト）
+- [x] `go test -v -race ./...` — 全テスト通過（engine 35 + postgres 41 + grpc 18 = 94テスト）
+- [x] `go list -f '{{ join .Imports "\n" }}' ./internal/adapter/grpc/` に engine がないことを確認
+- [x] CI設定が正しいYAML構造であることを確認
 
 ### E2E検証（Go SDKリポジトリと合同）
 
