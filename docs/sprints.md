@@ -27,16 +27,22 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 - [ ] go mod init, .gitignore
 - [ ] docker-compose.yml（PostgreSQL）
-- [ ] api/v1/service.proto, types.proto の定義
+- [ ] api/v1/service.proto の定義（全10メソッド: StartWorkflow, DescribeWorkflow, GetWorkflowHistory, TerminateWorkflow, PollWorkflowTask, CompleteWorkflowTask, FailWorkflowTask, PollActivityTask, CompleteActivityTask, FailActivityTask）
+- [ ] api/v1/types.proto の定義（HistoryEvent, Command, FailActivityTaskRequest に non_retryable/error_type 含む）
 - [ ] protoc-gen-goによるコード生成の確認
-- [ ] internal/adapter/postgres/migration/000001_initial.up.sql（4テーブル作成）
+- [ ] internal/adapter/postgres/migration/000001_initial.up.sql
+  - workflow_executions テーブル
+  - workflow_events テーブル（UNIQUE(workflow_id, sequence_num)）
+  - workflow_tasks テーブル（Workflow Task専用）
+  - activity_tasks テーブル（Activity Task専用、timeout_at/start_to_close_timeout/retry_policy カラム含む）
+  - timers テーブル
 - [ ] internal/adapter/postgres/migration/000001_initial.down.sql
 - [ ] golang-migrateでマイグレーション実行確認
 
 完了条件:
 
-- PostgreSQLが起動し、マイグレーションが通る
-- gRPCコードが生成される
+- PostgreSQLが起動し、マイグレーションが通る（5テーブル作成）
+- gRPCコードが生成される（全10メソッド分）
 - `go build ./cmd/dandori` でサーバーバイナリがビルドできる
 
 ### Sprint 2 - ドメインモデルとストア層
@@ -47,13 +53,21 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 タスク:
 
-- [ ] internal/domain/ の型定義（Event, Command, Task, Timer, WorkflowExecution）
-- [ ] internal/port/service.go（Inbound Port: WorkflowService, StartWorkflowParams, WorkflowTask）
-- [ ] internal/port/repository.go（Outbound Port: WorkflowRepository, EventRepository, TaskRepository, TimerRepository, TxManager）
-- [ ] internal/adapter/postgres/store.go（コネクションプール、TxManager、context経由のトランザクション伝搬）
-- [ ] internal/adapter/postgres/event.go（Append, GetByWorkflowID, GetNextSequenceNum）
-- [ ] internal/adapter/postgres/task.go（Enqueue, Poll with SKIP LOCKED, Complete）
-- [ ] internal/adapter/postgres/workflow.go（Create, Get, UpdateStatus）
+- [ ] internal/domain/errors.go（ErrWorkflowNotFound, ErrWorkflowAlreadyExists, ErrWorkflowNotRunning, ErrTaskNotFound, ErrTaskAlreadyCompleted, ErrNoTaskAvailable）
+- [ ] internal/domain/event.go（EventType定数: Started, Completed, Failed, Terminated, ActivityScheduled, ActivityCompleted, ActivityFailed, ActivityTimedOut）
+- [ ] internal/domain/command.go（CommandType定数、ScheduleActivityTaskAttributes に RetryPolicy/StartToCloseTimeout、CompleteWorkflowAttributes, FailWorkflowAttributes）
+- [ ] internal/domain/retry.go（RetryPolicy: MaxAttempts, InitialInterval, BackoffCoefficient, MaxInterval）
+- [ ] internal/domain/task.go（WorkflowTask, ActivityTask を別型で定義、TaskStatus、ActivityFailure）
+- [ ] internal/domain/workflow.go（WorkflowStatus に TERMINATED、IsTerminal()メソッド）
+- [ ] internal/domain/timer.go
+- [ ] internal/port/service.go（役割別 Inbound Port: ClientService, WorkflowTaskService, ActivityTaskService）
+- [ ] internal/port/repository.go（Outbound Port: WorkflowRepository, EventRepository, WorkflowTaskRepository, ActivityTaskRepository, TimerRepository, TxManager）
+- [ ] internal/adapter/postgres/store.go（コネクションプール、TxManager、context経由のトランザクション伝搬、Workflows()/Events()/WorkflowTasks()/ActivityTasks()/Timers() ファクトリメソッド）
+- [ ] internal/adapter/postgres/event.go（Append で sequence_num を自動採番、GetByWorkflowID）
+- [ ] internal/adapter/postgres/workflow_task.go（Enqueue, Poll with SKIP LOCKED, Complete, GetByID, RecoverStaleTasks）
+- [ ] internal/adapter/postgres/activity_task.go（Enqueue, Poll with SKIP LOCKED + timeout_at 設定, Complete, GetByID, GetTimedOut, Requeue, RecoverStaleTasks）
+- [ ] internal/adapter/postgres/workflow.go（Create, Get で ErrWorkflowNotFound 返却, UpdateStatus）
+- [ ] internal/adapter/postgres/timer.go（Create, GetFired, MarkFired）
 - [ ] adapter/postgres/のユニットテスト（testcontainers-go）
 
 完了条件:
@@ -61,6 +75,9 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 - testcontainersでPostgreSQLを起動し、全リポジトリのCRUD操作がテスト通過
 - TxManagerで複数リポジトリ操作が1トランザクションで実行されることを確認
 - SKIP LOCKEDによるタスク取得の排他制御をテストで確認
+- 存在しないワークフローでErrWorkflowNotFoundが返ることを確認
+- タスクなし時にErrNoTaskAvailableが返ることを確認
+- timeout_atがActivity Task取得時に正しく設定されることを確認
 
 ### Sprint 3 - Engineとコマンドプロセッサ
 
@@ -70,16 +87,30 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 タスク:
 
-- [ ] internal/engine/engine.go（port.WorkflowServiceを実装するEngine struct、StartWorkflow, GetWorkflow, CompleteWorkflowTask, CompleteActivityTask, FailActivityTask）
-- [ ] internal/engine/command_processor.go（ScheduleActivityTask, CompleteWorkflow, FailWorkflowの処理）
-- [ ] internal/engine/retry.go（固定間隔リトライポリシー）
+- [ ] internal/engine/engine.go
+  - port.ClientService 実装: StartWorkflow（冪等性チェック + ID自動生成）、DescribeWorkflow、TerminateWorkflow（状態チェック + ErrWorkflowNotRunning）、GetWorkflowHistory
+  - port.WorkflowTaskService 実装: PollWorkflowTask、CompleteWorkflowTask（Advisory Lock + taskID→workflowID解決）、FailWorkflowTask
+  - port.ActivityTaskService 実装: PollActivityTask、CompleteActivityTask（ワークフロー状態チェック）、FailActivityTask（non_retryable + リトライ判定 + ワークフロー状態チェック）
+  - var _ port.ClientService = (*Engine)(nil) 等のコンパイル時保証
+- [ ] internal/engine/command_processor.go
+  - processScheduleActivity: TaskQueue未指定時にワークフローのTaskQueueを使用、RetryPolicy/Timeout伝搬
+  - processCompleteWorkflow, processFailWorkflow
+  - 未知のCommandTypeでエラーを返す
+- [ ] internal/engine/background.go（BackgroundWorker: RunActivityTimeoutChecker, RunTaskRecovery。Engineとは別構造体）
+- [ ] internal/engine/retry.go（固定間隔リトライ、computeNextRetryTime）
 - [ ] engineのユニットテスト（port/のインターフェースをモックしてロジックを検証）
 
 完了条件:
 
-- StartWorkflowでイベント記録 + タスク投入が1トランザクションで実行される
-- CompleteWorkflowTaskでコマンド→イベント変換 + タスク生成が正しく動作する
-- リトライポリシーのロジックがテスト通過
+- StartWorkflowで冪等性チェック + イベント記録 + タスク投入が1トランザクションで実行される
+- 同一IDで2回StartWorkflow → ErrWorkflowAlreadyExists
+- 終了済みIDで再度StartWorkflow → 新規作成成功
+- TerminateWorkflowで状態チェック → RUNNING以外は ErrWorkflowNotRunning
+- CompleteWorkflowTaskでtaskIDからworkflowIDを解決し、コマンド→イベント変換が正しく動作する
+- CompleteActivityTaskでワークフローがTERMINATED済みの場合、結果が破棄されタスクだけ完了する
+- FailActivityTaskでnon_retryable=trueの場合は即座にActivityTaskFailed
+- FailActivityTaskでリトライ可能な場合はRequeueされる
+- BackgroundWorkerのRunActivityTimeoutCheckerのロジックがテスト通過
 
 ### Sprint 4 - gRPCハンドラとサーバー起動
 
@@ -89,18 +120,27 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 タスク:
 
-- [ ] internal/adapter/grpc/handler.go（proto型 ↔ domain型の変換、port.WorkflowServiceインターフェース経由で委譲）
-- [ ] cmd/dandori/main.go（DI: adapter/postgres → engine → port.WorkflowService → adapter/grpc、gRPCサーバー起動、graceful shutdown）
-- [ ] PollWorkflowTask（イベント履歴を添付して返す）
-- [ ] PollActivityTask
-- [ ] GetWorkflowHistory
+- [ ] internal/adapter/grpc/handler.go
+  - NewHandler(client, wfTask, actTask) で役割別インターフェースを受け取る
+  - domainErrorToGRPC() でドメインエラー→gRPCステータス変換を一元化（engine/に依存しない）
+  - 全11メソッドのハンドラ実装
+  - PollWorkflowTask: ErrNoTaskAvailable → 空レスポンス（エラーではない）
+- [ ] cmd/dandori/main.go
+  - DI: adapter/postgres → engine.New + engine.NewBackgroundWorker → adapter/grpc.NewHandler(eng, eng, eng)
+  - gRPCサーバー起動
+  - BackgroundWorker.RunActivityTimeoutChecker, RunTaskRecovery をgoroutineで起動
+  - graceful shutdown（context cancel → バックグラウンド停止 → gRPC停止）
 - [ ] gRPCurlで全APIの動作確認
 
 完了条件:
 
-- サーバーが起動し、gRPCurlでStartWorkflow → GetWorkflowExecutionが動作する
-- PollWorkflowTaskでイベント履歴付きのWorkflow Taskが取得できる
-- CompleteActivityTask後にWorkflow Taskが自動生成される
+- サーバーが起動し、gRPCurlでStartWorkflow → DescribeWorkflowが動作する
+- 同一IDでStartWorkflow 2回 → ALREADY_EXISTS (gRPC)
+- 存在しないIDでDescribeWorkflow → NOT_FOUND (gRPC)
+- COMPLETED状態のWFにTerminateWorkflow → FAILED_PRECONDITION (gRPC)
+- PollWorkflowTaskでタスクなし → 空レスポンス（エラーなし）
+- FailWorkflowTask, FailActivityTask（non_retryable含む）が正常に動作する
+- adapter/grpc/ が engine/ を import していないことを確認
 
 ### Sprint 5 - テストと品質
 
@@ -111,8 +151,12 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 タスク:
 
 - [ ] adapter/grpc経由のインテグレーションテスト（StartWorkflow → Poll → Complete のフロー）
-- [ ] engine/command_processorのエッジケーステスト
-- [ ] engine/retryのテスト（成功、全リトライ失敗）
+- [ ] engine/command_processorのエッジケーステスト（RetryPolicy伝搬、TaskQueue未指定時のフォールバック、未知のコマンドタイプ）
+- [ ] engine/retryのテスト（成功、全リトライ失敗、non_retryableで即座に失敗）
+- [ ] engine/backgroundのテスト（ActivityTimeoutCheckerがtimeout_at超過を検知）
+- [ ] ワークフロー状態遷移テスト（TERMINATED後のCompleteActivityTask → 結果破棄）
+- [ ] StartWorkflow冪等性テスト（同一ID + RUNNING → エラー、同一ID + COMPLETED → 新規作成OK）
+- [ ] エラーモデルテスト（各ドメインエラーが正しいgRPCステータスに変換される）
 - [ ] adapter/postgres内のAdvisory Lockによるワークフロー直列化のテスト
 - [ ] CI設定（GitHub Actions: lint, test, build）
 
@@ -121,14 +165,21 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 - `go test ./...` が全件通過
 - testcontainersを使用したインテグレーションテストが通過
 - CIが緑
+- adapter/grpc/ → engine/ の依存がないことをCIで検証
 
 ### E2E検証（Go SDKリポジトリと合同）
 
 Sprint 5完了後、Go SDKリポジトリの開発と合わせてE2E検証を実施する:
 
 - サーバー + ワーカー起動でサンプルワークフロー（3ステップ順次Activity）が完了する
+- client.ExecuteWorkflow → WorkflowRun.Get() で結果が取得できる
 - ワーカー強制停止 → 再起動でreplayが正しく動作する
 - 複数ワーカー起動でタスク重複実行が起きない
+- Activity失敗時のリトライが正しく動作する（non_retryable=trueで即座に失敗）
+- Activityタイムアウトが検知されてワークフローに通知される
+- TerminateWorkflowで実行中ワークフローが即座に終了する
+- TERMINATED後のActivity完了が正しく破棄される
+- ワークフロー関数変更後のreplayで非決定性エラーがFailWorkflowTaskで報告される
 
 ---
 
@@ -139,9 +190,9 @@ Sprint構成はPhase 1完了後に詳細化する。想定Sprint:
 - Sprint 6: Timer / Sleep
 - Sprint 7: Signal / Channel
 - Sprint 8: 並行Activity対応（サーバー側）
-- Sprint 9: ワークフローキャンセル、ハートビート
+- Sprint 9: ワークフローキャンセル（CancelWorkflow API）、ハートビート（RecordActivityHeartbeat API）
 - Sprint 10: LISTEN/NOTIFY、sticky execution対応
-- Sprint 11: CLIツール、構造化ログ整備
+- Sprint 11: CLIツール、ListWorkflows API、構造化ログ整備
 
 ## Phase 3: 高度な機能
 

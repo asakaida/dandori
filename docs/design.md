@@ -6,16 +6,16 @@
 
 ```text
 Client (Go SDK / CLI)
-    │
-    │ gRPC
-    ▼
+    |
+    | gRPC
+    v
 dandori-server (本リポジトリ)
-    │
-    │ PostgreSQL
-    ▼
+    |
+    | PostgreSQL
+    v
 PostgreSQL
-    │
-    ▼
+    |
+    v
 dandori-worker (Go SDK側で実装, 1..N instances)
 ```
 
@@ -27,7 +27,8 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 2. ワーカーから返されたコマンドの処理（コマンド→イベント変換）
 3. タスクキューの管理（Workflow Task + Activity Taskの2種類）
 4. タイマーの管理（発火時刻到達の検知）
-5. 外部APIの提供（StartWorkflow, GetWorkflow等）
+5. 外部APIの提供（StartWorkflow, DescribeWorkflow等）
+6. Activityタイムアウトの監視（StartToCloseTimeout超過の検知）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
 
@@ -35,7 +36,7 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 
 2種類のタスクを処理する:
 
-- Workflow Task: ワークフロー関数を最初からreplayし、イベント履歴と照合しながら実行。新しい副作用呼び出しに到達したらコマンドを生成してサーバーに返す
+- Workflow Task: ワークフロー関数を最初からreplayし、イベント履歴と照合しながら実行。新しい副作用呼び出しに到達したらコマンドを生成してサーバーに返す。replayで非決定性エラーが発生した場合はFailWorkflowTaskでサーバーに報告する
 - Activity Task: Activity関数を実際に実行し、結果をサーバーに報告
 
 gRPC経由でサーバーに結果を返す。理由:
@@ -50,27 +51,24 @@ Hexagonal Architecture（Ports and Adapters）を採用する。
 
 ```text
        Inbound Adapter                     Core                        Outbound Adapter
-    ┌──────────────────┐                                           ┌────────────────────────┐
-    │  adapter/grpc/   │          ┌──────────────────────┐         │  adapter/postgres/     │
-    │                  │──►       │                      │         │                        │──► PostgreSQL
-    │  proto型 →       │   port/  │  engine/             │  port/  │  Outbound Port の      │
-    │  domain型変換    │──►Inbound│                      │  Out-   │  インターフェースを    │
-    └──────────────────┘   Port   │  ビジネスロジック    │  bound ◄│  暗黙的に実装         │
-                           │      │  コマンド処理        │  Port   │                        │
-    ┌──────────────────┐   │      │  トランザクション制御│   │     │  migration/ も含む    │
-    │  adapter/http/   │──►│      │                      │   │     └────────────────────────┘
-    │  (Phase 3)       │   │      └──────────────────────┘   │
-    └──────────────────┘   │                │                │     ┌────────────────────────┐
-                           │                ▼                │     │  adapter/telemetry/    │
-    ┌──────────────────┐   │           domain/               │     │  (Phase 2-3)           │
-    │adapter/telemetry/│──►│           純粋な型定義           │     │                        │
-    │  Inbound Port の │   │                                 │     │  Outbound Port の      │
-    │  デコレータ      │                                     └────►│  デコレータ            │
-    └──────────────────┘                                           └────────────────────────┘
+    +------------------+                                           +------------------------+
+    |  adapter/grpc/   |          +----------------------+         |  adapter/postgres/     |
+    |                  |-->       |                      |         |                        |--> PostgreSQL
+    |  proto型 ->       |   port/  |  engine/             |  port/  |  Outbound Port の      |
+    |  domain型変換    |-->Inbound|                      |  Out-   |  インターフェースを    |
+    +------------------+   Port   |  ビジネスロジック    |  bound <|  暗黙的に実装         |
+                           |      |  コマンド処理        |  Port   |                        |
+    +------------------+   |      |  トランザクション制御|   |     |  migration/ も含む    |
+    |  adapter/http/   |-->|      |                      |   |     +------------------------+
+    |  (Phase 3)       |   |      +----------------------+   |
+    +------------------+   |                |                |     +------------------------+
+                           |                v                |     |  adapter/telemetry/    |
+    +------------------+   |           domain/               |     |  (Phase 2-3)           |
+    |adapter/telemetry/|-->|           純粋な型定義           |     |                        |
+    |  Inbound Port の |   |           エラー定義             |     |  Outbound Port の      |
+    |  デコレータ      |                                     +---->|  デコレータ            |
+    +------------------+                                           +------------------------+
 ```
-
-adapter/telemetry/はInbound PortとOutbound Portの両方のデコレータとして機能する。
-Phase 1では不要だが、Phase 2-3でメトリクス・トレーシングを追加する際にこの位置に配置する。
 
 ### プロジェクト構成
 
@@ -96,21 +94,25 @@ dandori/
 │   │       │   └── 000001_initial.down.sql
 │   │       ├── store.go                      # コネクションプール、TxManager
 │   │       ├── event.go                      # EventRepository実装
-│   │       ├── task.go                       # TaskRepository実装
+│   │       ├── workflow_task.go               # WorkflowTaskRepository実装
+│   │       ├── activity_task.go              # ActivityTaskRepository実装
 │   │       ├── timer.go                      # TimerRepository実装
 │   │       └── workflow.go                   # WorkflowRepository実装
-│   ├── domain/                               # 純粋な型定義（依存なし）
+│   ├── domain/                               # 純粋な型定義 + エラー定義（依存なし）
 │   │   ├── command.go
+│   │   ├── errors.go                         # ドメインエラー定義
 │   │   ├── event.go
+│   │   ├── retry.go
 │   │   ├── task.go
 │   │   ├── timer.go
 │   │   └── workflow.go
 │   ├── engine/                               # アプリケーションコア（ビジネスロジック）
-│   │   ├── engine.go                         # 全操作のエントリーポイント（port.WorkflowServiceを実装）
+│   │   ├── engine.go                         # リクエスト駆動の操作（ClientService, WorkflowTaskService, ActivityTaskService を実装）
 │   │   ├── command_processor.go              # コマンド→イベント変換パイプライン
+│   │   ├── background.go                     # バックグラウンドプロセス（タイマー、タイムアウト監視）
 │   │   └── retry.go                          # リトライポリシー
 │   └── port/                                 # ポート定義（インターフェース）
-│       ├── service.go                        # Inbound Port: WorkflowService
+│       ├── service.go                        # Inbound Port: 役割別インターフェース
 │       └── repository.go                     # Outbound Port: 各Repository, TxManager
 ├── docker-compose.yml
 └── go.mod
@@ -120,35 +122,63 @@ dandori/
 
 ```text
 cmd/dandori/main.go（依存の組み立て）
-    │
-    ├── adapter/grpc/ ──► port/ (Inbound) ◄── engine/ ──► port/ (Outbound) ◄── adapter/postgres/
-    │                       │                    │              │                      │
-    │                       ▼                    ▼              ▼                      ▼
-    └──────────────────► domain/ ◄───────────────┴──────────────┴──────────────────────┘
+    |
+    ├── adapter/grpc/ --> port/ (Inbound) <-- engine/ --> port/ (Outbound) <-- adapter/postgres/
+    |                       |                    |              |                      |
+    |                       v                    v              v                      v
+    └──────────────────> domain/ <───────────────┴──────────────┴──────────────────────┘
 ```
 
-- `domain/`: 純粋な型定義のみ。他のパッケージに依存しない
-- `port/`: Inbound Port（WorkflowService）とOutbound Port（各Repository, TxManager）の定義。domain/のみに依存
-- `engine/`: ビジネスロジック。port.WorkflowServiceを実装し、port/のOutbound Portを通じてのみ外部と通信。port/とdomain/に依存
-- `adapter/grpc/`: Inbound Adapter。port.WorkflowServiceインターフェースに依存。proto型とdomain型の変換を行い、インターフェース経由でengine/に委譲。port/とdomain/に依存（engine/には依存しない）
-- `adapter/postgres/`: Outbound Adapter。port/のOutbound Portインターフェースを暗黙的に満たす。port/とdomain/に依存（engine/には依存しない）
-- `cmd/dandori/`: 全パッケージをimportし、依存を組み立てるエントリーポイント。engine.EngineをWorkflowServiceとしてadapter/grpc/に渡す
+**依存ルール**:
+
+- `domain/`: 純粋な型・エラー定義。他のパッケージに依存しない。ドメインエラーもここに定義する
+- `port/`: Inbound Port と Outbound Port の定義。domain/ のみに依存
+- `engine/`: ビジネスロジック。port/ と domain/ に依存。adapter/ には依存しない
+- `adapter/grpc/`: Inbound Adapter。port/ と domain/ に依存。**engine/ には依存しない**（エラー判定は domain/ のエラーを使う）
+- `adapter/postgres/`: Outbound Adapter。port/ と domain/ に依存。engine/ には依存しない
+- `cmd/dandori/`: 全パッケージをimportし、依存を組み立てるエントリーポイント
 
 ### 各層の責務
 
-#### domain/ - ドメインモデル
+#### domain/ - ドメインモデルとエラー
 
-ビジネスロジックを持たない純粋な型定義。全パッケージから参照される共有の語彙。
+ビジネスロジックを持たない純粋な型定義とドメインエラー。全パッケージから参照される共有の語彙。
+
+```go
+// domain/errors.go
+// ドメインエラーはdomain/に定義し、engine/とadapter/の両方から参照可能にする。
+// これにより adapter/grpc/ が engine/ に依存することを防ぐ。
+var (
+    ErrWorkflowNotFound      = errors.New("workflow not found")
+    ErrWorkflowAlreadyExists = errors.New("workflow already exists")
+    ErrWorkflowNotRunning    = errors.New("workflow is not in running state")
+    ErrTaskNotFound          = errors.New("task not found")
+    ErrTaskAlreadyCompleted  = errors.New("task already completed")
+    ErrNoTaskAvailable       = errors.New("no task available")
+)
+```
 
 ```go
 // domain/event.go
 type EventType string
 
 const (
-    EventWorkflowExecutionStarted EventType = "WorkflowExecutionStarted"
-    EventActivityTaskScheduled    EventType = "ActivityTaskScheduled"
-    EventActivityTaskCompleted    EventType = "ActivityTaskCompleted"
-    // ...
+    EventWorkflowExecutionStarted    EventType = "WorkflowExecutionStarted"
+    EventWorkflowExecutionCompleted  EventType = "WorkflowExecutionCompleted"
+    EventWorkflowExecutionFailed     EventType = "WorkflowExecutionFailed"
+    EventWorkflowExecutionTerminated EventType = "WorkflowExecutionTerminated"
+    EventActivityTaskScheduled       EventType = "ActivityTaskScheduled"
+    EventActivityTaskCompleted       EventType = "ActivityTaskCompleted"
+    EventActivityTaskFailed          EventType = "ActivityTaskFailed"
+    EventActivityTaskTimedOut        EventType = "ActivityTaskTimedOut"
+
+    // Phase 2 で追加:
+    // EventWorkflowExecutionCancelRequested
+    // EventWorkflowExecutionCanceled
+    // EventTimerStarted
+    // EventTimerFired
+    // EventTimerCanceled
+    // EventWorkflowSignaled
 )
 
 type HistoryEvent struct {
@@ -169,12 +199,42 @@ const (
     CommandScheduleActivityTask CommandType = "ScheduleActivityTask"
     CommandCompleteWorkflow     CommandType = "CompleteWorkflow"
     CommandFailWorkflow         CommandType = "FailWorkflow"
-    // ...
+
+    // Phase 2 で追加:
+    // CommandStartTimer
+    // CommandCancelTimer
 )
 
 type Command struct {
     Type       CommandType
     Attributes json.RawMessage
+}
+
+type ScheduleActivityTaskAttributes struct {
+    SeqID               int64           `json:"seq_id"`
+    ActivityType        string          `json:"activity_type"`
+    Input               json.RawMessage `json:"input"`
+    TaskQueue           string          `json:"task_queue,omitempty"`
+    StartToCloseTimeout time.Duration   `json:"start_to_close_timeout"`
+    RetryPolicy         *RetryPolicy    `json:"retry_policy,omitempty"`
+}
+
+type CompleteWorkflowAttributes struct {
+    Result json.RawMessage `json:"result"`
+}
+
+type FailWorkflowAttributes struct {
+    ErrorMessage string `json:"error_message"`
+}
+```
+
+```go
+// domain/retry.go
+type RetryPolicy struct {
+    MaxAttempts        int           `json:"max_attempts"`
+    InitialInterval    time.Duration `json:"initial_interval"`
+    BackoffCoefficient float64       `json:"backoff_coefficient"`
+    MaxInterval        time.Duration `json:"max_interval"`
 }
 ```
 
@@ -183,10 +243,16 @@ type Command struct {
 type WorkflowStatus string
 
 const (
-    WorkflowStatusRunning   WorkflowStatus = "RUNNING"
-    WorkflowStatusCompleted WorkflowStatus = "COMPLETED"
-    WorkflowStatusFailed    WorkflowStatus = "FAILED"
+    WorkflowStatusRunning    WorkflowStatus = "RUNNING"
+    WorkflowStatusCompleted  WorkflowStatus = "COMPLETED"
+    WorkflowStatusFailed     WorkflowStatus = "FAILED"
+    WorkflowStatusTerminated WorkflowStatus = "TERMINATED"
 )
+
+// IsTerminal はワークフローが終了状態かどうかを返す
+func (s WorkflowStatus) IsTerminal() bool {
+    return s == WorkflowStatusCompleted || s == WorkflowStatusFailed || s == WorkflowStatusTerminated
+}
 
 type WorkflowExecution struct {
     ID           uuid.UUID
@@ -210,17 +276,45 @@ const (
     TaskTypeActivity TaskType = "ACTIVITY"
 )
 
-type Task struct {
-    ID            int64
-    Type          TaskType
-    QueueName     string
-    WorkflowID    uuid.UUID
-    ActivityType  string          // Activity Taskのみ
-    ActivityInput json.RawMessage // Activity Taskのみ
-    ActivitySeqID int64           // Activity Taskのみ
-    Attempt       int
-    MaxAttempts   int
-    ScheduledAt   time.Time
+type TaskStatus string
+
+const (
+    TaskStatusPending   TaskStatus = "PENDING"
+    TaskStatusRunning   TaskStatus = "RUNNING"
+    TaskStatusCompleted TaskStatus = "COMPLETED"
+)
+
+// WorkflowTask はワーカーがポーリングで取得するWorkflow Task
+type WorkflowTask struct {
+    ID         int64
+    QueueName  string
+    WorkflowID uuid.UUID
+    Status     TaskStatus
+    ScheduledAt time.Time
+}
+
+// ActivityTask はワーカーがポーリングで取得するActivity Task
+type ActivityTask struct {
+    ID                  int64
+    QueueName           string
+    WorkflowID          uuid.UUID
+    ActivityType        string
+    ActivityInput       json.RawMessage
+    ActivitySeqID       int64
+    StartToCloseTimeout time.Duration
+    Attempt             int
+    MaxAttempts         int
+    RetryPolicy         *RetryPolicy
+    Status              TaskStatus
+    ScheduledAt         time.Time
+    TimeoutAt           *time.Time
+}
+
+// ActivityFailure はActivity失敗の詳細情報
+type ActivityFailure struct {
+    Message      string
+    Type         string
+    NonRetryable bool
 }
 ```
 
@@ -228,34 +322,58 @@ type Task struct {
 
 Inbound PortとOutbound Portの両方のインターフェースを定義する。domain/のみに依存する独立したパッケージ。
 
+**Inbound Port は役割ごとに分離する（Interface Segregation Principle）**:
+
 ```go
-// port/service.go - Inbound Port
-// Inbound Adapter（grpc/, http/等）はこのインターフェースに依存する。
-// engine.Engine がこれを実装する。
-// adapter/telemetry/ がデコレータとしてこれを実装する。
-type WorkflowService interface {
+// port/service.go - Inbound Port（役割別に分離）
+
+// ClientService はクライアント向け操作を定義する。
+// gRPCハンドラのクライアントAPIメソッドがこのインターフェースに依存する。
+type ClientService interface {
     StartWorkflow(ctx context.Context, params StartWorkflowParams) (*domain.WorkflowExecution, error)
-    GetWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
-    TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error
-    CompleteWorkflowTask(ctx context.Context, taskID int64, commands []domain.Command) error
-    PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*WorkflowTask, error)
-    PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.Task, error)
-    CompleteActivityTask(ctx context.Context, taskID int64, result json.RawMessage) error
-    FailActivityTask(ctx context.Context, taskID int64, errMsg string) error
+    DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
     GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
+    TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error
 }
 
-// StartWorkflowParams, WorkflowTask 等のパラメータ型もport/に定義する
+// WorkflowTaskService はワーカーのWorkflow Task操作を定義する。
+type WorkflowTaskService interface {
+    PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*WorkflowTaskResult, error)
+    CompleteWorkflowTask(ctx context.Context, taskID int64, commands []domain.Command) error
+    FailWorkflowTask(ctx context.Context, taskID int64, cause string, message string) error
+}
+
+// ActivityTaskService はワーカーのActivity Task操作を定義する。
+type ActivityTaskService interface {
+    PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+    CompleteActivityTask(ctx context.Context, taskID int64, result json.RawMessage) error
+    FailActivityTask(ctx context.Context, taskID int64, failure domain.ActivityFailure) error
+}
+
+// StartWorkflowParams はワークフロー開始のパラメータ
 type StartWorkflowParams struct {
-    ID           uuid.UUID
+    ID           uuid.UUID       // ゼロ値の場合はUUID自動生成
     WorkflowType string
     TaskQueue    string
     Input        json.RawMessage
 }
 
-type WorkflowTask struct {
-    Task    domain.Task
+// WorkflowTaskResult はPollWorkflowTaskの結果
+type WorkflowTaskResult struct {
+    Task    domain.WorkflowTask
     Events  []domain.HistoryEvent
+}
+```
+
+engine.Engineはこの3つのインターフェースを全て実装する。gRPCハンドラは必要なインターフェースのみを受け取る。
+
+telemetryデコレータは関心のあるインターフェースだけを装飾できる:
+
+```go
+// 例: ClientServiceだけにメトリクスを付ける
+type metricsClientService struct {
+    next    port.ClientService
+    metrics MetricsHandler
 }
 ```
 
@@ -268,15 +386,29 @@ type WorkflowRepository interface {
 }
 
 type EventRepository interface {
+    // Append はイベントを追記する。sequence_numはリポジトリ内で自動採番される。
     Append(ctx context.Context, events []domain.HistoryEvent) error
     GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
-    GetNextSequenceNum(ctx context.Context, workflowID uuid.UUID) (int, error)
 }
 
-type TaskRepository interface {
-    Enqueue(ctx context.Context, task domain.Task) error
-    Poll(ctx context.Context, queueName string, taskType domain.TaskType, workerID string) (*domain.Task, error)
+type WorkflowTaskRepository interface {
+    Enqueue(ctx context.Context, task domain.WorkflowTask) error
+    // Poll はキューからタスクを1件取得する。タスクがない場合はdomain.ErrNoTaskAvailableを返す。
+    Poll(ctx context.Context, queueName string, workerID string) (*domain.WorkflowTask, error)
     Complete(ctx context.Context, taskID int64) error
+    GetByID(ctx context.Context, taskID int64) (*domain.WorkflowTask, error)
+    RecoverStaleTasks(ctx context.Context) (int, error)
+}
+
+type ActivityTaskRepository interface {
+    Enqueue(ctx context.Context, task domain.ActivityTask) error
+    // Poll はキューからタスクを1件取得する。タスクがない場合はdomain.ErrNoTaskAvailableを返す。
+    Poll(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+    Complete(ctx context.Context, taskID int64) error
+    GetByID(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
+    GetTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
+    Requeue(ctx context.Context, taskID int64, scheduledAt time.Time) error
+    RecoverStaleTasks(ctx context.Context) (int, error)
 }
 
 type TimerRepository interface {
@@ -292,48 +424,67 @@ type TxManager interface {
 
 #### engine/ - アプリケーションコア
 
-ビジネスロジックとトランザクション制御を担う。port.WorkflowService（Inbound Port）を実装し、port/のOutbound Portを通じてのみ外部と通信する。
+ビジネスロジックとトランザクション制御を担う。3つの Inbound Port を実装する。
 
 ```go
 // engine/engine.go
-// Engine は port.WorkflowService を実装する
+// Engine は port.ClientService, port.WorkflowTaskService, port.ActivityTaskService を実装する
 type Engine struct {
-    workflows port.WorkflowRepository
-    events    port.EventRepository
-    tasks     port.TaskRepository
-    timers    port.TimerRepository
-    tx        port.TxManager
-    cmdProc   *CommandProcessor
+    workflows      port.WorkflowRepository
+    events         port.EventRepository
+    workflowTasks  port.WorkflowTaskRepository
+    activityTasks  port.ActivityTaskRepository
+    timers         port.TimerRepository
+    tx             port.TxManager
+    cmdProc        *CommandProcessor
 }
+
+// コンパイル時にインターフェース実装を保証
+var _ port.ClientService       = (*Engine)(nil)
+var _ port.WorkflowTaskService = (*Engine)(nil)
+var _ port.ActivityTaskService = (*Engine)(nil)
 
 func New(
     workflows port.WorkflowRepository,
     events port.EventRepository,
-    tasks port.TaskRepository,
+    workflowTasks port.WorkflowTaskRepository,
+    activityTasks port.ActivityTaskRepository,
     timers port.TimerRepository,
     tx port.TxManager,
 ) *Engine {
     e := &Engine{
-        workflows: workflows,
-        events:    events,
-        tasks:     tasks,
-        timers:    timers,
-        tx:        tx,
+        workflows:     workflows,
+        events:        events,
+        workflowTasks: workflowTasks,
+        activityTasks: activityTasks,
+        timers:        timers,
+        tx:            tx,
     }
-    e.cmdProc = &CommandProcessor{
-        events:    events,
-        tasks:     tasks,
-        workflows: workflows,
-        timers:    timers,
-    }
+    e.cmdProc = NewCommandProcessor(events, workflowTasks, activityTasks, workflows, timers)
     return e
 }
 
-// StartWorkflow: ワークフロー開始
-// 1トランザクションで実行作成 + イベント記録 + タスク投入を行う
+// --- ClientService の実装 ---
+
 func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error) {
+    if params.ID == uuid.Nil {
+        params.ID = uuid.New()
+    }
+
     var wf domain.WorkflowExecution
     err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
+        // 冪等性チェック: 同一IDのワークフローが存在するか
+        existing, err := e.workflows.Get(ctx, params.ID)
+        if err != nil && !errors.Is(err, domain.ErrWorkflowNotFound) {
+            return err
+        }
+        if existing != nil {
+            if !existing.Status.IsTerminal() {
+                return domain.ErrWorkflowAlreadyExists
+            }
+            // 終了済みなら新規作成を許可（IDを再利用）
+        }
+
         wf = domain.WorkflowExecution{
             ID:           params.ID,
             WorkflowType: params.WorkflowType,
@@ -351,89 +502,413 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
         }}); err != nil {
             return err
         }
-        return e.tasks.Enqueue(ctx, domain.Task{
-            Type:       domain.TaskTypeWorkflow,
+        return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
             QueueName:  params.TaskQueue,
             WorkflowID: wf.ID,
         })
     })
-    return &wf, err
+    if err != nil {
+        return nil, err
+    }
+    return &wf, nil
 }
 
-// CompleteWorkflowTask: ワーカーからのコマンドリストを処理
-func (e *Engine) CompleteWorkflowTask(ctx context.Context, taskID int64, commands []domain.Command) error {
+func (e *Engine) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error {
     return e.tx.RunInTx(ctx, func(ctx context.Context) error {
-        if err := e.tasks.Complete(ctx, taskID); err != nil {
+        // 状態チェック: RUNNING状態のワークフローのみTerminate可能
+        wf, err := e.workflows.Get(ctx, id)
+        if err != nil {
             return err
         }
-        return e.cmdProc.Process(ctx, commands)
+        if wf.Status.IsTerminal() {
+            return domain.ErrWorkflowNotRunning
+        }
+
+        // JSONは安全にmarshalする（文字列連結禁止）
+        data, err := json.Marshal(map[string]string{"reason": reason})
+        if err != nil {
+            return err
+        }
+        if err := e.events.Append(ctx, []domain.HistoryEvent{{
+            WorkflowID: id,
+            Type:       domain.EventWorkflowExecutionTerminated,
+            Data:       data,
+        }}); err != nil {
+            return err
+        }
+        return e.workflows.UpdateStatus(ctx, id, domain.WorkflowStatusTerminated, nil, reason)
     })
+}
+
+// --- WorkflowTaskService の実装 ---
+
+func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
+    // Poll はタスクがない場合 domain.ErrNoTaskAvailable を返す。
+    // gRPCハンドラ側でこれを空レスポンスに変換する。
+    task, err := e.workflowTasks.Poll(ctx, queueName, workerID)
+    if err != nil {
+        return nil, err
+    }
+    events, err := e.events.GetByWorkflowID(ctx, task.WorkflowID)
+    if err != nil {
+        return nil, err
+    }
+    return &port.WorkflowTaskResult{
+        Task:   *task,
+        Events: events,
+    }, nil
+}
+
+func (e *Engine) CompleteWorkflowTask(ctx context.Context, taskID int64, commands []domain.Command) error {
+    return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+        task, err := e.workflowTasks.GetByID(ctx, taskID)
+        if err != nil {
+            return err
+        }
+
+        // Advisory Lock: 同一ワークフローのWorkflow Task処理を直列化
+        // pg_advisory_xact_lock はトランザクション終了時に自動解放
+        // （adapter/postgres側でGetByID実行時にworkflowIDベースのAdvisory Lockを取得する）
+
+        if err := e.workflowTasks.Complete(ctx, taskID); err != nil {
+            return err
+        }
+        return e.cmdProc.Process(ctx, task.WorkflowID, commands)
+    })
+}
+
+// --- ActivityTaskService の実装 ---
+
+func (e *Engine) CompleteActivityTask(ctx context.Context, taskID int64, result json.RawMessage) error {
+    return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+        task, err := e.activityTasks.GetByID(ctx, taskID)
+        if err != nil {
+            return err
+        }
+
+        // 対象ワークフローがまだRUNNINGかチェック
+        wf, err := e.workflows.Get(ctx, task.WorkflowID)
+        if err != nil {
+            return err
+        }
+        if wf.Status.IsTerminal() {
+            // ワークフローが既に終了している場合、結果は破棄してタスクだけ完了する
+            return e.activityTasks.Complete(ctx, taskID)
+        }
+
+        if err := e.activityTasks.Complete(ctx, taskID); err != nil {
+            return err
+        }
+
+        completedData, err := json.Marshal(map[string]interface{}{
+            "seq_id": task.ActivitySeqID,
+            "result": json.RawMessage(result),
+        })
+        if err != nil {
+            return err
+        }
+        if err := e.events.Append(ctx, []domain.HistoryEvent{{
+            WorkflowID: task.WorkflowID,
+            Type:       domain.EventActivityTaskCompleted,
+            Data:       completedData,
+        }}); err != nil {
+            return err
+        }
+        return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+            QueueName:  wf.TaskQueue,
+            WorkflowID: task.WorkflowID,
+        })
+    })
+}
+
+func (e *Engine) FailActivityTask(ctx context.Context, taskID int64, failure domain.ActivityFailure) error {
+    return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+        task, err := e.activityTasks.GetByID(ctx, taskID)
+        if err != nil {
+            return err
+        }
+
+        wf, err := e.workflows.Get(ctx, task.WorkflowID)
+        if err != nil {
+            return err
+        }
+        if wf.Status.IsTerminal() {
+            return e.activityTasks.Complete(ctx, taskID)
+        }
+
+        // リトライ判定: non_retryable=true or 最大試行回数到達 → 失敗確定
+        shouldRetry := !failure.NonRetryable && task.Attempt < task.MaxAttempts
+
+        if shouldRetry {
+            nextSchedule := computeNextRetryTime(task)
+            return e.activityTasks.Requeue(ctx, taskID, nextSchedule)
+        }
+
+        // リトライ不可 → ActivityTaskFailed イベントを記録し、Workflow Taskを生成
+        if err := e.activityTasks.Complete(ctx, taskID); err != nil {
+            return err
+        }
+        failedData, err := json.Marshal(map[string]interface{}{
+            "seq_id":        task.ActivitySeqID,
+            "error_message": failure.Message,
+            "error_type":    failure.Type,
+        })
+        if err != nil {
+            return err
+        }
+        if err := e.events.Append(ctx, []domain.HistoryEvent{{
+            WorkflowID: task.WorkflowID,
+            Type:       domain.EventActivityTaskFailed,
+            Data:       failedData,
+        }}); err != nil {
+            return err
+        }
+        return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+            QueueName:  wf.TaskQueue,
+            WorkflowID: task.WorkflowID,
+        })
+    })
+}
+```
+
+```go
+// engine/background.go
+// BackgroundWorker はバックグラウンドプロセスを管理する。
+// Engine (リクエスト処理) とは別の構造体として定義し、責務を分離する。
+type BackgroundWorker struct {
+    events        port.EventRepository
+    workflowTasks port.WorkflowTaskRepository
+    activityTasks port.ActivityTaskRepository
+    workflows     port.WorkflowRepository
+    timers        port.TimerRepository
+    tx            port.TxManager
+}
+
+func NewBackgroundWorker(
+    events port.EventRepository,
+    workflowTasks port.WorkflowTaskRepository,
+    activityTasks port.ActivityTaskRepository,
+    workflows port.WorkflowRepository,
+    timers port.TimerRepository,
+    tx port.TxManager,
+) *BackgroundWorker {
+    return &BackgroundWorker{
+        events: events, workflowTasks: workflowTasks,
+        activityTasks: activityTasks, workflows: workflows,
+        timers: timers, tx: tx,
+    }
+}
+
+// RunActivityTimeoutChecker はtimeout_at超過のActivity Taskを検知し、
+// ActivityTaskTimedOutイベントを記録してWorkflow Taskを生成する。
+// ctx.Done()でループを終了する。
+func (w *BackgroundWorker) RunActivityTimeoutChecker(ctx context.Context, interval time.Duration) error {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-ticker.C:
+            if err := w.checkActivityTimeouts(ctx); err != nil {
+                slog.Error("activity timeout check failed", "error", err)
+            }
+        }
+    }
+}
+
+// RunTaskRecovery はlocked_untilを超えたタスクをPENDINGに戻す。
+func (w *BackgroundWorker) RunTaskRecovery(ctx context.Context, interval time.Duration) error {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-ticker.C:
+            if n, err := w.workflowTasks.RecoverStaleTasks(ctx); err != nil {
+                slog.Error("workflow task recovery failed", "error", err)
+            } else if n > 0 {
+                slog.Info("recovered stale workflow tasks", "count", n)
+            }
+            if n, err := w.activityTasks.RecoverStaleTasks(ctx); err != nil {
+                slog.Error("activity task recovery failed", "error", err)
+            } else if n > 0 {
+                slog.Info("recovered stale activity tasks", "count", n)
+            }
+        }
+    }
 }
 ```
 
 ```go
 // engine/command_processor.go
 type CommandProcessor struct {
-    events    port.EventRepository
-    tasks     port.TaskRepository
-    workflows port.WorkflowRepository
-    timers    port.TimerRepository
+    events        port.EventRepository
+    workflowTasks port.WorkflowTaskRepository
+    activityTasks port.ActivityTaskRepository
+    workflows     port.WorkflowRepository
+    timers        port.TimerRepository
+}
+
+func NewCommandProcessor(
+    events port.EventRepository,
+    workflowTasks port.WorkflowTaskRepository,
+    activityTasks port.ActivityTaskRepository,
+    workflows port.WorkflowRepository,
+    timers port.TimerRepository,
+) *CommandProcessor {
+    return &CommandProcessor{
+        events: events, workflowTasks: workflowTasks,
+        activityTasks: activityTasks, workflows: workflows, timers: timers,
+    }
 }
 
 // Process: コマンドリストを順次処理し、イベント記録とタスク生成を行う
 // 呼び出し元のトランザクション内で実行される
 func (p *CommandProcessor) Process(ctx context.Context, workflowID uuid.UUID, commands []domain.Command) error {
+    // ワークフロー情報（TaskQueue等）を取得
+    wf, err := p.workflows.Get(ctx, workflowID)
+    if err != nil {
+        return err
+    }
+
     for _, cmd := range commands {
         switch cmd.Type {
         case domain.CommandScheduleActivityTask:
-            // → ActivityTaskScheduledイベント記録
-            // → Activity Taskをキューに投入
+            if err := p.processScheduleActivity(ctx, wf, cmd); err != nil {
+                return err
+            }
         case domain.CommandCompleteWorkflow:
-            // → WorkflowExecutionCompletedイベント記録
-            // → ワークフローステータスをCOMPLETEDに更新
+            if err := p.processCompleteWorkflow(ctx, wf, cmd); err != nil {
+                return err
+            }
         case domain.CommandFailWorkflow:
-            // → WorkflowExecutionFailedイベント記録
-            // → ワークフローステータスをFAILEDに更新
+            if err := p.processFailWorkflow(ctx, wf, cmd); err != nil {
+                return err
+            }
+        default:
+            return fmt.Errorf("unknown command type: %s", cmd.Type)
         }
     }
     return nil
+}
+
+func (p *CommandProcessor) processScheduleActivity(ctx context.Context, wf *domain.WorkflowExecution, cmd domain.Command) error {
+    var attrs domain.ScheduleActivityTaskAttributes
+    if err := json.Unmarshal(cmd.Attributes, &attrs); err != nil {
+        return err
+    }
+
+    if err := p.events.Append(ctx, []domain.HistoryEvent{{
+        WorkflowID: wf.ID,
+        Type:       domain.EventActivityTaskScheduled,
+        Data:       cmd.Attributes,
+    }}); err != nil {
+        return err
+    }
+
+    // TaskQueueが未指定ならワークフローのTaskQueueを使用
+    taskQueue := attrs.TaskQueue
+    if taskQueue == "" {
+        taskQueue = wf.TaskQueue
+    }
+
+    maxAttempts := 3
+    if attrs.RetryPolicy != nil && attrs.RetryPolicy.MaxAttempts > 0 {
+        maxAttempts = attrs.RetryPolicy.MaxAttempts
+    }
+
+    return p.activityTasks.Enqueue(ctx, domain.ActivityTask{
+        QueueName:           taskQueue,
+        WorkflowID:          wf.ID,
+        ActivityType:        attrs.ActivityType,
+        ActivityInput:       attrs.Input,
+        ActivitySeqID:       attrs.SeqID,
+        StartToCloseTimeout: attrs.StartToCloseTimeout,
+        Attempt:             1,
+        MaxAttempts:         maxAttempts,
+        RetryPolicy:         attrs.RetryPolicy,
+    })
 }
 ```
 
 #### adapter/grpc/ - Inbound Adapter
 
-proto型とdomain型の変換を行う薄い層。ビジネスロジックは一切持たない。port.WorkflowService（Inbound Port）のインターフェースに依存し、engine/には直接依存しない。
+proto型とdomain型の変換を行う薄い層。ビジネスロジックは一切持たない。**役割別のインターフェースを受け取る**。エラーハンドリングは **domain/ のエラーを使い、engine/ には依存しない**。
 
 ```go
 // adapter/grpc/handler.go
 type Handler struct {
     apiv1.UnimplementedDandoriServiceServer
-    svc port.WorkflowService
+    client   port.ClientService
+    wfTask   port.WorkflowTaskService
+    actTask  port.ActivityTaskService
 }
 
-func NewHandler(svc port.WorkflowService) *Handler {
-    return &Handler{svc: svc}
+func NewHandler(
+    client port.ClientService,
+    wfTask port.WorkflowTaskService,
+    actTask port.ActivityTaskService,
+) *Handler {
+    return &Handler{client: client, wfTask: wfTask, actTask: actTask}
 }
 
 func (h *Handler) StartWorkflow(ctx context.Context, req *apiv1.StartWorkflowRequest) (*apiv1.StartWorkflowResponse, error) {
-    wf, err := h.svc.StartWorkflow(ctx, port.StartWorkflowParams{
-        ID:           uuid.MustParse(req.WorkflowId),
+    var id uuid.UUID
+    if req.WorkflowId != "" {
+        var err error
+        id, err = uuid.Parse(req.WorkflowId)
+        if err != nil {
+            return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
+        }
+    }
+    wf, err := h.client.StartWorkflow(ctx, port.StartWorkflowParams{
+        ID:           id,
         WorkflowType: req.WorkflowType,
         TaskQueue:    req.TaskQueue,
         Input:        req.Input,
     })
     if err != nil {
-        return nil, status.Errorf(codes.Internal, "failed to start workflow: %v", err)
+        return nil, domainErrorToGRPC(err)
     }
-    return &apiv1.StartWorkflowResponse{
-        WorkflowId: wf.ID.String(),
-    }, nil
+    return &apiv1.StartWorkflowResponse{WorkflowId: wf.ID.String()}, nil
+}
+
+func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowTaskRequest) (*apiv1.PollWorkflowTaskResponse, error) {
+    result, err := h.wfTask.PollWorkflowTask(ctx, req.QueueName, req.WorkerId)
+    if err != nil {
+        if errors.Is(err, domain.ErrNoTaskAvailable) {
+            // タスクなし: 空レスポンスを返す（エラーではない）
+            return &apiv1.PollWorkflowTaskResponse{}, nil
+        }
+        return nil, domainErrorToGRPC(err)
+    }
+    // proto型への変換...
+    return &apiv1.PollWorkflowTaskResponse{...}, nil
+}
+
+// domainErrorToGRPC はドメインエラーをgRPCステータスコードに変換する。
+// engine/には依存せず、domain/のエラーのみを使う。
+func domainErrorToGRPC(err error) error {
+    switch {
+    case errors.Is(err, domain.ErrWorkflowNotFound):
+        return status.Errorf(codes.NotFound, "%v", err)
+    case errors.Is(err, domain.ErrWorkflowAlreadyExists):
+        return status.Errorf(codes.AlreadyExists, "%v", err)
+    case errors.Is(err, domain.ErrWorkflowNotRunning):
+        return status.Errorf(codes.FailedPrecondition, "%v", err)
+    case errors.Is(err, domain.ErrTaskNotFound):
+        return status.Errorf(codes.NotFound, "%v", err)
+    case errors.Is(err, domain.ErrTaskAlreadyCompleted):
+        return status.Errorf(codes.FailedPrecondition, "%v", err)
+    default:
+        return status.Errorf(codes.Internal, "internal error: %v", err)
+    }
 }
 ```
 
 #### adapter/postgres/ - Outbound Adapter
-
-port/のインターフェースのPostgreSQL実装。マイグレーションもPostgreSQL実装の一部として管理する。
 
 ```go
 // adapter/postgres/store.go
@@ -442,6 +917,8 @@ type Store struct {
 }
 
 // RunInTx: port.TxManager を満たす
+// context経由でトランザクションを伝搬する。
+// 全てのリポジトリ実装はconn()メソッドでcontextからトランザクションを取得する。
 func (s *Store) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
     tx, err := s.pool.Begin(ctx)
     if err != nil {
@@ -456,30 +933,11 @@ func (s *Store) RunInTx(ctx context.Context, fn func(ctx context.Context) error)
     return tx.Commit(ctx)
 }
 
-func (s *Store) conn(ctx context.Context) pgxtype.Querier {
-    if tx := txFromContext(ctx); tx != nil {
-        return tx
-    }
-    return s.pool
-}
-```
-
-```go
-// adapter/postgres/event.go
-type EventStore struct {
-    store *Store
-}
-
-// port.EventRepository を暗黙的に満たす
-func (s *EventStore) Append(ctx context.Context, events []domain.HistoryEvent) error {
-    conn := s.store.conn(ctx)
-    // INSERT INTO workflow_events ...
-}
-
-func (s *EventStore) GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
-    conn := s.store.conn(ctx)
-    // SELECT FROM workflow_events WHERE workflow_id = $1 ORDER BY sequence_num
-}
+func (s *Store) Workflows() port.WorkflowRepository          { return &WorkflowStore{store: s} }
+func (s *Store) Events() port.EventRepository                { return &EventStore{store: s} }
+func (s *Store) WorkflowTasks() port.WorkflowTaskRepository  { return &WorkflowTaskStore{store: s} }
+func (s *Store) ActivityTasks() port.ActivityTaskRepository   { return &ActivityTaskStore{store: s} }
+func (s *Store) Timers() port.TimerRepository                { return &TimerStore{store: s} }
 ```
 
 ### 依存の組み立て（cmd/dandori/main.go）
@@ -489,25 +947,35 @@ func main() {
     // Outbound Adapter
     store := postgres.New(pool)
 
-    // Application Core（port.WorkflowServiceを実装）
+    // Application Core
     eng := engine.New(
-        store.Workflows(),   // port.WorkflowRepository
-        store.Events(),      // port.EventRepository
-        store.Tasks(),       // port.TaskRepository
-        store.Timers(),      // port.TimerRepository
-        store,               // port.TxManager
+        store.Workflows(),
+        store.Events(),
+        store.WorkflowTasks(),
+        store.ActivityTasks(),
+        store.Timers(),
+        store, // TxManager
     )
 
-    // Inbound Adapter（port.WorkflowServiceインターフェースを受け取る）
-    var svc port.WorkflowService = eng
-    hdl := grpc.NewHandler(svc)
+    // Background Worker（Engineとは別の構造体）
+    bgWorker := engine.NewBackgroundWorker(
+        store.Events(),
+        store.WorkflowTasks(),
+        store.ActivityTasks(),
+        store.Workflows(),
+        store.Timers(),
+        store,
+    )
+
+    // Inbound Adapter（役割別にインターフェースを渡す）
+    hdl := grpc.NewHandler(eng, eng, eng)
 
     // gRPCサーバー起動
     go runGRPCServer(hdl)
 
-    // バックグラウンドプロセス起動
-    go eng.RunTimerPoller(ctx)
-    go eng.RunTaskTimeoutRecovery(ctx)
+    // バックグラウンドプロセス起動（Engineとは独立したライフサイクル）
+    go bgWorker.RunActivityTimeoutChecker(ctx, 5*time.Second)
+    go bgWorker.RunTaskRecovery(ctx, 10*time.Second)
 
     // graceful shutdown
     waitForShutdown(ctx)
@@ -520,21 +988,54 @@ func main() {
 
 | 操作 | トランザクション内で行うこと |
 |------|---------------------------|
-| StartWorkflow | WorkflowExecution作成 + イベント記録 + Workflow Task投入 |
-| CompleteWorkflowTask | コマンド→イベント変換 + タスク生成 + ステータス更新 |
-| CompleteActivityTask | イベント記録 + Workflow Task投入 |
-| FailActivityTask | リトライ判定 + イベント記録 + Activity Task再投入 or Workflow Task投入 |
-
-engine/のメソッドがトランザクション境界を決定し、port.TxManagerを通じてトランザクションを開始する。adapter/postgres/の各リポジトリはcontext経由でトランザクションを受け取る。
+| StartWorkflow | 冪等性チェック + WorkflowExecution作成 + イベント記録 + Workflow Task投入 |
+| CompleteWorkflowTask | Advisory Lock取得 + タスク解決 + コマンド→イベント変換 + タスク生成 + ステータス更新 |
+| FailWorkflowTask | タスク完了 + ログ記録 |
+| CompleteActivityTask | ワークフロー状態チェック + イベント記録 + Workflow Task投入 |
+| FailActivityTask | ワークフロー状態チェック + リトライ判定 + イベント記録 + タスク再投入 or Workflow Task投入 |
+| TerminateWorkflow | ワークフロー状態チェック + イベント記録 + ステータスをTERMINATEDに更新 |
 
 ### バックグラウンドプロセス
 
-サーバーにはリクエスト駆動の処理に加えて、バックグラウンドで動作するプロセスがある:
+BackgroundWorkerが管理する:
+
+- タスクタイムアウト回収（`RunTaskRecovery`）: locked_untilを超えたタスクをPENDINGに戻す（visibility timeout）
+- Activityタイムアウト監視（`RunActivityTimeoutChecker`）: timeout_atを超えたActivity Taskを検知し、ActivityTaskTimedOutイベントを記録してWorkflow Taskを生成する
+
+Phase 2で追加:
 
 - タイマーポーラー: 発火時刻到達のtimerを検知し、TimerFiredイベントを記録してWorkflow Taskを生成する
-- タスクタイムアウト回収: locked_untilを超えたタスクをPENDINGに戻す
 
-これらはengine/のメソッドとして実装し、cmd/dandori/main.goからgoroutineとして起動する。
+各プロセスはcontext.Done()でグレースフルに停止する。
+
+### エラーモデル
+
+各操作で返しうるドメインエラーを定義する:
+
+| 操作 | 正常 | エラー |
+|------|------|--------|
+| StartWorkflow | *WorkflowExecution | ErrWorkflowAlreadyExists（同一ID+RUNNING） |
+| DescribeWorkflow | *WorkflowExecution | ErrWorkflowNotFound |
+| GetWorkflowHistory | []HistoryEvent | ErrWorkflowNotFound |
+| TerminateWorkflow | nil | ErrWorkflowNotFound, ErrWorkflowNotRunning |
+| PollWorkflowTask | *WorkflowTaskResult | ErrNoTaskAvailable |
+| CompleteWorkflowTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
+| FailWorkflowTask | nil | ErrTaskNotFound |
+| PollActivityTask | *ActivityTask | ErrNoTaskAvailable |
+| CompleteActivityTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
+| FailActivityTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
+
+gRPCハンドラはdomainErrorToGRPC()で一元的にgRPCステータスコードに変換する:
+
+| ドメインエラー | gRPC ステータス |
+|---|---|
+| ErrWorkflowNotFound | NOT_FOUND |
+| ErrWorkflowAlreadyExists | ALREADY_EXISTS |
+| ErrWorkflowNotRunning | FAILED_PRECONDITION |
+| ErrTaskNotFound | NOT_FOUND |
+| ErrTaskAlreadyCompleted | FAILED_PRECONDITION |
+| ErrNoTaskAvailable | （エラーではなく空レスポンス） |
+| その他 | INTERNAL |
 
 ## 3. Deterministic Replayの仕組み
 
@@ -546,12 +1047,20 @@ engine/のメソッドがトランザクション境界を決定し、port.TxMan
 4. ワークフロー関数内でExecuteActivityが呼ばれると、SDKがイベント履歴を確認:
    - 完了イベントがあれば記録された結果を即座に返す（replay）
    - なければScheduleActivityTaskコマンドを生成し、ワークフロー関数をサスペンド
-5. コマンドリストがサーバーに返される
+5. コマンドリストがCompleteWorkflowTaskでサーバーに返される
 6. サーバーがコマンドをイベントに変換し、Activity Taskをキューに投入
 7. ワーカーがActivity Taskを取得し、Activity関数を実際に実行して結果を報告
 8. サーバーがActivityTaskCompletedイベントを記録し、新しいWorkflow Taskを生成
 9. ワーカーが再度ワークフロー関数を最初からreplay。既完了のActivityは履歴から結果が返り、新しいActivityに到達する
 10. ワークフロー関数が最後まで実行されるとCompleteWorkflowコマンドが返される
+
+### 非決定性エラーの処理
+
+ワーカーがreplay中にseqIDの不一致を検出した場合:
+
+1. ワーカーはFailWorkflowTask APIを呼び、cause="NonDeterminismError"と詳細メッセージをサーバーに報告する
+2. サーバーはタスクを完了としてマークし、エラーをログに記録する
+3. ワークフロー自体は停止状態となり、コード修正後にワーカーが再起動されると新しいWorkflow Taskで再試行される
 
 ### seqIDによるコマンドとイベントの対応付け
 
@@ -559,12 +1068,6 @@ engine/のメソッドがトランザクション境界を決定し、port.TxMan
 replay時にこのseqIDをキーとしてイベント履歴を検索する。
 
 例: 3つのActivityを順次呼ぶワークフロー
-
-- 1回目のExecuteActivity → seqID=0
-- 2回目のExecuteActivity → seqID=1
-- 3回目のExecuteActivity → seqID=2
-
-イベント履歴（2つ目のActivityまで完了した状態）:
 
 ```text
 [0] WorkflowExecutionStarted
@@ -574,71 +1077,42 @@ replay時にこのseqIDをキーとしてイベント履歴を検索する。
 [4] ActivityTaskCompleted  {seqID: 1, result: {...}}
 ```
 
-replay時、seqID=0と1のExecuteActivityはキャッシュ結果を返し、seqID=2で新しいコマンドが生成される。
-
 ## 4. コマンドとイベントの関係
 
 ### コマンド一覧（ワーカー → サーバー）
 
 | コマンド | 説明 |
 |---------|------|
-| ScheduleActivityTask | Activity実行を要求 |
-| StartTimer | タイマー開始を要求 |
-| CancelTimer | タイマーキャンセルを要求 |
+| ScheduleActivityTask | Activity実行を要求（RetryPolicy, StartToCloseTimeout付き） |
 | CompleteWorkflow | ワークフロー正常完了 |
 | FailWorkflow | ワークフロー異常終了 |
 
-### コマンド → イベント変換（CommandProcessorが処理）
+Phase 2 で追加: StartTimer, CancelTimer
+
+### コマンド → イベント変換
 
 | コマンド | 生成されるイベント | 副作用 |
 |---------|-------------------|--------|
 | ScheduleActivityTask | ActivityTaskScheduled | Activity Taskをキューに投入 |
-| StartTimer | TimerStarted | timersテーブルにレコード挿入 |
-| CancelTimer | TimerCanceled | timersのステータス更新 |
 | CompleteWorkflow | WorkflowExecutionCompleted | ステータスをCOMPLETEDに更新 |
 | FailWorkflow | WorkflowExecutionFailed | ステータスをFAILEDに更新 |
 
-### 外部トリガー → イベント → Workflow Task生成
+### 外部トリガー → イベント
 
 | トリガー | 生成されるイベント | 副作用 |
 |---------|-------------------|--------|
 | StartWorkflow API | WorkflowExecutionStarted | Workflow Task生成 |
 | Activity完了報告 | ActivityTaskCompleted | Workflow Task生成 |
-| Activity失敗報告 | ActivityTaskFailed | リトライ or Workflow Task生成 |
-| タイマー発火 | TimerFired | Workflow Task生成 |
-| SignalWorkflow API | WorkflowSignaled | Workflow Task生成 |
+| Activity失敗報告（リトライ不可） | ActivityTaskFailed | Workflow Task生成 |
+| Activity失敗報告（リトライ可） | （イベントなし） | 同一Activity Taskを再キューイング |
+| Activityタイムアウト検知 | ActivityTaskTimedOut | Workflow Task生成 |
+| TerminateWorkflow API | WorkflowExecutionTerminated | ステータスをTERMINATEDに更新 |
 
 ### イベントタイプ一覧
 
-```go
-// ワークフローライフサイクル
-WorkflowExecutionStarted
-WorkflowExecutionCompleted
-WorkflowExecutionFailed
-WorkflowExecutionCancelRequested
-WorkflowExecutionCanceled
-WorkflowExecutionTimedOut
+MVP: WorkflowExecutionStarted, WorkflowExecutionCompleted, WorkflowExecutionFailed, WorkflowExecutionTerminated, ActivityTaskScheduled, ActivityTaskCompleted, ActivityTaskFailed, ActivityTaskTimedOut
 
-// Activity
-ActivityTaskScheduled
-ActivityTaskStarted
-ActivityTaskCompleted
-ActivityTaskFailed
-ActivityTaskTimedOut
-
-// タイマー
-TimerStarted
-TimerFired
-TimerCanceled
-
-// シグナル
-WorkflowSignaled
-
-// Workflow Task（内部管理用）
-WorkflowTaskScheduled
-WorkflowTaskStarted
-WorkflowTaskCompleted
-```
+Phase 2: WorkflowExecutionCancelRequested, WorkflowExecutionCanceled, TimerStarted, TimerFired, TimerCanceled, WorkflowSignaled
 
 ## 5. workflow.Contextの設計（Go SDKリポジトリで実装）
 
@@ -650,32 +1124,28 @@ type Context struct {
 }
 
 type workflowEnvironment struct {
-    events       []HistoryEvent   // サーバーから受け取ったイベント履歴
-    eventIndex   int              // 現在のreplay位置
-    commands     []Command        // このWorkflow Task実行で生成したコマンド
-    isReplaying  bool             // replay中かどうか
+    events       []HistoryEvent
+    commands     []Command
+    isReplaying  bool
     scheduler    *coroutineScheduler
-    nextSeqID    int64            // コマンドのシーケンスID
+    nextSeqID    int64
 }
 ```
 
-### coroutineScheduler（ブロッキングの実現）
+### coroutineScheduler
 
 ワークフロー関数は独立したgoroutine上で実行され、yieldでサスペンドされる。
 協調スケジューラパターンでメインgoroutineとワークフローgoroutineの間の制御を切り替える。
 
 ```go
 type coroutineScheduler struct {
-    mainCh     chan struct{}  // ワークフロー→メインの通知
-    workflowCh chan struct{} // メイン→ワークフローの通知
+    mainCh     chan struct{}
+    workflowCh chan struct{}
     ctx        context.Context
     completed  bool
     err        error
 }
 ```
-
-- `start(fn)`: ワークフローgoroutineを起動し、yieldまで待つ
-- `yield()`: ワークフローgoroutineからメインに制御を返し、再開を待つ。contextがキャンセルされたらgoroutineを終了
 
 ### ExecuteActivityのreplayロジック
 
@@ -685,33 +1155,43 @@ func ExecuteActivity[I, O any](ctx Context, activityType string, input I, opts .
     seqID := env.nextSeqID
     env.nextSeqID++
 
-    // イベント履歴を確認
-    if event := env.findCompletionEvent(seqID); event != nil {
-        // replay: 記録された結果を返す
+    if completedEvent := env.findCompletionEvent(seqID); completedEvent != nil {
         var result O
-        json.Unmarshal(event.Result, &result)
-        return result, event.Error
+        json.Unmarshal(completedEvent.Result, &result)
+        return result, completedEvent.Error
     }
 
-    // 新規: コマンドを生成してサスペンド
+    if failedEvent := env.findFailureEvent(seqID); failedEvent != nil {
+        var zero O
+        return zero, errors.New(failedEvent.ErrorMessage)
+    }
+
+    if scheduledEvent := env.findScheduledEvent(seqID); scheduledEvent != nil {
+        env.scheduler.yield()
+        var zero O
+        return zero, workflow.ErrDestroyWorkflow
+    }
+
+    options := applyActivityOptions(opts...)
     env.commands = append(env.commands, Command{
         Type: CommandScheduleActivityTask,
-        Attributes: &ScheduleActivityTaskAttributes{
-            SeqID:        seqID,
-            ActivityType: activityType,
-            Input:        marshalJSON(input),
-        },
+        Attributes: marshalJSON(ScheduleActivityTaskAttributes{
+            SeqID:               seqID,
+            ActivityType:        activityType,
+            Input:               marshalJSON(input),
+            StartToCloseTimeout: options.StartToCloseTimeout,
+            RetryPolicy:         options.RetryPolicy,
+        }),
     })
     env.scheduler.yield()
-
     var zero O
-    return zero, nil
+    return zero, workflow.ErrDestroyWorkflow
 }
 ```
 
-## 6. PostgreSQLスキーマ
+yield()後のコードパスについて: Workflow Task処理完了時にcontextがキャンセルされ、goroutineは終了する。`ErrDestroyWorkflow` はgoroutineクリーンアップ時の安全ガードである。
 
-以下のSQLはadapter/postgres/migration/に配置する。
+## 6. PostgreSQLスキーマ
 
 ### workflow_executions テーブル
 
@@ -732,7 +1212,7 @@ CREATE TABLE workflow_executions (
 CREATE INDEX idx_workflow_executions_status ON workflow_executions(status);
 ```
 
-### workflow_events テーブル（Source of Truth）
+### workflow_events テーブル
 
 ```sql
 CREATE TABLE workflow_events (
@@ -748,19 +1228,15 @@ CREATE TABLE workflow_events (
 CREATE INDEX idx_workflow_events_workflow_id ON workflow_events(workflow_id);
 ```
 
-### task_queue テーブル
+### workflow_tasks テーブル
+
+WorkflowTaskとActivityTaskはスキーマが異なるため、テーブルを分離する。
 
 ```sql
-CREATE TABLE task_queue (
+CREATE TABLE workflow_tasks (
     id              BIGSERIAL PRIMARY KEY,
-    task_type       TEXT NOT NULL,  -- 'WORKFLOW' or 'ACTIVITY'
     queue_name      TEXT NOT NULL,
     workflow_id     UUID NOT NULL REFERENCES workflow_executions(id),
-    activity_type   TEXT,           -- Activity Task固有
-    activity_input  JSONB,          -- Activity Task固有
-    activity_seq_id BIGINT,         -- Activity Task固有
-    attempt         INT NOT NULL DEFAULT 1,
-    max_attempts    INT NOT NULL DEFAULT 3,
     status          TEXT NOT NULL DEFAULT 'PENDING',
     scheduled_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     started_at      TIMESTAMPTZ,
@@ -769,23 +1245,59 @@ CREATE TABLE task_queue (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_task_queue_poll
-    ON task_queue(queue_name, task_type, status, scheduled_at)
+CREATE INDEX idx_workflow_tasks_poll
+    ON workflow_tasks(queue_name, status, scheduled_at)
     WHERE status = 'PENDING';
 ```
 
-タスク取得クエリ:
+### activity_tasks テーブル
 
 ```sql
-UPDATE task_queue
+CREATE TABLE activity_tasks (
+    id                     BIGSERIAL PRIMARY KEY,
+    queue_name             TEXT NOT NULL,
+    workflow_id            UUID NOT NULL REFERENCES workflow_executions(id),
+    activity_type          TEXT NOT NULL,
+    activity_input         JSONB,
+    activity_seq_id        BIGINT NOT NULL,
+    start_to_close_timeout INTERVAL,
+    retry_policy           JSONB,
+    attempt                INT NOT NULL DEFAULT 1,
+    max_attempts           INT NOT NULL DEFAULT 3,
+    status                 TEXT NOT NULL DEFAULT 'PENDING',
+    scheduled_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at             TIMESTAMPTZ,
+    locked_by              TEXT,
+    locked_until           TIMESTAMPTZ,
+    timeout_at             TIMESTAMPTZ,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_activity_tasks_poll
+    ON activity_tasks(queue_name, status, scheduled_at)
+    WHERE status = 'PENDING';
+
+CREATE INDEX idx_activity_tasks_timeout
+    ON activity_tasks(timeout_at)
+    WHERE status = 'RUNNING' AND timeout_at IS NOT NULL;
+```
+
+タスク取得クエリ（Activity Task）:
+
+```sql
+UPDATE activity_tasks
 SET status = 'RUNNING',
     locked_by = $1,
     locked_until = NOW() + INTERVAL '30 seconds',
-    started_at = NOW()
+    started_at = NOW(),
+    timeout_at = CASE
+        WHEN start_to_close_timeout IS NOT NULL
+        THEN NOW() + start_to_close_timeout
+        ELSE NULL
+    END
 WHERE id = (
-    SELECT id FROM task_queue
+    SELECT id FROM activity_tasks
     WHERE queue_name = $2
-      AND task_type = $3
       AND status = 'PENDING'
       AND scheduled_at <= NOW()
     ORDER BY scheduled_at ASC
@@ -813,117 +1325,127 @@ CREATE INDEX idx_timers_pending ON timers(fire_at) WHERE status = 'PENDING';
 ### PostgreSQL活用ポイント
 
 - SKIP LOCKED: タスクキューの排他制御
-- JSONB: ワークフロー入出力、イベントデータの柔軟な格納
-- Advisory Lock: ワークフロー単位のロック（pg_advisory_xact_lock）で同一ワークフローのWorkflow Task直列化
+- JSONB: ワークフロー入出力、イベントデータ、RetryPolicyの柔軟な格納
+- Advisory Lock: CompleteWorkflowTask時にworkflow_idハッシュでpg_advisory_xact_lockを取得し、同一ワークフローのWorkflow Task処理を直列化
+- UNIQUE(workflow_id, sequence_num): イベントの重複挿入を防止
+- タイムアウト検知: timeout_atカラムによるActivity StartToCloseTimeout監視
 - LISTEN/NOTIFY: タスク投入の即時通知（Phase 2）
-- パーティショニング: workflow_eventsの肥大化対策（Phase 4）
 
 ## 7. gRPCサービス定義
 
 ```protobuf
 service DandoriService {
-  // クライアント向けAPI
+  // === クライアント向け API ===
   rpc StartWorkflow(StartWorkflowRequest) returns (StartWorkflowResponse);
-  rpc GetWorkflowExecution(GetWorkflowExecutionRequest) returns (GetWorkflowExecutionResponse);
+  rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse);
+  rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
   rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
 
-  // ワーカー向けAPI - Workflow Task
+  // Phase 2:
+  // rpc SignalWorkflow(...);
+  // rpc CancelWorkflow(...);
+  // rpc ListWorkflows(...);
+
+  // === ワーカー向け API: Workflow Task ===
   rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
   rpc CompleteWorkflowTask(CompleteWorkflowTaskRequest) returns (CompleteWorkflowTaskResponse);
+  rpc FailWorkflowTask(FailWorkflowTaskRequest) returns (FailWorkflowTaskResponse);
 
-  // ワーカー向けAPI - Activity Task
+  // === ワーカー向け API: Activity Task ===
   rpc PollActivityTask(PollActivityTaskRequest) returns (PollActivityTaskResponse);
   rpc CompleteActivityTask(CompleteActivityTaskRequest) returns (CompleteActivityTaskResponse);
   rpc FailActivityTask(FailActivityTaskRequest) returns (FailActivityTaskResponse);
 
-  // イベント履歴
-  rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
+  // Phase 2:
+  // rpc RecordActivityHeartbeat(...);
 }
 ```
+
+メッセージ定義は前回のものと同一（§7の主要メッセージ定義を参照）。省略。
 
 ## 8. Go SDKリポジトリ構成（dandori-sdk-go）
 
 ```text
 dandori-sdk-go/
-├── client/                          # クライアントSDK
-│   └── client.go
-├── worker/                          # ワーカー
+├── client/
+│   ├── client.go              # Client interface, Dial()
+│   ├── options.go             # Options, StartWorkflowOptions
+│   └── workflow_run.go        # WorkflowRun interface 実装
+├── worker/
 │   ├── worker.go
 │   ├── workflow_task_processor.go
 │   └── activity_task_processor.go
-├── workflow/                        # ワークフロー定義API
+├── workflow/
 │   ├── context.go
-│   ├── activity.go
+│   ├── activity.go            # ExecuteActivity[I,O]
+│   ├── options.go             # ActivityOption, WithStartToCloseTimeout, WithRetryPolicy
 │   ├── scheduler.go
 │   └── env.go
-├── internal/
-│   └── ...
 ├── examples/
 │   └── order/
-│       ├── workflows.go
-│       ├── activities.go
-│       └── main.go
 └── go.mod
 ```
 
 ## 9. 実装の難所と対処方針
 
-### トランザクションの一貫性（サーバー側）
+### トランザクションの一貫性
 
 CompleteWorkflowTaskでは複数のイベント記録、タスク生成、ステータス更新を1トランザクションで行う。port.TxManagerとcontext伝搬でこれを実現する。
 
-### Workflow Taskの直列化（サーバー側）
+### Workflow Taskの直列化
 
-同一ワークフローのWorkflow Taskは1つだけが処理中であるよう、pg_advisory_xact_lockで制御する。
+CompleteWorkflowTask実行時にpg_advisory_xact_lock(hash(workflowID))を取得する。adapter/postgres/のWorkflowTaskStore.GetByID内でロックを取得し、トランザクション終了時に自動解放する。
 
-### ActivityリトライとseqIDの対応（サーバー側）
+### ワークフロー状態の整合性
 
-リトライはサーバー側で管理。同じseqIDのActivityが失敗→リトライされても、ワークフロー関数から見ると「まだ完了していないActivity」。全リトライ失敗時にActivityTaskFailedイベントが記録される。
+CompleteActivityTask / FailActivityTask は対象ワークフローの状態をチェックする。ワークフローが既に終了（COMPLETED/FAILED/TERMINATED）している場合、結果は破棄してタスクだけ完了させる。
+
+### ActivityリトライとseqIDの対応
+
+リトライはサーバー側で管理。non_retryable=true または残り試行回数0で ActivityTaskFailed イベントが記録される。リトライ中はイベントを記録しない（ワークフローから見ると「まだ完了していないActivity」）。
+
+### Activity StartToCloseTimeout
+
+タスク取得時にtimeout_atを設定する。BackgroundWorkerのRunActivityTimeoutCheckerがtimeout_at超過のタスクを検知する。
+
+### StartWorkflowの冪等性
+
+同一IDで非終了状態のワークフローが存在する場合はErrWorkflowAlreadyExistsを返す。終了済みの場合は新規作成を許可する。チェックと作成は同一トランザクション内で実行する。
+
+### エラー定義の配置
+
+ドメインエラーはdomain/に定義する。これによりadapter/grpc/がengine/に依存することを防ぎ、Hexagonal Architectureの依存方向を維持する。
+
+### Poll操作の振る舞い
+
+タスクがない場合、リポジトリはdomain.ErrNoTaskAvailableを返す。gRPCハンドラはこれを空レスポンスに変換する（エラーではない）。SDKのワーカーは空レスポンスを受け取ると一定間隔後に再度Pollする。
 
 ### goroutineの管理とリーク防止（Go SDK側）
 
-ワークフローgoroutineはyieldでサスペンドされる。Workflow Task処理完了時にcontextをcancelし、goroutineを適切に終了させる。
+Workflow Task処理完了時にcontextをcancelし、goroutineを適切に終了させる。
 
-### replayの正確性（Go SDK側）
+### WorkflowRun.Get()の実装（Go SDK側）
 
-- seqIDの不一致でNonDeterministicErrorを発生させる
-- workflow.Now(ctx)、workflow.NewUUID(ctx)等のAPI提供で非決定的操作を回避
-
-### イベント履歴の肥大化
-
-- Phase 1: 全履歴をWorkflow Taskに添付
-- Phase 2: ワーカー側キャッシュ（sticky execution）
-- Phase 4: Continue-as-New
+MVPではDescribeWorkflowのポーリングで実現する。
 
 ## 10. Phase 1 MVPの実装ステップ
 
-### サーバー（本リポジトリ）
+### サーバー
 
 1. プロジェクト骨格: go mod, docker-compose.yml, proto定義
-2. domain/: ドメインモデル型定義
-3. port/: リポジトリインターフェース定義
-4. adapter/postgres/: PostgreSQL実装、TxManager、マイグレーション
-5. engine/: Engine実装、CommandProcessor、リトライポリシー
-6. adapter/grpc/: gRPCハンドラ
-7. cmd/dandori/: DI、サーバー起動、graceful shutdown
-8. テスト（adapter/postgres、engine、adapter/grpc）
+2. domain/: 型定義 + エラー定義（ErrWorkflowNotFound等）
+3. port/: 役割別Inbound Port（ClientService, WorkflowTaskService, ActivityTaskService）+ Outbound Port（WorkflowTaskRepository, ActivityTaskRepository を分離）
+4. adapter/postgres/: PostgreSQL実装、テーブル分離（workflow_tasks, activity_tasks）
+5. engine/: Engine（3つのInbound Port実装）、CommandProcessor、BackgroundWorker（別構造体）
+6. adapter/grpc/: gRPCハンドラ（役割別インターフェース受取、domainErrorToGRPC）
+7. cmd/dandori/: DI、サーバー起動、BackgroundWorker起動、graceful shutdown
+8. テスト
 
-### Go SDK（dandori-sdk-goリポジトリ）
+### Go SDK
 
-1. ワーカーSDK - Activityサイド: ポーリング、Activity実行、結果報告
-2. ワーカーSDK - Workflowサイド（核心）: workflow.Context, coroutineScheduler, ExecuteActivity（replay）
-3. クライアントSDK: StartWorkflow, GetWorkflowExecution
-4. 非決定性検出（seqID不一致でエラー）
-5. サンプルワークフロー（順次実行の3ステップ）
-6. テスト（replayロジックのユニットテスト、E2Eテスト）
-
-## 11. 検証方法
-
-- サンプルワークフロー（3ステップ順次Activity実行）のエンドツーエンド動作確認
-- gRPCurlでStartWorkflow → GetWorkflowExecutionで最終的にCOMPLETEDになることを確認
-- ワーカーを強制停止し再起動、ワークフローがreplayで途中から再開されることを確認
-- 複数ワーカー起動、タスクが重複実行されないことを確認
-- Activity失敗時のリトライが正しく動作することを確認
-- replayの正確性テスト: 同じイベント履歴でワークフロー関数を再実行し、同じコマンドが生成されることを確認
-- go test ./... で全ユニットテスト通過
-- testcontainersでPostgreSQLに対するインテグレーションテスト
+1. クライアントSDK: Dial, ExecuteWorkflow, GetWorkflow, WorkflowRun
+2. ワーカーSDK - Activityサイド
+3. ワーカーSDK - Workflowサイド（核心）
+4. 非決定性検出 + FailWorkflowTask報告
+5. サンプルワークフロー
+6. テスト
