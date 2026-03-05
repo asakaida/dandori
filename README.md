@@ -12,7 +12,7 @@ Go + PostgreSQLで実現する軽量 Durable Workflow エンジン。
 
 ## 使い方: 旅行予約ワークフロー
 
-航空券と宿泊を予約し、結果をまとめて返すワークフローの例です。どちらかが失敗してもリトライされ、サーバーやワーカーが途中でクラッシュしても Deterministic Replay により中断地点から再開します。
+航空券と宿泊を予約し、結果をまとめて返すワークフローの例です。途中で失敗した場合は Saga パターンで予約済みのステップを逆順にキャンセル（補償）します。サーバーやワーカーが途中でクラッシュしても Deterministic Replay により中断地点から再開します。
 
 ### Activity の定義
 
@@ -61,20 +61,38 @@ func BookHotel(ctx context.Context, input BookHotelInput) (BookHotelOutput, erro
 	}
 	return BookHotelOutput{ReservationID: id}, nil
 }
+
+// --- 補償（キャンセル）用 Activity ---
+
+type CancelFlightInput struct {
+	ConfirmationCode string `json:"confirmation_code"`
+}
+
+func CancelFlight(ctx context.Context, input CancelFlightInput) (struct{}, error) {
+	return struct{}{}, cancelFlightAPI(input.ConfirmationCode)
+}
+
+type CancelHotelInput struct {
+	ReservationID string `json:"reservation_id"`
+}
+
+func CancelHotel(ctx context.Context, input CancelHotelInput) (struct{}, error) {
+	return struct{}{}, cancelHotelAPI(input.ReservationID)
+}
 ```
 
 ### Workflow の定義
 
-Activity をどの順序で実行するかを記述します。この関数は決定的（deterministic）でなければなりません。
+Activity をどの順序で実行するかを記述します。この関数は決定的（deterministic）でなければなりません。`saga.New()` で補償コンテキストを作り、各ステップの成功後にキャンセル用 Activity を登録しておくことで、途中で失敗した場合に予約済みのステップを逆順でキャンセルできます。
 
 ```go
 // workflow.go
 package travel
 
 import (
-	"fmt"
 	"time"
 
+	"github.com/asakaida/dandori-sdk-go/saga"
 	"github.com/asakaida/dandori-sdk-go/workflow"
 )
 
@@ -94,6 +112,8 @@ func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, er
 	}
 	ctx = workflow.WithActivityOptions(ctx, actOpts)
 
+	s := saga.New(saga.Options{})
+
 	// 航空券を予約
 	var flight BookFlightOutput
 	err := workflow.ExecuteActivity(ctx, BookFlight, BookFlightInput{
@@ -102,8 +122,13 @@ func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, er
 		Date: input.Date,
 	}).Get(&flight)
 	if err != nil {
-		return TripResult{}, fmt.Errorf("flight booking failed: %w", err)
+		// まだ何も予約していないので補償不要
+		return TripResult{}, err
 	}
+	// 航空券キャンセルを補償として登録
+	s.AddCompensation(ctx, CancelFlight, CancelFlightInput{
+		ConfirmationCode: flight.ConfirmationCode,
+	})
 
 	// 宿泊を予約
 	var hotel BookHotelOutput
@@ -113,7 +138,8 @@ func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, er
 		CheckOut: input.CheckOutDate,
 	}).Get(&hotel)
 	if err != nil {
-		return TripResult{}, fmt.Errorf("hotel booking failed: %w", err)
+		// 宿泊予約失敗 → 航空券をキャンセル（逆順補償）
+		return TripResult{}, s.Compensate(ctx, err)
 	}
 
 	return TripResult{
@@ -122,6 +148,8 @@ func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, er
 	}, nil
 }
 ```
+
+`s.Compensate(ctx, err)` は登録された補償を逆順に実行します。サーバーにとっては通常の Activity 実行と区別がつかないため、特別なサーバー側の仕組みは不要です。
 
 ### Worker の起動
 
@@ -148,6 +176,8 @@ func main() {
 	w.RegisterWorkflow(travel.BookTripWorkflow)
 	w.RegisterActivity(travel.BookFlight)
 	w.RegisterActivity(travel.BookHotel)
+	w.RegisterActivity(travel.CancelFlight)
+	w.RegisterActivity(travel.CancelHotel)
 
 	if err := w.Run(); err != nil {
 		log.Fatal(err)
@@ -200,7 +230,7 @@ func main() {
 }
 ```
 
-### 処理の流れ
+### 処理の流れ（正常系）
 
 ```text
 Client                     dandori-server                Worker
@@ -226,7 +256,42 @@ Client                     dandori-server                Worker
   |<-- Result ------------------|                          |
 ```
 
-もしワーカーが Activity 実行中にクラッシュしても、dandori-server がタイムアウトを検知してタスクを再キューイングします。ワークフロー関数はイベント履歴から状態を復元（replay）するため、完了済みの航空券予約をスキップして宿泊予約から再開できます。
+### 処理の流れ（宿泊予約失敗 → Saga 補償）
+
+```text
+Client                     dandori-server                Worker
+  |                             |                          |
+  |-- StartWorkflow ----------->|                          |
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- BookTripWorkflow()
+  |                             |                          |   "航空券を予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookFlight() ✓
+  |                             |<-- Complete (結果) ------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + 続行
+  |                             |                          |   "宿泊を予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookHotel() ✗
+  |                             |<-- Failed ---------------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + Compensate()
+  |                             |                          |   "航空券をキャンセルして"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- CancelFlight()
+  |                             |<-- Complete -------------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + FailWorkflow
+  |                             |<-- FailWorkflow ---------|
+  |<-- Error ------------------|                          |
+```
+
+サーバーにとって補償 Activity（CancelFlight）は通常の Activity と同じです。Saga の逆順実行ロジックは SDK 側で完結します。
+
+もしワーカーが Activity 実行中にクラッシュしても、dandori-server がタイムアウトを検知してタスクを再キューイングします。ワークフロー関数はイベント履歴から状態を復元（replay）するため、完了済みの航空券予約をスキップして宿泊予約から再開できます。補償の途中でクラッシュした場合も同様に、完了済みの補償をスキップして残りの補償から再開します。
 
 ## アーキテクチャ
 
@@ -351,14 +416,14 @@ go test -v -race ./test/e2e/...                  # E2Eテスト
 
 - [設計書](docs/design.md) - アーキテクチャ、データモデル、API仕様の詳細
 - [プロダクト要求仕様書](docs/prd.md) - コアコンセプト、機能要件、フェーズ計画
-- [スプリント管理](docs/sprints.md) - Sprint 1-20の詳細タスクと進捗
+- [スプリント管理](docs/sprints.md) - Sprint 1-21の詳細タスクと進捗
 
 ## 開発状況
 
 - **Phase 1 (MVP)**: 完了 - Sprint 1-5 + E2Eテスト（104テスト通過）
 - **Phase 2 (信頼性と機能拡張)**: Sprint 6-11（Timer, Signal, Cancel, Heartbeat, LISTEN/NOTIFY, CLI）
-- **Phase 3 (高度な機能)**: Sprint 12-16（Child Workflow, SideEffect, Cron, HTTP API, Observability）
-- **Phase 4 (運用性と最適化)**: Sprint 17-20（Namespace, Web UI, パフォーマンス, ドキュメント）
+- **Phase 3 (高度な機能)**: Sprint 12-17（Saga, Child Workflow, SideEffect, Cron, HTTP API, Observability）
+- **Phase 4 (運用性と最適化)**: Sprint 18-21（Namespace, Web UI, パフォーマンス, ドキュメント）
 
 ## ライセンス
 
