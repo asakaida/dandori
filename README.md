@@ -1,6 +1,6 @@
 # dandori
 
-Temporalにインスパイアされたワークフローエンジン。PostgreSQLとGoで構築し、deterministic replay方式を採用。
+Go + PostgreSQLで実現する軽量 Durable Workflow エンジン。
 
 ## 特徴
 
@@ -9,6 +9,224 @@ Temporalにインスパイアされたワークフローエンジン。PostgreSQ
 - **PostgreSQL**: 外部依存を最小限に。タスクキューは `SELECT FOR UPDATE SKIP LOCKED` で実現
 - **gRPC API**: proto定義をAPI契約とし、将来的に他言語SDKにも対応可能
 - **Hexagonal Architecture**: domain/ -> port/ -> adapter/ の依存方向でテスタビリティを確保
+
+## 使い方: 旅行予約ワークフロー
+
+航空券と宿泊を予約し、結果をまとめて返すワークフローの例です。どちらかが失敗してもリトライされ、サーバーやワーカーが途中でクラッシュしても Deterministic Replay により中断地点から再開します。
+
+### Activity の定義
+
+実際の外部 API 呼び出しを行う関数です。dandori はこれらを自動でリトライ・タイムアウト管理します。
+
+```go
+// activities.go
+package travel
+
+import "context"
+
+type BookFlightInput struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Date string `json:"date"`
+}
+
+type BookFlightOutput struct {
+	ConfirmationCode string `json:"confirmation_code"`
+}
+
+func BookFlight(ctx context.Context, input BookFlightInput) (BookFlightOutput, error) {
+	// 航空券予約 API を呼び出す
+	code, err := callFlightAPI(input)
+	if err != nil {
+		return BookFlightOutput{}, err
+	}
+	return BookFlightOutput{ConfirmationCode: code}, nil
+}
+
+type BookHotelInput struct {
+	City     string `json:"city"`
+	CheckIn  string `json:"check_in"`
+	CheckOut string `json:"check_out"`
+}
+
+type BookHotelOutput struct {
+	ReservationID string `json:"reservation_id"`
+}
+
+func BookHotel(ctx context.Context, input BookHotelInput) (BookHotelOutput, error) {
+	// 宿泊予約 API を呼び出す
+	id, err := callHotelAPI(input)
+	if err != nil {
+		return BookHotelOutput{}, err
+	}
+	return BookHotelOutput{ReservationID: id}, nil
+}
+```
+
+### Workflow の定義
+
+Activity をどの順序で実行するかを記述します。この関数は決定的（deterministic）でなければなりません。
+
+```go
+// workflow.go
+package travel
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/asakaida/dandori-sdk-go/workflow"
+)
+
+type TripResult struct {
+	FlightConfirmation string `json:"flight_confirmation"`
+	HotelReservation   string `json:"hotel_reservation"`
+}
+
+func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, error) {
+	actOpts := workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &workflow.RetryPolicy{
+			MaxAttempts:        3,
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, actOpts)
+
+	// 航空券を予約
+	var flight BookFlightOutput
+	err := workflow.ExecuteActivity(ctx, BookFlight, BookFlightInput{
+		From: input.From,
+		To:   input.To,
+		Date: input.Date,
+	}).Get(&flight)
+	if err != nil {
+		return TripResult{}, fmt.Errorf("flight booking failed: %w", err)
+	}
+
+	// 宿泊を予約
+	var hotel BookHotelOutput
+	err = workflow.ExecuteActivity(ctx, BookHotel, BookHotelInput{
+		City:     input.To,
+		CheckIn:  input.Date,
+		CheckOut: input.CheckOutDate,
+	}).Get(&hotel)
+	if err != nil {
+		return TripResult{}, fmt.Errorf("hotel booking failed: %w", err)
+	}
+
+	return TripResult{
+		FlightConfirmation: flight.ConfirmationCode,
+		HotelReservation:   hotel.ReservationID,
+	}, nil
+}
+```
+
+### Worker の起動
+
+```go
+// worker/main.go
+package main
+
+import (
+	"log"
+
+	"github.com/asakaida/dandori-sdk-go/client"
+	"github.com/asakaida/dandori-sdk-go/worker"
+	"example.com/travel"
+)
+
+func main() {
+	c, err := client.Dial("localhost:7233")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer c.Close()
+
+	w := worker.New(c, "travel-queue")
+	w.RegisterWorkflow(travel.BookTripWorkflow)
+	w.RegisterActivity(travel.BookFlight)
+	w.RegisterActivity(travel.BookHotel)
+
+	if err := w.Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+### Client からワークフローを開始
+
+```go
+// client/main.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/asakaida/dandori-sdk-go/client"
+	"example.com/travel"
+)
+
+func main() {
+	c, err := client.Dial("localhost:7233")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer c.Close()
+
+	run, err := c.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+		ID:        "trip-tokyo-2026-03",
+		TaskQueue: "travel-queue",
+	}, travel.BookTripWorkflow, travel.BookTripInput{
+		From:         "NRT",
+		To:           "OKA",
+		Date:         "2026-04-01",
+		CheckOutDate: "2026-04-05",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var result travel.TripResult
+	if err := run.Get(context.Background(), &result); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Flight: %s\n", result.FlightConfirmation)
+	fmt.Printf("Hotel:  %s\n", result.HotelReservation)
+}
+```
+
+### 処理の流れ
+
+```text
+Client                     dandori-server                Worker
+  |                             |                          |
+  |-- StartWorkflow ----------->|                          |
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- BookTripWorkflow()
+  |                             |                          |   "航空券を予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookFlight()
+  |                             |<-- Complete (結果) ------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + 続行
+  |                             |                          |   "宿泊を予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookHotel()
+  |                             |<-- Complete (結果) ------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + 完了
+  |                             |<-- CompleteWorkflow -----|
+  |<-- Result ------------------|                          |
+```
+
+もしワーカーが Activity 実行中にクラッシュしても、dandori-server がタイムアウトを検知してタスクを再キューイングします。ワークフロー関数はイベント履歴から状態を復元（replay）するため、完了済みの航空券予約をスキップして宿泊予約から再開できます。
 
 ## アーキテクチャ
 
