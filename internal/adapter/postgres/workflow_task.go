@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/asakaida/dandori/internal/domain"
+	"github.com/google/uuid"
 )
 
 type WorkflowTaskStore struct {
@@ -90,6 +91,13 @@ func (s *WorkflowTaskStore) GetByID(ctx context.Context, taskID int64) (*domain.
 	}
 
 	return &task, nil
+}
+
+func (s *WorkflowTaskStore) DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error {
+	_, err := s.store.conn(ctx).ExecContext(ctx,
+		`DELETE FROM workflow_tasks WHERE workflow_id = $1`, workflowID,
+	)
+	return err
 }
 
 func (s *WorkflowTaskStore) RecoverStaleTasks(ctx context.Context) (int, error) {

@@ -18,6 +18,7 @@ type WorkflowRepository interface {
 type EventRepository interface {
 	Append(ctx context.Context, events []domain.HistoryEvent) error
 	GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
+	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type WorkflowTaskRepository interface {
@@ -26,6 +27,7 @@ type WorkflowTaskRepository interface {
 	Complete(ctx context.Context, taskID int64) error
 	GetByID(ctx context.Context, taskID int64) (*domain.WorkflowTask, error)
 	RecoverStaleTasks(ctx context.Context) (int, error)
+	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type ActivityTaskRepository interface {
@@ -36,12 +38,14 @@ type ActivityTaskRepository interface {
 	GetTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
 	Requeue(ctx context.Context, taskID int64, scheduledAt time.Time) error
 	RecoverStaleTasks(ctx context.Context) (int, error)
+	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type TimerRepository interface {
 	Create(ctx context.Context, timer domain.Timer) error
 	GetFired(ctx context.Context) ([]domain.Timer, error)
 	MarkFired(ctx context.Context, timerID int64) error
+	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type TxManager interface {

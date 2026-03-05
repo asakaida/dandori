@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/asakaida/dandori/internal/domain"
+	"github.com/google/uuid"
 )
 
 type ActivityTaskStore struct {
@@ -208,6 +209,13 @@ func (s *ActivityTaskStore) Requeue(ctx context.Context, taskID int64, scheduled
 			 locked_by = NULL, locked_until = NULL, scheduled_at = $2
 		 WHERE id = $1`,
 		taskID, scheduledAt,
+	)
+	return err
+}
+
+func (s *ActivityTaskStore) DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error {
+	_, err := s.store.conn(ctx).ExecContext(ctx,
+		`DELETE FROM activity_tasks WHERE workflow_id = $1`, workflowID,
 	)
 	return err
 }

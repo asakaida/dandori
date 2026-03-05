@@ -68,6 +68,60 @@ func TestWorkflowStore_UpdateStatus(t *testing.T) {
 	assert.NotNil(t, wf.ClosedAt)
 }
 
+func TestWorkflowStore_Create_UpsertTerminal(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	wfID := uuid.New()
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           wfID,
+		WorkflowType: "old-wf",
+		TaskQueue:    "default",
+		Status:       domain.WorkflowStatusRunning,
+	}))
+	require.NoError(t, store.Workflows().UpdateStatus(ctx, wfID, domain.WorkflowStatusCompleted, json.RawMessage(`{"old":true}`), ""))
+
+	// Re-create with same ID should succeed since it's terminal
+	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           wfID,
+		WorkflowType: "new-wf",
+		TaskQueue:    "new-queue",
+		Status:       domain.WorkflowStatusRunning,
+		Input:        json.RawMessage(`{"new":true}`),
+	})
+	require.NoError(t, err)
+
+	wf, err := store.Workflows().Get(ctx, wfID)
+	require.NoError(t, err)
+	assert.Equal(t, "new-wf", wf.WorkflowType)
+	assert.Equal(t, "new-queue", wf.TaskQueue)
+	assert.Equal(t, domain.WorkflowStatusRunning, wf.Status)
+	assert.Nil(t, wf.ClosedAt)
+	assert.Nil(t, wf.Result)
+}
+
+func TestWorkflowStore_Create_DuplicateRunning(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	wfID := uuid.New()
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           wfID,
+		WorkflowType: "test-wf",
+		TaskQueue:    "default",
+		Status:       domain.WorkflowStatusRunning,
+	}))
+
+	// Creating with same ID while RUNNING should fail
+	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           wfID,
+		WorkflowType: "test-wf",
+		TaskQueue:    "default",
+		Status:       domain.WorkflowStatusRunning,
+	})
+	assert.ErrorIs(t, err, domain.ErrWorkflowAlreadyExists)
+}
+
 func TestWorkflowStore_UpdateStatus_Failed(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()

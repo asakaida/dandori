@@ -83,36 +83,47 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 ### Sprint 3 - Engineとコマンドプロセッサ
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: engine/のビジネスロジックを実装し、StartWorkflowからコマンド処理までの一連のフローを動作させる
 
 タスク:
 
-- [ ] internal/engine/engine.go
-  - port.ClientService 実装: StartWorkflow（冪等性チェック + ID自動生成）、DescribeWorkflow、TerminateWorkflow（状態チェック + ErrWorkflowNotRunning）、GetWorkflowHistory
-  - port.WorkflowTaskService 実装: PollWorkflowTask、CompleteWorkflowTask（Advisory Lock + taskID→workflowID解決）、FailWorkflowTask
+- [x] internal/port/repository.go にDeleteByWorkflowIDを追加（EventRepository, WorkflowTaskRepository, ActivityTaskRepository, TimerRepository）
+- [x] adapter/postgres/ にDeleteByWorkflowID実装（event.go, workflow_task.go, activity_task.go, timer.go）
+- [x] adapter/postgres/workflow.go のCreateをupsert化（ON CONFLICT + terminal状態チェック → ErrWorkflowAlreadyExists）
+- [x] adapter/postgres/ の新規テスト追加（DeleteByWorkflowID×4, Create upsert×2、計38テスト通過）
+- [x] internal/engine/engine.go
+  - port.ClientService 実装: StartWorkflow（冪等性チェック + ID自動生成 + 終了済みワークフローの関連データ削除→再作成）、DescribeWorkflow、TerminateWorkflow（状態チェック + ErrWorkflowNotRunning）、GetWorkflowHistory
+  - port.WorkflowTaskService 実装: PollWorkflowTask（ErrNoTaskAvailable→nil,nil）、CompleteWorkflowTask（Advisory Lock + taskID→workflowID解決）、FailWorkflowTask
   - port.ActivityTaskService 実装: PollActivityTask、CompleteActivityTask（ワークフロー状態チェック）、FailActivityTask（non_retryable + リトライ判定 + ワークフロー状態チェック）
   - var _ port.ClientService = (*Engine)(nil) 等のコンパイル時保証
-- [ ] internal/engine/command_processor.go
-  - processScheduleActivity: TaskQueue未指定時にワークフローのTaskQueueを使用、RetryPolicy/Timeout伝搬
+- [x] internal/engine/command_processor.go
+  - processScheduleActivity: TaskQueue未指定時にワークフローのTaskQueueを使用、RetryPolicy/Timeout伝搬、デフォルトMaxAttempts=1
   - processCompleteWorkflow, processFailWorkflow
   - 未知のCommandTypeでエラーを返す
-- [ ] internal/engine/background.go（BackgroundWorker: RunActivityTimeoutChecker, RunTaskRecovery。Engineとは別構造体）
-- [ ] internal/engine/retry.go（固定間隔リトライ、computeNextRetryTime）
-- [ ] engineのユニットテスト（port/のインターフェースをモックしてロジックを検証）
+- [x] internal/engine/background.go（BackgroundWorker: RunActivityTimeoutChecker, RunTaskRecovery。Engineとは別構造体）
+- [x] internal/engine/retry.go（指数バックオフリトライ、computeNextRetryTime、MaxIntervalキャップ）
+- [x] engineのユニットテスト（手書きモック構造体でロジックを検証、35テスト通過）
+
+実装上の設計判断:
+
+- CommandProcessorを独立構造体にせず、Engineのメソッドとして統合（processCommandsがCompleteWorkflowTask内から呼ばれるため、同一トランザクション内で自然に動作）
+- PollWorkflowTask/PollActivityTaskはErrNoTaskAvailableをengine層で(nil, nil)に変換し、gRPCハンドラの簡素化に備える
+- StartWorkflowで終了済みワークフロー再作成時に旧events/tasks/timersを削除してからCreate（upsert）
 
 完了条件:
 
-- StartWorkflowで冪等性チェック + イベント記録 + タスク投入が1トランザクションで実行される
-- 同一IDで2回StartWorkflow → ErrWorkflowAlreadyExists
-- 終了済みIDで再度StartWorkflow → 新規作成成功
-- TerminateWorkflowで状態チェック → RUNNING以外は ErrWorkflowNotRunning
-- CompleteWorkflowTaskでtaskIDからworkflowIDを解決し、コマンド→イベント変換が正しく動作する
-- CompleteActivityTaskでワークフローがTERMINATED済みの場合、結果が破棄されタスクだけ完了する
-- FailActivityTaskでnon_retryable=trueの場合は即座にActivityTaskFailed
-- FailActivityTaskでリトライ可能な場合はRequeueされる
-- BackgroundWorkerのRunActivityTimeoutCheckerのロジックがテスト通過
+- [x] StartWorkflowで冪等性チェック + イベント記録 + タスク投入が1トランザクションで実行される
+- [x] 同一IDで2回StartWorkflow → ErrWorkflowAlreadyExists
+- [x] 終了済みIDで再度StartWorkflow → 新規作成成功（関連データ削除→再作成）
+- [x] TerminateWorkflowで状態チェック → RUNNING以外は ErrWorkflowNotRunning
+- [x] CompleteWorkflowTaskでtaskIDからworkflowIDを解決し、コマンド→イベント変換が正しく動作する
+- [x] CompleteActivityTaskでワークフローがTERMINATED済みの場合、結果が破棄されタスクだけ完了する
+- [x] FailActivityTaskでnon_retryable=trueの場合は即座にActivityTaskFailed
+- [x] FailActivityTaskでリトライ可能な場合はRequeueされる
+- [x] BackgroundWorkerのRunActivityTimeoutCheckerのロジックがテスト通過
+- [x] go build ./cmd/dandori, go vet ./... がクリーン
 
 ### Sprint 4 - gRPCハンドラとサーバー起動
 
@@ -153,11 +164,6 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 タスク:
 
 - [ ] adapter/grpc経由のインテグレーションテスト（StartWorkflow → Poll → Complete のフロー）
-- [ ] engine/command_processorのエッジケーステスト（RetryPolicy伝搬、TaskQueue未指定時のフォールバック、未知のコマンドタイプ）
-- [ ] engine/retryのテスト（成功、全リトライ失敗、non_retryableで即座に失敗）
-- [ ] engine/backgroundのテスト（ActivityTimeoutCheckerがtimeout_at超過を検知）
-- [ ] ワークフロー状態遷移テスト（TERMINATED後のCompleteActivityTask → 結果破棄）
-- [ ] StartWorkflow冪等性テスト（同一ID + RUNNING → エラー、同一ID + COMPLETED → 新規作成OK）
 - [ ] エラーモデルテスト（各ドメインエラーが正しいgRPCステータスに変換される）
 - [ ] adapter/postgres内のAdvisory Lockによるワークフロー直列化のテスト
 - [ ] CI設定（GitHub Actions: lint, test, build）

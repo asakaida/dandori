@@ -16,12 +16,32 @@ type WorkflowStore struct {
 }
 
 func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution) error {
-	_, err := s.store.conn(ctx).ExecContext(ctx,
-		`INSERT INTO workflow_executions (id, workflow_type, task_queue, status, input)
-		 VALUES ($1, $2, $3, $4, $5)`,
+	res, err := s.store.conn(ctx).ExecContext(ctx,
+		`INSERT INTO workflow_executions (id, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, NOW())
+		 ON CONFLICT (id) DO UPDATE SET
+			workflow_type = EXCLUDED.workflow_type,
+			task_queue = EXCLUDED.task_queue,
+			status = EXCLUDED.status,
+			input = EXCLUDED.input,
+			result = NULL,
+			error_message = NULL,
+			closed_at = NULL,
+			updated_at = NOW()
+		 WHERE workflow_executions.status IN ('COMPLETED', 'FAILED', 'TERMINATED')`,
 		wf.ID, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrWorkflowAlreadyExists
+	}
+	return nil
 }
 
 func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {

@@ -85,6 +85,24 @@ func TestEventStore_Append_Sequential(t *testing.T) {
 	assert.Equal(t, 2, events[1].SequenceNum)
 }
 
+func TestEventStore_DeleteByWorkflowID(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.Events().Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: wfID, Type: domain.EventWorkflowExecutionStarted, Data: json.RawMessage(`{}`)},
+		{WorkflowID: wfID, Type: domain.EventActivityTaskScheduled, Data: json.RawMessage(`{}`)},
+	}))
+
+	err := store.Events().DeleteByWorkflowID(ctx, wfID)
+	require.NoError(t, err)
+
+	events, err := store.Events().GetByWorkflowID(ctx, wfID)
+	require.NoError(t, err)
+	assert.Len(t, events, 0)
+}
+
 func TestEventStore_GetByWorkflowID_OrderBySequence(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()

@@ -219,6 +219,28 @@ func TestActivityTaskStore_GetByID_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrTaskNotFound)
 }
 
+func TestActivityTaskStore_DeleteByWorkflowID(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		QueueName:     "default",
+		WorkflowID:    wfID,
+		ActivityType:  "task-1",
+		ActivityInput: json.RawMessage(`{}`),
+		ActivitySeqID: 0,
+		Attempt:       1,
+		MaxAttempts:   1,
+	}))
+
+	err := store.ActivityTasks().DeleteByWorkflowID(ctx, wfID)
+	require.NoError(t, err)
+
+	_, err = store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
+}
+
 func TestActivityTaskStore_RecoverStaleTasks(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()

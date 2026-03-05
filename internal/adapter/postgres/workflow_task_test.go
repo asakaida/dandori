@@ -135,6 +135,25 @@ func TestWorkflowTaskStore_RecoverStaleTasks(t *testing.T) {
 	assert.Equal(t, task.ID, recovered.ID)
 }
 
+func TestWorkflowTaskStore_DeleteByWorkflowID(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
+		QueueName: "default", WorkflowID: wfID,
+	}))
+	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
+		QueueName: "default", WorkflowID: wfID,
+	}))
+
+	err := store.WorkflowTasks().DeleteByWorkflowID(ctx, wfID)
+	require.NoError(t, err)
+
+	_, err = store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
+}
+
 func TestWorkflowTaskStore_Poll_RespectsScheduledAt(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()

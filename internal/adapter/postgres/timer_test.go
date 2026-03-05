@@ -39,6 +39,25 @@ func TestTimerStore_Create_GetFired_MarkFired(t *testing.T) {
 	assert.Len(t, fired, 0)
 }
 
+func TestTimerStore_DeleteByWorkflowID(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		WorkflowID: wfID,
+		SeqID:      1,
+		FireAt:     time.Now().Add(-1 * time.Second),
+	}))
+
+	err := store.Timers().DeleteByWorkflowID(ctx, wfID)
+	require.NoError(t, err)
+
+	fired, err := store.Timers().GetFired(ctx)
+	require.NoError(t, err)
+	assert.Len(t, fired, 0)
+}
+
 func TestTimerStore_GetFired_FutureTimerNotReturned(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()

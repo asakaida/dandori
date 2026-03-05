@@ -26,6 +26,13 @@ func (s *EventStore) Append(ctx context.Context, events []domain.HistoryEvent) e
 	return nil
 }
 
+func (s *EventStore) DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error {
+	_, err := s.store.conn(ctx).ExecContext(ctx,
+		`DELETE FROM workflow_events WHERE workflow_id = $1`, workflowID,
+	)
+	return err
+}
+
 func (s *EventStore) GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
 	rows, err := s.store.conn(ctx).QueryContext(ctx,
 		`SELECT id, workflow_id, sequence_num, event_type, event_data, timestamp

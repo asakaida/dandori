@@ -269,13 +269,6 @@ type WorkflowExecution struct {
 
 ```go
 // domain/task.go
-type TaskType string
-
-const (
-    TaskTypeWorkflow TaskType = "WORKFLOW"
-    TaskTypeActivity TaskType = "ACTIVITY"
-)
-
 type TaskStatus string
 
 const (
@@ -389,6 +382,7 @@ type EventRepository interface {
     // Append はイベントを追記する。sequence_numはリポジトリ内で自動採番される。
     Append(ctx context.Context, events []domain.HistoryEvent) error
     GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
+    DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type WorkflowTaskRepository interface {
@@ -398,6 +392,7 @@ type WorkflowTaskRepository interface {
     Complete(ctx context.Context, taskID int64) error
     GetByID(ctx context.Context, taskID int64) (*domain.WorkflowTask, error)
     RecoverStaleTasks(ctx context.Context) (int, error)
+    DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type ActivityTaskRepository interface {
@@ -409,12 +404,14 @@ type ActivityTaskRepository interface {
     GetTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
     Requeue(ctx context.Context, taskID int64, scheduledAt time.Time) error
     RecoverStaleTasks(ctx context.Context) (int, error)
+    DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type TimerRepository interface {
     Create(ctx context.Context, timer domain.Timer) error
     GetFired(ctx context.Context) ([]domain.Timer, error)
     MarkFired(ctx context.Context, timerID int64) error
+    DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
 type TxManager interface {
@@ -428,7 +425,9 @@ type TxManager interface {
 
 ```go
 // engine/engine.go
-// Engine は port.ClientService, port.WorkflowTaskService, port.ActivityTaskService を実装する
+// Engine は port.ClientService, port.WorkflowTaskService, port.ActivityTaskService を実装する。
+// コマンド処理(processCommands)はEngineのメソッドとして統合し、
+// CompleteWorkflowTask内から同一トランザクションで自然に呼び出す。
 type Engine struct {
     workflows      port.WorkflowRepository
     events         port.EventRepository
@@ -436,7 +435,6 @@ type Engine struct {
     activityTasks  port.ActivityTaskRepository
     timers         port.TimerRepository
     tx             port.TxManager
-    cmdProc        *CommandProcessor
 }
 
 // コンパイル時にインターフェース実装を保証
@@ -452,7 +450,7 @@ func New(
     timers port.TimerRepository,
     tx port.TxManager,
 ) *Engine {
-    e := &Engine{
+    return &Engine{
         workflows:     workflows,
         events:        events,
         workflowTasks: workflowTasks,
@@ -460,8 +458,6 @@ func New(
         timers:        timers,
         tx:            tx,
     }
-    e.cmdProc = NewCommandProcessor(events, workflowTasks, activityTasks, workflows, timers)
-    return e
 }
 
 // --- ClientService の実装 ---
@@ -471,81 +467,106 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
         params.ID = uuid.New()
     }
 
-    var wf domain.WorkflowExecution
+    var wf *domain.WorkflowExecution
     err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
         // 冪等性チェック: 同一IDのワークフローが存在するか
         existing, err := e.workflows.Get(ctx, params.ID)
         if err != nil && !errors.Is(err, domain.ErrWorkflowNotFound) {
             return err
         }
-        if existing != nil {
-            if !existing.Status.IsTerminal() {
-                return domain.ErrWorkflowAlreadyExists
-            }
-            // 終了済みなら新規作成を許可（IDを再利用）
+
+        if existing != nil && existing.Status == domain.WorkflowStatusRunning {
+            return domain.ErrWorkflowAlreadyExists
         }
 
-        wf = domain.WorkflowExecution{
+        // 終了済みワークフローの再作成: 旧関連データを削除してからupsert
+        if existing != nil && existing.Status.IsTerminal() {
+            if err := e.events.DeleteByWorkflowID(ctx, params.ID); err != nil {
+                return err
+            }
+            if err := e.workflowTasks.DeleteByWorkflowID(ctx, params.ID); err != nil {
+                return err
+            }
+            if err := e.activityTasks.DeleteByWorkflowID(ctx, params.ID); err != nil {
+                return err
+            }
+            if err := e.timers.DeleteByWorkflowID(ctx, params.ID); err != nil {
+                return err
+            }
+        }
+
+        newWF := domain.WorkflowExecution{
             ID:           params.ID,
             WorkflowType: params.WorkflowType,
             TaskQueue:    params.TaskQueue,
             Status:       domain.WorkflowStatusRunning,
             Input:        params.Input,
         }
-        if err := e.workflows.Create(ctx, wf); err != nil {
+        if err := e.workflows.Create(ctx, newWF); err != nil {
+            return err
+        }
+
+        eventData, err := json.Marshal(map[string]json.RawMessage{"input": params.Input})
+        if err != nil {
             return err
         }
         if err := e.events.Append(ctx, []domain.HistoryEvent{{
-            WorkflowID: wf.ID,
+            WorkflowID: params.ID,
             Type:       domain.EventWorkflowExecutionStarted,
-            Data:       params.Input,
+            Data:       eventData,
         }}); err != nil {
             return err
         }
-        return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+        if err := e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
             QueueName:  params.TaskQueue,
-            WorkflowID: wf.ID,
-        })
+            WorkflowID: params.ID,
+        }); err != nil {
+            return err
+        }
+
+        wf = &newWF
+        return nil
     })
     if err != nil {
         return nil, err
     }
-    return &wf, nil
+    return wf, nil
 }
 
 func (e *Engine) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error {
     return e.tx.RunInTx(ctx, func(ctx context.Context) error {
-        // 状態チェック: RUNNING状態のワークフローのみTerminate可能
         wf, err := e.workflows.Get(ctx, id)
         if err != nil {
             return err
         }
-        if wf.Status.IsTerminal() {
+        if wf.Status != domain.WorkflowStatusRunning {
             return domain.ErrWorkflowNotRunning
         }
 
-        // JSONは安全にmarshalする（文字列連結禁止）
+        if err := e.workflows.UpdateStatus(ctx, id, domain.WorkflowStatusTerminated, nil, reason); err != nil {
+            return err
+        }
+
         data, err := json.Marshal(map[string]string{"reason": reason})
         if err != nil {
             return err
         }
-        if err := e.events.Append(ctx, []domain.HistoryEvent{{
+        return e.events.Append(ctx, []domain.HistoryEvent{{
             WorkflowID: id,
             Type:       domain.EventWorkflowExecutionTerminated,
             Data:       data,
-        }}); err != nil {
-            return err
-        }
-        return e.workflows.UpdateStatus(ctx, id, domain.WorkflowStatusTerminated, nil, reason)
+        }})
     })
 }
 
 // --- WorkflowTaskService の実装 ---
 
 func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
-    // Poll はタスクがない場合 domain.ErrNoTaskAvailable を返す。
-    // gRPCハンドラ側でこれを空レスポンスに変換する。
+    // タスクがない場合は(nil, nil)を返す。gRPCハンドラ側で空レスポンスに変換する。
     task, err := e.workflowTasks.Poll(ctx, queueName, workerID)
+    if errors.Is(err, domain.ErrNoTaskAvailable) {
+        return nil, nil
+    }
     if err != nil {
         return nil, err
     }
@@ -573,7 +594,12 @@ func (e *Engine) CompleteWorkflowTask(ctx context.Context, taskID int64, command
         if err := e.workflowTasks.Complete(ctx, taskID); err != nil {
             return err
         }
-        return e.cmdProc.Process(ctx, task.WorkflowID, commands)
+
+        wf, err := e.workflows.Get(ctx, task.WorkflowID)
+        if err != nil {
+            return err
+        }
+        return e.processCommands(ctx, task.WorkflowID, wf.TaskQueue, commands)
     })
 }
 
@@ -586,23 +612,23 @@ func (e *Engine) CompleteActivityTask(ctx context.Context, taskID int64, result 
             return err
         }
 
-        // 対象ワークフローがまだRUNNINGかチェック
         wf, err := e.workflows.Get(ctx, task.WorkflowID)
         if err != nil {
             return err
-        }
-        if wf.Status.IsTerminal() {
-            // ワークフローが既に終了している場合、結果は破棄してタスクだけ完了する
-            return e.activityTasks.Complete(ctx, taskID)
         }
 
         if err := e.activityTasks.Complete(ctx, taskID); err != nil {
             return err
         }
 
-        completedData, err := json.Marshal(map[string]interface{}{
-            "seq_id": task.ActivitySeqID,
-            "result": json.RawMessage(result),
+        if wf.Status.IsTerminal() {
+            // ワークフローが既に終了している場合、結果は破棄してタスクだけ完了する
+            return nil
+        }
+
+        completedData, err := json.Marshal(map[string]any{
+            "activity_seq_id": task.ActivitySeqID,
+            "result":          result,
         })
         if err != nil {
             return err
@@ -637,36 +663,32 @@ func (e *Engine) FailActivityTask(ctx context.Context, taskID int64, failure dom
         }
 
         // リトライ判定: non_retryable=true or 最大試行回数到達 → 失敗確定
-        shouldRetry := !failure.NonRetryable && task.Attempt < task.MaxAttempts
-
-        if shouldRetry {
-            nextSchedule := computeNextRetryTime(task)
-            return e.activityTasks.Requeue(ctx, taskID, nextSchedule)
+        if failure.NonRetryable || task.Attempt >= task.MaxAttempts {
+            if err := e.activityTasks.Complete(ctx, taskID); err != nil {
+                return err
+            }
+            failedData, err := json.Marshal(map[string]any{
+                "activity_seq_id": task.ActivitySeqID,
+                "failure":         failure,
+            })
+            if err != nil {
+                return err
+            }
+            if err := e.events.Append(ctx, []domain.HistoryEvent{{
+                WorkflowID: task.WorkflowID,
+                Type:       domain.EventActivityTaskFailed,
+                Data:       failedData,
+            }}); err != nil {
+                return err
+            }
+            return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+                QueueName:  wf.TaskQueue,
+                WorkflowID: task.WorkflowID,
+            })
         }
 
-        // リトライ不可 → ActivityTaskFailed イベントを記録し、Workflow Taskを生成
-        if err := e.activityTasks.Complete(ctx, taskID); err != nil {
-            return err
-        }
-        failedData, err := json.Marshal(map[string]interface{}{
-            "seq_id":        task.ActivitySeqID,
-            "error_message": failure.Message,
-            "error_type":    failure.Type,
-        })
-        if err != nil {
-            return err
-        }
-        if err := e.events.Append(ctx, []domain.HistoryEvent{{
-            WorkflowID: task.WorkflowID,
-            Type:       domain.EventActivityTaskFailed,
-            Data:       failedData,
-        }}); err != nil {
-            return err
-        }
-        return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
-            QueueName:  wf.TaskQueue,
-            WorkflowID: task.WorkflowID,
-        })
+        // リトライ可能 → 指数バックオフで再キューイング
+        return e.activityTasks.Requeue(ctx, taskID, computeNextRetryTime(task))
     })
 }
 ```
@@ -743,48 +765,23 @@ func (w *BackgroundWorker) RunTaskRecovery(ctx context.Context, interval time.Du
 
 ```go
 // engine/command_processor.go
-type CommandProcessor struct {
-    events        port.EventRepository
-    workflowTasks port.WorkflowTaskRepository
-    activityTasks port.ActivityTaskRepository
-    workflows     port.WorkflowRepository
-    timers        port.TimerRepository
-}
+// コマンド処理はEngineのメソッドとして統合。
+// CompleteWorkflowTask内から同一トランザクションで呼び出される。
 
-func NewCommandProcessor(
-    events port.EventRepository,
-    workflowTasks port.WorkflowTaskRepository,
-    activityTasks port.ActivityTaskRepository,
-    workflows port.WorkflowRepository,
-    timers port.TimerRepository,
-) *CommandProcessor {
-    return &CommandProcessor{
-        events: events, workflowTasks: workflowTasks,
-        activityTasks: activityTasks, workflows: workflows, timers: timers,
-    }
-}
-
-// Process: コマンドリストを順次処理し、イベント記録とタスク生成を行う
-// 呼び出し元のトランザクション内で実行される
-func (p *CommandProcessor) Process(ctx context.Context, workflowID uuid.UUID, commands []domain.Command) error {
-    // ワークフロー情報（TaskQueue等）を取得
-    wf, err := p.workflows.Get(ctx, workflowID)
-    if err != nil {
-        return err
-    }
-
+// processCommands: コマンドリストを順次処理し、イベント記録とタスク生成を行う
+func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, taskQueue string, commands []domain.Command) error {
     for _, cmd := range commands {
         switch cmd.Type {
         case domain.CommandScheduleActivityTask:
-            if err := p.processScheduleActivity(ctx, wf, cmd); err != nil {
+            if err := e.processScheduleActivity(ctx, workflowID, taskQueue, cmd.Attributes); err != nil {
                 return err
             }
         case domain.CommandCompleteWorkflow:
-            if err := p.processCompleteWorkflow(ctx, wf, cmd); err != nil {
+            if err := e.processCompleteWorkflow(ctx, workflowID, cmd.Attributes); err != nil {
                 return err
             }
         case domain.CommandFailWorkflow:
-            if err := p.processFailWorkflow(ctx, wf, cmd); err != nil {
+            if err := e.processFailWorkflow(ctx, workflowID, cmd.Attributes); err != nil {
                 return err
             }
         default:
@@ -794,42 +791,44 @@ func (p *CommandProcessor) Process(ctx context.Context, workflowID uuid.UUID, co
     return nil
 }
 
-func (p *CommandProcessor) processScheduleActivity(ctx context.Context, wf *domain.WorkflowExecution, cmd domain.Command) error {
-    var attrs domain.ScheduleActivityTaskAttributes
-    if err := json.Unmarshal(cmd.Attributes, &attrs); err != nil {
-        return err
-    }
-
-    if err := p.events.Append(ctx, []domain.HistoryEvent{{
-        WorkflowID: wf.ID,
-        Type:       domain.EventActivityTaskScheduled,
-        Data:       cmd.Attributes,
-    }}); err != nil {
+func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage) error {
+    var a domain.ScheduleActivityTaskAttributes
+    if err := json.Unmarshal(attrs, &a); err != nil {
         return err
     }
 
     // TaskQueueが未指定ならワークフローのTaskQueueを使用
-    taskQueue := attrs.TaskQueue
-    if taskQueue == "" {
-        taskQueue = wf.TaskQueue
+    queue := a.TaskQueue
+    if queue == "" {
+        queue = taskQueue
     }
 
-    maxAttempts := 3
-    if attrs.RetryPolicy != nil && attrs.RetryPolicy.MaxAttempts > 0 {
-        maxAttempts = attrs.RetryPolicy.MaxAttempts
+    // RetryPolicy未指定時のデフォルトMaxAttempts=1（リトライなし）
+    maxAttempts := 1
+    if a.RetryPolicy != nil && a.RetryPolicy.MaxAttempts > 0 {
+        maxAttempts = a.RetryPolicy.MaxAttempts
     }
 
-    return p.activityTasks.Enqueue(ctx, domain.ActivityTask{
-        QueueName:           taskQueue,
-        WorkflowID:          wf.ID,
-        ActivityType:        attrs.ActivityType,
-        ActivityInput:       attrs.Input,
-        ActivitySeqID:       attrs.SeqID,
-        StartToCloseTimeout: attrs.StartToCloseTimeout,
+    if err := e.activityTasks.Enqueue(ctx, domain.ActivityTask{
+        QueueName:           queue,
+        WorkflowID:          workflowID,
+        ActivityType:        a.ActivityType,
+        ActivityInput:       a.Input,
+        ActivitySeqID:       a.SeqID,
+        StartToCloseTimeout: a.StartToCloseTimeout,
         Attempt:             1,
         MaxAttempts:         maxAttempts,
-        RetryPolicy:         attrs.RetryPolicy,
-    })
+        RetryPolicy:         a.RetryPolicy,
+    }); err != nil {
+        return err
+    }
+
+    eventData, _ := json.Marshal(a)
+    return e.events.Append(ctx, []domain.HistoryEvent{{
+        WorkflowID: workflowID,
+        Type:       domain.EventActivityTaskScheduled,
+        Data:       eventData,
+    }})
 }
 ```
 
@@ -878,11 +877,11 @@ func (h *Handler) StartWorkflow(ctx context.Context, req *apiv1.StartWorkflowReq
 func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowTaskRequest) (*apiv1.PollWorkflowTaskResponse, error) {
     result, err := h.wfTask.PollWorkflowTask(ctx, req.QueueName, req.WorkerId)
     if err != nil {
-        if errors.Is(err, domain.ErrNoTaskAvailable) {
-            // タスクなし: 空レスポンスを返す（エラーではない）
-            return &apiv1.PollWorkflowTaskResponse{}, nil
-        }
         return nil, domainErrorToGRPC(err)
+    }
+    if result == nil {
+        // タスクなし: 空レスポンスを返す（エラーではない）
+        return &apiv1.PollWorkflowTaskResponse{}, nil
     }
     // proto型への変換...
     return &apiv1.PollWorkflowTaskResponse{...}, nil
@@ -992,9 +991,9 @@ func main() {
 
 | 操作 | トランザクション内で行うこと |
 |------|---------------------------|
-| StartWorkflow | 冪等性チェック + WorkflowExecution作成 + イベント記録 + Workflow Task投入 |
+| StartWorkflow | 冪等性チェック + (終了済み再作成時は旧関連データ削除) + WorkflowExecution作成(upsert) + イベント記録 + Workflow Task投入 |
 | CompleteWorkflowTask | Advisory Lock取得 + タスク解決 + コマンド→イベント変換 + タスク生成 + ステータス更新 |
-| FailWorkflowTask | タスク完了 + ログ記録 |
+| FailWorkflowTask | タスク完了 + ワークフローFAILED更新 + WorkflowExecutionFailedイベント記録 |
 | CompleteActivityTask | ワークフロー状態チェック + イベント記録 + Workflow Task投入 |
 | FailActivityTask | ワークフロー状態チェック + リトライ判定 + イベント記録 + タスク再投入 or Workflow Task投入 |
 | TerminateWorkflow | ワークフロー状態チェック + イベント記録 + ステータスをTERMINATEDに更新 |
@@ -1022,10 +1021,10 @@ Phase 2で追加:
 | DescribeWorkflow | *WorkflowExecution | ErrWorkflowNotFound |
 | GetWorkflowHistory | []HistoryEvent | ErrWorkflowNotFound |
 | TerminateWorkflow | nil | ErrWorkflowNotFound, ErrWorkflowNotRunning |
-| PollWorkflowTask | *WorkflowTaskResult | ErrNoTaskAvailable |
+| PollWorkflowTask | *WorkflowTaskResult (nil=タスクなし) | — |
 | CompleteWorkflowTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
 | FailWorkflowTask | nil | ErrTaskNotFound |
-| PollActivityTask | *ActivityTask | ErrNoTaskAvailable |
+| PollActivityTask | *ActivityTask (nil=タスクなし) | — |
 | CompleteActivityTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
 | FailActivityTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
 
