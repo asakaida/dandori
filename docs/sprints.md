@@ -47,37 +47,39 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 ### Sprint 2 - ドメインモデルとストア層
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: domain/の型定義、port/のインターフェース定義、adapter/postgres/のPostgreSQL実装を完成させる
 
+技術選定変更: PostgreSQLドライバを pgx/v5 から database/sql + github.com/lib/pq に変更
+
 タスク:
 
-- [ ] internal/domain/errors.go（ErrWorkflowNotFound, ErrWorkflowAlreadyExists, ErrWorkflowNotRunning, ErrTaskNotFound, ErrTaskAlreadyCompleted, ErrNoTaskAvailable）
-- [ ] internal/domain/event.go（EventType定数: Started, Completed, Failed, Terminated, ActivityScheduled, ActivityCompleted, ActivityFailed, ActivityTimedOut）
-- [ ] internal/domain/command.go（CommandType定数、ScheduleActivityTaskAttributes に RetryPolicy/StartToCloseTimeout、CompleteWorkflowAttributes, FailWorkflowAttributes）
-- [ ] internal/domain/retry.go（RetryPolicy: MaxAttempts, InitialInterval, BackoffCoefficient, MaxInterval）
-- [ ] internal/domain/task.go（WorkflowTask, ActivityTask を別型で定義、TaskStatus、ActivityFailure）
-- [ ] internal/domain/workflow.go（WorkflowStatus に TERMINATED、IsTerminal()メソッド）
-- [ ] internal/domain/timer.go
-- [ ] internal/port/service.go（役割別 Inbound Port: ClientService, WorkflowTaskService, ActivityTaskService）
-- [ ] internal/port/repository.go（Outbound Port: WorkflowRepository, EventRepository, WorkflowTaskRepository, ActivityTaskRepository, TimerRepository, TxManager）
-- [ ] internal/adapter/postgres/store.go（コネクションプール、TxManager、context経由のトランザクション伝搬、Workflows()/Events()/WorkflowTasks()/ActivityTasks()/Timers() ファクトリメソッド）
-- [ ] internal/adapter/postgres/event.go（Append で sequence_num を自動採番、GetByWorkflowID）
-- [ ] internal/adapter/postgres/workflow_task.go（Enqueue, Poll with SKIP LOCKED, Complete, GetByID, RecoverStaleTasks）
-- [ ] internal/adapter/postgres/activity_task.go（Enqueue, Poll with SKIP LOCKED + timeout_at 設定, Complete, GetByID, GetTimedOut, Requeue, RecoverStaleTasks）
-- [ ] internal/adapter/postgres/workflow.go（Create, Get で ErrWorkflowNotFound 返却, UpdateStatus）
-- [ ] internal/adapter/postgres/timer.go（Create, GetFired, MarkFired）
-- [ ] adapter/postgres/のユニットテスト（testcontainers-go）
+- [x] internal/domain/errors.go（ErrWorkflowNotFound, ErrWorkflowAlreadyExists, ErrWorkflowNotRunning, ErrTaskNotFound, ErrTaskAlreadyCompleted, ErrNoTaskAvailable）
+- [x] internal/domain/event.go（EventType定数: Started, Completed, Failed, Terminated, ActivityScheduled, ActivityCompleted, ActivityFailed, ActivityTimedOut）
+- [x] internal/domain/command.go（CommandType定数、ScheduleActivityTaskAttributes に RetryPolicy/StartToCloseTimeout、CompleteWorkflowAttributes, FailWorkflowAttributes）
+- [x] internal/domain/retry.go（RetryPolicy: MaxAttempts, InitialInterval, BackoffCoefficient, MaxInterval）
+- [x] internal/domain/task.go（WorkflowTask, ActivityTask を別型で定義、TaskStatus、ActivityFailure）
+- [x] internal/domain/workflow.go（WorkflowStatus に TERMINATED、IsTerminal()メソッド）
+- [x] internal/domain/timer.go
+- [x] internal/port/service.go（役割別 Inbound Port: ClientService, WorkflowTaskService, ActivityTaskService）
+- [x] internal/port/repository.go（Outbound Port: WorkflowRepository, EventRepository, WorkflowTaskRepository, ActivityTaskRepository, TimerRepository, TxManager）
+- [x] internal/adapter/postgres/store.go（database/sql、TxManager、context経由のトランザクション伝搬、ネストTx再利用、Workflows()/Events()/WorkflowTasks()/ActivityTasks()/Timers() ファクトリメソッド）
+- [x] internal/adapter/postgres/event.go（Append で sequence_num を自動採番、GetByWorkflowID）
+- [x] internal/adapter/postgres/workflow_task.go（Enqueue, Poll with SKIP LOCKED, Complete, GetByID with Advisory Lock, RecoverStaleTasks）
+- [x] internal/adapter/postgres/activity_task.go（Enqueue, Poll with SKIP LOCKED + timeout_at 設定, Complete, GetByID, GetTimedOut, Requeue, RecoverStaleTasks）
+- [x] internal/adapter/postgres/workflow.go（Create, Get で ErrWorkflowNotFound 返却, UpdateStatus）
+- [x] internal/adapter/postgres/timer.go（Create, GetFired, MarkFired）
+- [x] adapter/postgres/のインテグレーションテスト（testcontainers-go、全32テスト通過）
 
 完了条件:
 
-- testcontainersでPostgreSQLを起動し、全リポジトリのCRUD操作がテスト通過
-- TxManagerで複数リポジトリ操作が1トランザクションで実行されることを確認
-- SKIP LOCKEDによるタスク取得の排他制御をテストで確認
-- 存在しないワークフローでErrWorkflowNotFoundが返ることを確認
-- タスクなし時にErrNoTaskAvailableが返ることを確認
-- timeout_atがActivity Task取得時に正しく設定されることを確認
+- [x] testcontainersでPostgreSQLを起動し、全リポジトリのCRUD操作がテスト通過
+- [x] TxManagerで複数リポジトリ操作が1トランザクションで実行されることを確認
+- [x] SKIP LOCKEDによるタスク取得の排他制御をテストで確認
+- [x] 存在しないワークフローでErrWorkflowNotFoundが返ることを確認
+- [x] タスクなし時にErrNoTaskAvailableが返ることを確認
+- [x] timeout_atがActivity Task取得時に正しく設定されることを確認
 
 ### Sprint 3 - Engineとコマンドプロセッサ
 

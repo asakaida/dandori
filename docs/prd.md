@@ -375,7 +375,7 @@ w.Start(ctx)
 ### 使用ライブラリ（最小構成）
 
 - gRPC: google.golang.org/grpc + protoc-gen-go
-- PostgreSQLドライバ: github.com/jackc/pgx/v5
+- PostgreSQLドライバ: database/sql + github.com/lib/pq
 - マイグレーション: github.com/golang-migrate/migrate
 - CLI: github.com/spf13/cobra（Phase 2）
 - ログ: 標準ライブラリ log/slog

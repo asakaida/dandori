@@ -913,24 +913,28 @@ func domainErrorToGRPC(err error) error {
 ```go
 // adapter/postgres/store.go
 type Store struct {
-    pool *pgxpool.Pool
+    db *sql.DB
 }
 
 // RunInTx: port.TxManager を満たす
 // context経由でトランザクションを伝搬する。
 // 全てのリポジトリ実装はconn()メソッドでcontextからトランザクションを取得する。
+// 既にトランザクション内の場合はネストせず再利用する。
 func (s *Store) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
-    tx, err := s.pool.Begin(ctx)
+    if txFromContext(ctx) != nil {
+        return fn(ctx)
+    }
+
+    tx, err := s.db.BeginTx(ctx, nil)
     if err != nil {
         return err
     }
-    defer tx.Rollback(ctx)
+    defer tx.Rollback()
 
-    ctx = withTx(ctx, tx)
-    if err := fn(ctx); err != nil {
+    if err := fn(withTx(ctx, tx)); err != nil {
         return err
     }
-    return tx.Commit(ctx)
+    return tx.Commit()
 }
 
 func (s *Store) Workflows() port.WorkflowRepository          { return &WorkflowStore{store: s} }
@@ -945,7 +949,7 @@ func (s *Store) Timers() port.TimerRepository                { return &TimerStor
 ```go
 func main() {
     // Outbound Adapter
-    store := postgres.New(pool)
+    store := postgres.New(db)
 
     // Application Core
     eng := engine.New(
