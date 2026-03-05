@@ -12,17 +12,19 @@ Go + PostgreSQLで実現する軽量 Durable Workflow エンジン。
 
 ## 使い方: 旅行予約ワークフロー
 
-航空券と宿泊を予約し、結果をまとめて返すワークフローの例です。途中で失敗した場合は Saga パターンで予約済みのステップを逆順にキャンセル（補償）します。サーバーやワーカーが途中でクラッシュしても Deterministic Replay により中断地点から再開します。
+航空券・宿泊・レンタカーを順番に予約し、結果をまとめて返すワークフローの例です。途中で失敗した場合は **Saga パターン** で予約済みのステップを **逆順にキャンセル（補償）** します。サーバーやワーカーが途中でクラッシュしても Deterministic Replay により中断地点から再開します。
 
 ### Activity の定義
 
-実際の外部 API 呼び出しを行う関数です。dandori はこれらを自動でリトライ・タイムアウト管理します。
+実際の外部 API 呼び出しを行う関数です。dandori はこれらを自動でリトライ・タイムアウト管理します。予約用と、補償（キャンセル）用のペアを用意します。
 
 ```go
 // activities.go
 package travel
 
 import "context"
+
+// --- 予約用 Activity ---
 
 type BookFlightInput struct {
 	From string `json:"from"`
@@ -35,7 +37,6 @@ type BookFlightOutput struct {
 }
 
 func BookFlight(ctx context.Context, input BookFlightInput) (BookFlightOutput, error) {
-	// 航空券予約 API を呼び出す
 	code, err := callFlightAPI(input)
 	if err != nil {
 		return BookFlightOutput{}, err
@@ -54,12 +55,29 @@ type BookHotelOutput struct {
 }
 
 func BookHotel(ctx context.Context, input BookHotelInput) (BookHotelOutput, error) {
-	// 宿泊予約 API を呼び出す
 	id, err := callHotelAPI(input)
 	if err != nil {
 		return BookHotelOutput{}, err
 	}
 	return BookHotelOutput{ReservationID: id}, nil
+}
+
+type BookCarInput struct {
+	City     string `json:"city"`
+	PickUp   string `json:"pick_up"`
+	DropOff  string `json:"drop_off"`
+}
+
+type BookCarOutput struct {
+	ReservationID string `json:"reservation_id"`
+}
+
+func BookCar(ctx context.Context, input BookCarInput) (BookCarOutput, error) {
+	id, err := callCarAPI(input)
+	if err != nil {
+		return BookCarOutput{}, err
+	}
+	return BookCarOutput{ReservationID: id}, nil
 }
 
 // --- 補償（キャンセル）用 Activity ---
@@ -79,11 +97,21 @@ type CancelHotelInput struct {
 func CancelHotel(ctx context.Context, input CancelHotelInput) (struct{}, error) {
 	return struct{}{}, cancelHotelAPI(input.ReservationID)
 }
+
+type CancelCarInput struct {
+	ReservationID string `json:"reservation_id"`
+}
+
+func CancelCar(ctx context.Context, input CancelCarInput) (struct{}, error) {
+	return struct{}{}, cancelCarAPI(input.ReservationID)
+}
 ```
 
 ### Workflow の定義
 
-Activity をどの順序で実行するかを記述します。この関数は決定的（deterministic）でなければなりません。`saga.New()` で補償コンテキストを作り、各ステップの成功後にキャンセル用 Activity を登録しておくことで、途中で失敗した場合に予約済みのステップを逆順でキャンセルできます。
+Activity をどの順序で実行するかを記述します。この関数は決定的（deterministic）でなければなりません。
+
+**Saga パターンの仕組み:** `saga.New()` は補償スタックを作ります。各ステップの成功後にキャンセル用 Activity を `AddCompensation` でスタックに積みます。途中で失敗した場合、`Compensate` がスタックを逆順に実行して予約済みのステップをキャンセルします。
 
 ```go
 // workflow.go
@@ -99,6 +127,7 @@ import (
 type TripResult struct {
 	FlightConfirmation string `json:"flight_confirmation"`
 	HotelReservation   string `json:"hotel_reservation"`
+	CarReservation     string `json:"car_reservation"`
 }
 
 func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, error) {
@@ -112,9 +141,10 @@ func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, er
 	}
 	ctx = workflow.WithActivityOptions(ctx, actOpts)
 
+	// Saga: 補償スタックを作成（失敗時に逆順でキャンセルするための仕組み）
 	s := saga.New(saga.Options{})
 
-	// 航空券を予約
+	// ステップ 1: 航空券を予約
 	var flight BookFlightOutput
 	err := workflow.ExecuteActivity(ctx, BookFlight, BookFlightInput{
 		From: input.From,
@@ -125,12 +155,13 @@ func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, er
 		// まだ何も予約していないので補償不要
 		return TripResult{}, err
 	}
-	// 航空券キャンセルを補償として登録
+	// 成功 → 航空券キャンセルを補償スタックに積む
+	//   スタック: [CancelFlight]
 	s.AddCompensation(ctx, CancelFlight, CancelFlightInput{
 		ConfirmationCode: flight.ConfirmationCode,
 	})
 
-	// 宿泊を予約
+	// ステップ 2: 宿泊を予約
 	var hotel BookHotelOutput
 	err = workflow.ExecuteActivity(ctx, BookHotel, BookHotelInput{
 		City:     input.To,
@@ -138,18 +169,41 @@ func BookTripWorkflow(ctx workflow.Context, input BookTripInput) (TripResult, er
 		CheckOut: input.CheckOutDate,
 	}).Get(&hotel)
 	if err != nil {
-		// 宿泊予約失敗 → 航空券をキャンセル（逆順補償）
+		// 宿泊予約失敗 → 補償スタックを逆順実行: CancelFlight
+		return TripResult{}, s.Compensate(ctx, err)
+	}
+	// 成功 → 宿泊キャンセルを補償スタックに積む
+	//   スタック: [CancelFlight, CancelHotel]
+	s.AddCompensation(ctx, CancelHotel, CancelHotelInput{
+		ReservationID: hotel.ReservationID,
+	})
+
+	// ステップ 3: レンタカーを予約
+	var car BookCarOutput
+	err = workflow.ExecuteActivity(ctx, BookCar, BookCarInput{
+		City:    input.To,
+		PickUp:  input.Date,
+		DropOff: input.CheckOutDate,
+	}).Get(&car)
+	if err != nil {
+		// レンタカー予約失敗 → 補償スタックを逆順実行: CancelHotel → CancelFlight
 		return TripResult{}, s.Compensate(ctx, err)
 	}
 
+	// 全予約成功
 	return TripResult{
 		FlightConfirmation: flight.ConfirmationCode,
 		HotelReservation:   hotel.ReservationID,
+		CarReservation:     car.ReservationID,
 	}, nil
 }
 ```
 
-`s.Compensate(ctx, err)` は登録された補償を逆順に実行します。サーバーにとっては通常の Activity 実行と区別がつかないため、特別なサーバー側の仕組みは不要です。
+**ポイント:**
+- Saga オブジェクト自体は予約処理を実行しない。**「失敗時に何を巻き戻すか」を管理する補償スタック**
+- 各ステップの成功後に `AddCompensation` でキャンセル用 Activity をスタックに積む
+- `Compensate` はスタックを**逆順**に実行する。ステップ 3 で失敗した場合、CancelHotel → CancelFlight の順にキャンセルが走る
+- サーバーにとって補償 Activity（CancelHotel 等）は通常の Activity と同じ。Saga の逆順実行ロジックは SDK 側で完結する
 
 ### Worker の起動
 
@@ -176,8 +230,10 @@ func main() {
 	w.RegisterWorkflow(travel.BookTripWorkflow)
 	w.RegisterActivity(travel.BookFlight)
 	w.RegisterActivity(travel.BookHotel)
+	w.RegisterActivity(travel.BookCar)
 	w.RegisterActivity(travel.CancelFlight)
 	w.RegisterActivity(travel.CancelHotel)
+	w.RegisterActivity(travel.CancelCar)
 
 	if err := w.Run(); err != nil {
 		log.Fatal(err)
@@ -208,7 +264,7 @@ func main() {
 	defer c.Close()
 
 	run, err := c.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
-		ID:        "trip-tokyo-2026-03",
+		ID:        "trip-okinawa-2026-04",
 		TaskQueue: "travel-queue",
 	}, travel.BookTripWorkflow, travel.BookTripInput{
 		From:         "NRT",
@@ -227,36 +283,11 @@ func main() {
 
 	fmt.Printf("Flight: %s\n", result.FlightConfirmation)
 	fmt.Printf("Hotel:  %s\n", result.HotelReservation)
+	fmt.Printf("Car:    %s\n", result.CarReservation)
 }
 ```
 
 ### 処理の流れ（正常系）
-
-```text
-Client                     dandori-server                Worker
-  |                             |                          |
-  |-- StartWorkflow ----------->|                          |
-  |                             |-- Workflow Task -------->|
-  |                             |                          |-- BookTripWorkflow()
-  |                             |                          |   "航空券を予約して"
-  |                             |<-- ScheduleActivity ----|
-  |                             |-- Activity Task -------->|
-  |                             |                          |-- BookFlight()
-  |                             |<-- Complete (結果) ------|
-  |                             |-- Workflow Task -------->|
-  |                             |                          |-- replay + 続行
-  |                             |                          |   "宿泊を予約して"
-  |                             |<-- ScheduleActivity ----|
-  |                             |-- Activity Task -------->|
-  |                             |                          |-- BookHotel()
-  |                             |<-- Complete (結果) ------|
-  |                             |-- Workflow Task -------->|
-  |                             |                          |-- replay + 完了
-  |                             |<-- CompleteWorkflow -----|
-  |<-- Result ------------------|                          |
-```
-
-### 処理の流れ（宿泊予約失敗 → Saga 補償）
 
 ```text
 Client                     dandori-server                Worker
@@ -274,14 +305,63 @@ Client                     dandori-server                Worker
   |                             |                          |   "宿泊を予約して"
   |                             |<-- ScheduleActivity ----|
   |                             |-- Activity Task -------->|
-  |                             |                          |-- BookHotel() ✗
+  |                             |                          |-- BookHotel() ✓
+  |                             |<-- Complete (結果) ------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + 続行
+  |                             |                          |   "レンタカーを予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookCar() ✓
+  |                             |<-- Complete (結果) ------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + 完了
+  |                             |<-- CompleteWorkflow -----|
+  |<-- Result ------------------|                          |
+```
+
+### 処理の流れ（レンタカー予約失敗 → Saga 補償）
+
+ステップ 3 のレンタカー予約が失敗した場合、Saga は補償スタックを逆順に実行して CancelHotel → CancelFlight の順にキャンセルします。
+
+```text
+Client                     dandori-server                Worker
+  |                             |                          |
+  |-- StartWorkflow ----------->|                          |
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- BookTripWorkflow()
+  |                             |                          |   "航空券を予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookFlight() ✓
+  |                             |<-- Complete (結果) ------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + 続行
+  |                             |                          |   "宿泊を予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookHotel() ✓
+  |                             |<-- Complete (結果) ------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |-- replay + 続行
+  |                             |                          |   "レンタカーを予約して"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- BookCar() ✗
   |                             |<-- Failed ---------------|
   |                             |-- Workflow Task -------->|
   |                             |                          |-- replay + Compensate()
-  |                             |                          |   "航空券をキャンセルして"
+  |                             |                          |   補償スタック逆順実行:
+  |                             |                          |   1. "宿泊をキャンセルして"
   |                             |<-- ScheduleActivity ----|
   |                             |-- Activity Task -------->|
-  |                             |                          |-- CancelFlight()
+  |                             |                          |-- CancelHotel() ✓
+  |                             |<-- Complete -------------|
+  |                             |-- Workflow Task -------->|
+  |                             |                          |   2. "航空券をキャンセルして"
+  |                             |<-- ScheduleActivity ----|
+  |                             |-- Activity Task -------->|
+  |                             |                          |-- CancelFlight() ✓
   |                             |<-- Complete -------------|
   |                             |-- Workflow Task -------->|
   |                             |                          |-- replay + FailWorkflow
@@ -289,9 +369,14 @@ Client                     dandori-server                Worker
   |<-- Error ------------------|                          |
 ```
 
-サーバーにとって補償 Activity（CancelFlight）は通常の Activity と同じです。Saga の逆順実行ロジックは SDK 側で完結します。
+サーバーにとって補償 Activity（CancelHotel, CancelFlight）は通常の Activity と全く同じです。Saga の逆順実行ロジックは SDK 側で完結します。
 
-もしワーカーが Activity 実行中にクラッシュしても、dandori-server がタイムアウトを検知してタスクを再キューイングします。ワークフロー関数はイベント履歴から状態を復元（replay）するため、完了済みの航空券予約をスキップして宿泊予約から再開できます。補償の途中でクラッシュした場合も同様に、完了済みの補償をスキップして残りの補償から再開します。
+### 耐障害性
+
+もしワーカーが Activity 実行中にクラッシュしても、dandori-server がタイムアウトを検知してタスクを再キューイングします。ワークフロー関数はイベント履歴から状態を復元（replay）するため、完了済みのステップをスキップして中断地点から再開できます。
+
+- **正常処理中のクラッシュ**: 例えば BookHotel 実行中にクラッシュ → replay で BookFlight の結果を復元し、BookHotel から再開
+- **補償処理中のクラッシュ**: 例えば CancelFlight 実行中にクラッシュ → replay で CancelHotel の完了を確認し、CancelFlight から再開
 
 ## アーキテクチャ
 
