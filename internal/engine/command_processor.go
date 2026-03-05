@@ -25,6 +25,14 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
 			if err := e.processFailWorkflow(ctx, workflowID, cmd.Attributes); err != nil {
 				return err
 			}
+		case domain.CommandStartTimer:
+			if err := e.processStartTimer(ctx, workflowID, cmd.Attributes); err != nil {
+				return err
+			}
+		case domain.CommandCancelTimer:
+			if err := e.processCancelTimer(ctx, workflowID, cmd.Attributes); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown command type: %s", cmd.Type)
 		}
@@ -108,5 +116,53 @@ func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, 
 	}
 	return e.events.Append(ctx, []domain.HistoryEvent{
 		{WorkflowID: workflowID, Type: domain.EventWorkflowExecutionFailed, Data: eventData},
+	})
+}
+
+func (e *Engine) processStartTimer(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage) error {
+	var a domain.StartTimerAttributes
+	if err := json.Unmarshal(attrs, &a); err != nil {
+		return fmt.Errorf("unmarshal StartTimerAttributes: %w", err)
+	}
+
+	timer := domain.Timer{
+		WorkflowID: workflowID,
+		SeqID:      a.SeqID,
+		FireAt:     time.Now().Add(a.Duration),
+	}
+	if err := e.timers.Create(ctx, timer); err != nil {
+		return err
+	}
+
+	eventData, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	return e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: workflowID, Type: domain.EventTimerStarted, Data: eventData},
+	})
+}
+
+func (e *Engine) processCancelTimer(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage) error {
+	var a domain.CancelTimerAttributes
+	if err := json.Unmarshal(attrs, &a); err != nil {
+		return fmt.Errorf("unmarshal CancelTimerAttributes: %w", err)
+	}
+
+	canceled, err := e.timers.Cancel(ctx, workflowID, a.SeqID)
+	if err != nil {
+		return err
+	}
+
+	if !canceled {
+		return nil
+	}
+
+	eventData, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	return e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: workflowID, Type: domain.EventTimerCanceled, Data: eventData},
 	})
 }

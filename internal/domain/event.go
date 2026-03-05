@@ -18,6 +18,9 @@ const (
 	EventActivityTaskCompleted       EventType = "ActivityTaskCompleted"
 	EventActivityTaskFailed          EventType = "ActivityTaskFailed"
 	EventActivityTaskTimedOut        EventType = "ActivityTaskTimedOut"
+	EventTimerStarted               EventType = "TimerStarted"
+	EventTimerFired                 EventType = "TimerFired"
+	EventTimerCanceled              EventType = "TimerCanceled"
 )
 
 type HistoryEvent struct {

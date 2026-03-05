@@ -15,6 +15,7 @@ type BackgroundWorker struct {
 	events        port.EventRepository
 	workflowTasks port.WorkflowTaskRepository
 	activityTasks port.ActivityTaskRepository
+	timers        port.TimerRepository
 	tx            port.TxManager
 }
 
@@ -23,6 +24,7 @@ func NewBackgroundWorker(
 	events port.EventRepository,
 	workflowTasks port.WorkflowTaskRepository,
 	activityTasks port.ActivityTaskRepository,
+	timers port.TimerRepository,
 	tx port.TxManager,
 ) *BackgroundWorker {
 	return &BackgroundWorker{
@@ -30,6 +32,7 @@ func NewBackgroundWorker(
 		events:        events,
 		workflowTasks: workflowTasks,
 		activityTasks: activityTasks,
+		timers:        timers,
 		tx:            tx,
 	}
 }
@@ -94,6 +97,74 @@ func (w *BackgroundWorker) handleTimedOutTask(ctx context.Context, task domain.A
 		return w.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  task.WorkflowID,
+			ScheduledAt: time.Now(),
+		})
+	})
+}
+
+func (w *BackgroundWorker) RunTimerPoller(ctx context.Context, interval time.Duration) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if err := w.pollFiredTimers(ctx); err != nil {
+				log.Printf("timer poller error: %v", err)
+			}
+		}
+	}
+}
+
+func (w *BackgroundWorker) pollFiredTimers(ctx context.Context) error {
+	timers, err := w.timers.GetFired(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, timer := range timers {
+		if err := w.handleFiredTimer(ctx, timer); err != nil {
+			log.Printf("handle fired timer %d error: %v", timer.ID, err)
+		}
+	}
+	return nil
+}
+
+func (w *BackgroundWorker) handleFiredTimer(ctx context.Context, timer domain.Timer) error {
+	return w.tx.RunInTx(ctx, func(ctx context.Context) error {
+		fired, err := w.timers.MarkFired(ctx, timer.ID)
+		if err != nil {
+			return err
+		}
+		if !fired {
+			return nil
+		}
+
+		wf, err := w.workflows.Get(ctx, timer.WorkflowID)
+		if err != nil {
+			return err
+		}
+		if wf.Status.IsTerminal() {
+			return nil
+		}
+
+		eventData, err := json.Marshal(map[string]any{
+			"seq_id": timer.SeqID,
+		})
+		if err != nil {
+			return err
+		}
+		if err := w.events.Append(ctx, []domain.HistoryEvent{
+			{WorkflowID: timer.WorkflowID, Type: domain.EventTimerFired, Data: eventData},
+		}); err != nil {
+			return err
+		}
+
+		return w.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			QueueName:   wf.TaskQueue,
+			WorkflowID:  timer.WorkflowID,
 			ScheduledAt: time.Now(),
 		})
 	})

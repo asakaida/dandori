@@ -80,6 +80,7 @@ func TestMain(m *testing.M) {
 		store.Events(),
 		store.WorkflowTasks(),
 		store.ActivityTasks(),
+		store.Timers(),
 		store,
 	)
 	handler := grpcadapter.NewHandler(eng, eng, eng)
@@ -115,6 +116,11 @@ func TestMain(m *testing.M) {
 	go func() {
 		if err := bgWorker.RunActivityTimeoutChecker(bgCtx, 500*time.Millisecond); err != nil && bgCtx.Err() == nil {
 			log.Printf("activity timeout checker stopped: %v", err)
+		}
+	}()
+	go func() {
+		if err := bgWorker.RunTimerPoller(bgCtx, 500*time.Millisecond); err != nil && bgCtx.Err() == nil {
+			log.Printf("timer poller stopped: %v", err)
 		}
 	}()
 	go func() {
@@ -251,4 +257,27 @@ func countEvents(events []*apiv1.HistoryEvent, eventType string) int {
 		}
 	}
 	return n
+}
+
+// startTimerCmd creates a StartTimer command.
+func startTimerCmd(seqID int64, duration time.Duration) *apiv1.Command {
+	attrs, _ := json.Marshal(map[string]any{
+		"seq_id":   seqID,
+		"duration": int64(duration),
+	})
+	return &apiv1.Command{
+		Type:       apiv1.CommandType_COMMAND_TYPE_START_TIMER,
+		Attributes: attrs,
+	}
+}
+
+// cancelTimerCmd creates a CancelTimer command.
+func cancelTimerCmd(seqID int64) *apiv1.Command {
+	attrs, _ := json.Marshal(map[string]any{
+		"seq_id": seqID,
+	})
+	return &apiv1.Command{
+		Type:       apiv1.CommandType_COMMAND_TYPE_CANCEL_TIMER,
+		Attributes: attrs,
+	}
 }

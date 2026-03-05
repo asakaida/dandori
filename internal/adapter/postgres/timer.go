@@ -41,12 +41,34 @@ func (s *TimerStore) GetFired(ctx context.Context) ([]domain.Timer, error) {
 	return timers, rows.Err()
 }
 
-func (s *TimerStore) MarkFired(ctx context.Context, timerID int64) error {
-	_, err := s.store.conn(ctx).ExecContext(ctx,
-		`UPDATE timers SET status = 'FIRED' WHERE id = $1`,
+func (s *TimerStore) MarkFired(ctx context.Context, timerID int64) (bool, error) {
+	result, err := s.store.conn(ctx).ExecContext(ctx,
+		`UPDATE timers SET status = 'FIRED' WHERE id = $1 AND status = 'PENDING'`,
 		timerID,
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func (s *TimerStore) Cancel(ctx context.Context, workflowID uuid.UUID, seqID int64) (bool, error) {
+	result, err := s.store.conn(ctx).ExecContext(ctx,
+		`UPDATE timers SET status = 'CANCELED' WHERE workflow_id = $1 AND seq_id = $2 AND status = 'PENDING'`,
+		workflowID, seqID,
+	)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 func (s *TimerStore) DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error {

@@ -20,6 +20,8 @@ enum CommandType {
   COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK = 1;
   COMMAND_TYPE_COMPLETE_WORKFLOW = 2;
   COMMAND_TYPE_FAIL_WORKFLOW = 3;
+  COMMAND_TYPE_START_TIMER = 4;
+  COMMAND_TYPE_CANCEL_TIMER = 5;
 }
 
 message WorkflowExecution {
@@ -71,6 +73,15 @@ message RetryPolicy {
   google.protobuf.Duration initial_interval = 2;
   double backoff_coefficient = 3;
   google.protobuf.Duration max_interval = 4;
+}
+
+message StartTimerAttributes {
+  int64 seq_id = 1;
+  google.protobuf.Duration duration = 2;
+}
+
+message CancelTimerAttributes {
+  int64 seq_id = 1;
 }
 
 message ActivityFailure {

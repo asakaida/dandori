@@ -30,8 +30,9 @@ func TestTimerStore_Create_GetFired_MarkFired(t *testing.T) {
 	assert.Equal(t, wfID, fired[0].WorkflowID)
 	assert.Equal(t, int64(1), fired[0].SeqID)
 
-	err = store.Timers().MarkFired(ctx, fired[0].ID)
+	ok, err := store.Timers().MarkFired(ctx, fired[0].ID)
 	require.NoError(t, err)
+	assert.True(t, ok)
 
 	// After marking, no more fired timers
 	fired, err = store.Timers().GetFired(ctx)
@@ -73,4 +74,86 @@ func TestTimerStore_GetFired_FutureTimerNotReturned(t *testing.T) {
 	fired, err := store.Timers().GetFired(ctx)
 	require.NoError(t, err)
 	assert.Len(t, fired, 0)
+}
+
+func TestTimerStore_Cancel_Pending(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		WorkflowID: wfID,
+		SeqID:      1,
+		FireAt:     time.Now().Add(1 * time.Hour),
+	}))
+
+	ok, err := store.Timers().Cancel(ctx, wfID, 1)
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	// Canceled timer should not appear in GetFired
+	fired, err := store.Timers().GetFired(ctx)
+	require.NoError(t, err)
+	assert.Len(t, fired, 0)
+}
+
+func TestTimerStore_Cancel_AlreadyFired(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		WorkflowID: wfID,
+		SeqID:      1,
+		FireAt:     time.Now().Add(-1 * time.Second),
+	}))
+
+	fired, err := store.Timers().GetFired(ctx)
+	require.NoError(t, err)
+	require.Len(t, fired, 1)
+
+	ok, err := store.Timers().MarkFired(ctx, fired[0].ID)
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	// Cancel after FIRED should return false
+	ok, err = store.Timers().Cancel(ctx, wfID, 1)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestTimerStore_Cancel_NonExistent(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	ok, err := store.Timers().Cancel(ctx, wfID, 999)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestTimerStore_MarkFired_PendingGuard(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		WorkflowID: wfID,
+		SeqID:      1,
+		FireAt:     time.Now().Add(-1 * time.Second),
+	}))
+
+	fired, err := store.Timers().GetFired(ctx)
+	require.NoError(t, err)
+	require.Len(t, fired, 1)
+
+	// First MarkFired succeeds
+	ok, err := store.Timers().MarkFired(ctx, fired[0].ID)
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	// Second MarkFired returns false (already FIRED)
+	ok, err = store.Timers().MarkFired(ctx, fired[0].ID)
+	require.NoError(t, err)
+	assert.False(t, ok)
 }

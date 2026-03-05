@@ -560,3 +560,110 @@ func TestFailActivityTask_TerminalWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, completed)
 }
+
+// --- ProcessCommands: Timer ---
+
+func TestProcessCommands_StartTimer(t *testing.T) {
+	wfID := uuid.New()
+	var createdTimer domain.Timer
+	var appendedEvents []domain.HistoryEvent
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error { appendedEvents = events; return nil },
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: wfID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{
+			CreateFn: func(_ context.Context, timer domain.Timer) error { createdTimer = timer; return nil },
+		},
+	)
+
+	attrs, _ := json.Marshal(domain.StartTimerAttributes{SeqID: 1, Duration: 5 * time.Second})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandStartTimer, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, wfID, createdTimer.WorkflowID)
+	assert.Equal(t, int64(1), createdTimer.SeqID)
+	assert.WithinDuration(t, time.Now().Add(5*time.Second), createdTimer.FireAt, 2*time.Second)
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventTimerStarted, appendedEvents[0].Type)
+}
+
+func TestProcessCommands_CancelTimer_Pending(t *testing.T) {
+	wfID := uuid.New()
+	var appendedEvents []domain.HistoryEvent
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error { appendedEvents = events; return nil },
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: wfID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{
+			CancelFn: func(_ context.Context, _ uuid.UUID, _ int64) (bool, error) { return true, nil },
+		},
+	)
+
+	attrs, _ := json.Marshal(domain.CancelTimerAttributes{SeqID: 1})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandCancelTimer, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventTimerCanceled, appendedEvents[0].Type)
+}
+
+func TestProcessCommands_CancelTimer_AlreadyFired(t *testing.T) {
+	wfID := uuid.New()
+	var eventAppended bool
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, _ []domain.HistoryEvent) error { eventAppended = true; return nil },
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: wfID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{
+			CancelFn: func(_ context.Context, _ uuid.UUID, _ int64) (bool, error) { return false, nil },
+		},
+	)
+
+	attrs, _ := json.Marshal(domain.CancelTimerAttributes{SeqID: 1})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandCancelTimer, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.False(t, eventAppended)
+}

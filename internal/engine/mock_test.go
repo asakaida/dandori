@@ -190,7 +190,8 @@ func (m *mockActivityTaskRepo) DeleteByWorkflowID(ctx context.Context, workflowI
 type mockTimerRepo struct {
 	CreateFn             func(ctx context.Context, timer domain.Timer) error
 	GetFiredFn           func(ctx context.Context) ([]domain.Timer, error)
-	MarkFiredFn          func(ctx context.Context, timerID int64) error
+	MarkFiredFn          func(ctx context.Context, timerID int64) (bool, error)
+	CancelFn             func(ctx context.Context, workflowID uuid.UUID, seqID int64) (bool, error)
 	DeleteByWorkflowIDFn func(ctx context.Context, workflowID uuid.UUID) error
 }
 
@@ -208,11 +209,18 @@ func (m *mockTimerRepo) GetFired(ctx context.Context) ([]domain.Timer, error) {
 	return nil, nil
 }
 
-func (m *mockTimerRepo) MarkFired(ctx context.Context, timerID int64) error {
+func (m *mockTimerRepo) MarkFired(ctx context.Context, timerID int64) (bool, error) {
 	if m.MarkFiredFn != nil {
 		return m.MarkFiredFn(ctx, timerID)
 	}
-	return nil
+	return true, nil
+}
+
+func (m *mockTimerRepo) Cancel(ctx context.Context, workflowID uuid.UUID, seqID int64) (bool, error) {
+	if m.CancelFn != nil {
+		return m.CancelFn(ctx, workflowID, seqID)
+	}
+	return true, nil
 }
 
 func (m *mockTimerRepo) DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error {

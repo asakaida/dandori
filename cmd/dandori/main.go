@@ -58,6 +58,7 @@ func main() {
 		store.Events(),
 		store.WorkflowTasks(),
 		store.ActivityTasks(),
+		store.Timers(),
 		store,
 	)
 	handler := grpcadapter.NewHandler(eng, eng, eng)
@@ -68,6 +69,11 @@ func main() {
 	go func() {
 		if err := bgWorker.RunActivityTimeoutChecker(ctx, 5*time.Second); err != nil && ctx.Err() == nil {
 			log.Printf("activity timeout checker stopped: %v", err)
+		}
+	}()
+	go func() {
+		if err := bgWorker.RunTimerPoller(ctx, 1*time.Second); err != nil && ctx.Err() == nil {
+			log.Printf("timer poller stopped: %v", err)
 		}
 	}()
 	go func() {

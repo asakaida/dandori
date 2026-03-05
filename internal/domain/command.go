@@ -11,6 +11,8 @@ const (
 	CommandScheduleActivityTask CommandType = "ScheduleActivityTask"
 	CommandCompleteWorkflow     CommandType = "CompleteWorkflow"
 	CommandFailWorkflow         CommandType = "FailWorkflow"
+	CommandStartTimer           CommandType = "StartTimer"
+	CommandCancelTimer          CommandType = "CancelTimer"
 )
 
 type Command struct {
@@ -33,4 +35,13 @@ type CompleteWorkflowAttributes struct {
 
 type FailWorkflowAttributes struct {
 	ErrorMessage string `json:"error_message"`
+}
+
+type StartTimerAttributes struct {
+	SeqID    int64         `json:"seq_id"`
+	Duration time.Duration `json:"duration"`
+}
+
+type CancelTimerAttributes struct {
+	SeqID int64 `json:"seq_id"`
 }

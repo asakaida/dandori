@@ -44,7 +44,8 @@ type ActivityTaskRepository interface {
 type TimerRepository interface {
 	Create(ctx context.Context, timer domain.Timer) error
 	GetFired(ctx context.Context) ([]domain.Timer, error)
-	MarkFired(ctx context.Context, timerID int64) error
+	MarkFired(ctx context.Context, timerID int64) (bool, error)
+	Cancel(ctx context.Context, workflowID uuid.UUID, seqID int64) (bool, error)
 	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 

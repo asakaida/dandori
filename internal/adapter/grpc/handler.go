@@ -260,6 +260,10 @@ func commandTypeFromProto(ct apiv1.CommandType) (domain.CommandType, error) {
 		return domain.CommandCompleteWorkflow, nil
 	case apiv1.CommandType_COMMAND_TYPE_FAIL_WORKFLOW:
 		return domain.CommandFailWorkflow, nil
+	case apiv1.CommandType_COMMAND_TYPE_START_TIMER:
+		return domain.CommandStartTimer, nil
+	case apiv1.CommandType_COMMAND_TYPE_CANCEL_TIMER:
+		return domain.CommandCancelTimer, nil
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "unknown command type: %v", ct)
 	}
