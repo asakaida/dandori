@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package dandori.api.v1;
+
+option go_package = "github.com/asakaida/dandori/api/v1;apiv1";
+
+import "api/v1/types.proto";
+import "google/protobuf/timestamp.proto";
+
+service DandoriService {
+  // Client API
+  rpc StartWorkflow(StartWorkflowRequest) returns (StartWorkflowResponse);
+  rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse);
+  rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
+  rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
+
+  // Worker API: Workflow Task
+  rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
+  rpc CompleteWorkflowTask(CompleteWorkflowTaskRequest) returns (CompleteWorkflowTaskResponse);
+  rpc FailWorkflowTask(FailWorkflowTaskRequest) returns (FailWorkflowTaskResponse);
+
+  // Worker API: Activity Task
+  rpc PollActivityTask(PollActivityTaskRequest) returns (PollActivityTaskResponse);
+  rpc CompleteActivityTask(CompleteActivityTaskRequest) returns (CompleteActivityTaskResponse);
+  rpc FailActivityTask(FailActivityTaskRequest) returns (FailActivityTaskResponse);
+}
+
+// === Client API Messages ===
+
+message StartWorkflowRequest {
+  string workflow_id = 1;
+  string workflow_type = 2;
+  string task_queue = 3;
+  bytes input = 4;
+}
+
+message StartWorkflowResponse {
+  string workflow_id = 1;
+}
+
+message DescribeWorkflowRequest {
+  string workflow_id = 1;
+}
+
+message DescribeWorkflowResponse {
+  WorkflowExecution workflow_execution = 1;
+}
+
+message GetWorkflowHistoryRequest {
+  string workflow_id = 1;
+}
+
+message GetWorkflowHistoryResponse {
+  repeated HistoryEvent events = 1;
+}
+
+message TerminateWorkflowRequest {
+  string workflow_id = 1;
+  string reason = 2;
+}
+
+message TerminateWorkflowResponse {}
+
+// === Worker API: Workflow Task Messages ===
+
+message PollWorkflowTaskRequest {
+  string queue_name = 1;
+  string worker_id = 2;
+}
+
+message PollWorkflowTaskResponse {
+  int64 task_id = 1;
+  string workflow_id = 2;
+  string workflow_type = 3;
+  repeated HistoryEvent events = 4;
+}
+
+message CompleteWorkflowTaskRequest {
+  int64 task_id = 1;
+  repeated Command commands = 2;
+}
+
+message CompleteWorkflowTaskResponse {}
+
+message FailWorkflowTaskRequest {
+  int64 task_id = 1;
+  string cause = 2;
+  string message = 3;
+}
+
+message FailWorkflowTaskResponse {}
+
+// === Worker API: Activity Task Messages ===
+
+message PollActivityTaskRequest {
+  string queue_name = 1;
+  string worker_id = 2;
+}
+
+message PollActivityTaskResponse {
+  int64 task_id = 1;
+  string workflow_id = 2;
+  string activity_type = 3;
+  bytes activity_input = 4;
+  int32 attempt = 5;
+  google.protobuf.Timestamp scheduled_at = 6;
+}
+
+message CompleteActivityTaskRequest {
+  int64 task_id = 1;
+  bytes result = 2;
+}
+
+message CompleteActivityTaskResponse {}
+
+message FailActivityTaskRequest {
+  int64 task_id = 1;
+  ActivityFailure failure = 2;
+}
+
+message FailActivityTaskResponse {}

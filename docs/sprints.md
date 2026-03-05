@@ -19,25 +19,25 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 ### Sprint 1 - プロジェクト基盤
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: ビルド・起動・DB接続ができるプロジェクト骨格を構築する
 
 タスク:
 
-- [ ] go mod init, .gitignore
-- [ ] docker-compose.yml（PostgreSQL）
-- [ ] api/v1/service.proto の定義（全10メソッド: StartWorkflow, DescribeWorkflow, GetWorkflowHistory, TerminateWorkflow, PollWorkflowTask, CompleteWorkflowTask, FailWorkflowTask, PollActivityTask, CompleteActivityTask, FailActivityTask）
-- [ ] api/v1/types.proto の定義（HistoryEvent, Command, FailActivityTaskRequest に non_retryable/error_type 含む）
-- [ ] protoc-gen-goによるコード生成の確認
-- [ ] internal/adapter/postgres/migration/000001_initial.up.sql
+- [x] go mod init, .gitignore
+- [x] docker-compose.yml（PostgreSQL 18-alpine3.23）
+- [x] api/v1/service.proto の定義（全10メソッド: StartWorkflow, DescribeWorkflow, GetWorkflowHistory, TerminateWorkflow, PollWorkflowTask, CompleteWorkflowTask, FailWorkflowTask, PollActivityTask, CompleteActivityTask, FailActivityTask）
+- [x] api/v1/types.proto の定義（HistoryEvent, Command, FailActivityTaskRequest に non_retryable/error_type 含む）
+- [x] protoc-gen-goによるコード生成の確認
+- [x] internal/adapter/postgres/migration/000001_initial.up.sql
   - workflow_executions テーブル
   - workflow_events テーブル（UNIQUE(workflow_id, sequence_num)）
   - workflow_tasks テーブル（Workflow Task専用）
   - activity_tasks テーブル（Activity Task専用、timeout_at/start_to_close_timeout/retry_policy カラム含む）
   - timers テーブル
-- [ ] internal/adapter/postgres/migration/000001_initial.down.sql
-- [ ] golang-migrateでマイグレーション実行確認
+- [x] internal/adapter/postgres/migration/000001_initial.down.sql
+- [x] golang-migrateでマイグレーション実行確認
 
 完了条件:
 

@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package dandori.api.v1;
+
+option go_package = "github.com/asakaida/dandori/api/v1;apiv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+enum WorkflowExecutionStatus {
+  WORKFLOW_EXECUTION_STATUS_UNSPECIFIED = 0;
+  WORKFLOW_EXECUTION_STATUS_RUNNING = 1;
+  WORKFLOW_EXECUTION_STATUS_COMPLETED = 2;
+  WORKFLOW_EXECUTION_STATUS_FAILED = 3;
+  WORKFLOW_EXECUTION_STATUS_TERMINATED = 4;
+}
+
+enum CommandType {
+  COMMAND_TYPE_UNSPECIFIED = 0;
+  COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK = 1;
+  COMMAND_TYPE_COMPLETE_WORKFLOW = 2;
+  COMMAND_TYPE_FAIL_WORKFLOW = 3;
+}
+
+message WorkflowExecution {
+  string id = 1;
+  string workflow_type = 2;
+  string task_queue = 3;
+  WorkflowExecutionStatus status = 4;
+  bytes input = 5;
+  bytes result = 6;
+  string error_message = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  google.protobuf.Timestamp closed_at = 10;
+}
+
+message HistoryEvent {
+  int64 id = 1;
+  string workflow_id = 2;
+  int32 sequence_num = 3;
+  string event_type = 4;
+  bytes event_data = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+message Command {
+  CommandType type = 1;
+  bytes attributes = 2;
+}
+
+message ScheduleActivityTaskAttributes {
+  int64 seq_id = 1;
+  string activity_type = 2;
+  bytes input = 3;
+  string task_queue = 4;
+  google.protobuf.Duration start_to_close_timeout = 5;
+  RetryPolicy retry_policy = 6;
+}
+
+message CompleteWorkflowAttributes {
+  bytes result = 1;
+}
+
+message FailWorkflowAttributes {
+  string error_message = 1;
+}
+
+message RetryPolicy {
+  int32 max_attempts = 1;
+  google.protobuf.Duration initial_interval = 2;
+  double backoff_coefficient = 3;
+  google.protobuf.Duration max_interval = 4;
+}
+
+message ActivityFailure {
+  string message = 1;
+  string type = 2;
+  bool non_retryable = 3;
+}
