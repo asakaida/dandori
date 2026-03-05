@@ -127,33 +127,47 @@ Go SDKリポジトリ（dandori-sdk-go）の進捗は当該リポジトリで管
 
 ### Sprint 4 - gRPCハンドラとサーバー起動
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: gRPCサーバーが起動し、全APIが呼び出し可能な状態にする
 
 タスク:
 
-- [ ] internal/adapter/grpc/handler.go
+- [x] internal/port/service.go に WorkflowType string を WorkflowTaskResult に追加
+- [x] internal/engine/engine.go の PollWorkflowTask でワークフロー取得し WorkflowType を設定
+- [x] internal/engine/engine_test.go の PollWorkflowTask テストで WorkflowType を検証
+- [x] internal/adapter/grpc/handler.go
   - NewHandler(client, wfTask, actTask) で役割別インターフェースを受け取る
   - domainErrorToGRPC() でドメインエラー→gRPCステータス変換を一元化（engine/に依存しない）
-  - 全11メソッドのハンドラ実装
-  - PollWorkflowTask: ErrNoTaskAvailable → 空レスポンス（エラーではない）
-- [ ] cmd/dandori/main.go
+  - 全10メソッドのハンドラ実装
+  - 型変換ヘルパー: workflowStatusToProto, domainWorkflowToProto, domainEventsToProto, protoCommandsToDomain, commandTypeFromProto
+  - PollWorkflowTask/PollActivityTask: nil結果 → 空レスポンス（エラーではない）
+- [x] internal/adapter/postgres/migrate.go（embed.FSによるマイグレーションランナー、冪等性あり）
+- [x] cmd/dandori/main.go
+  - 環境変数: DATABASE_URL, GRPC_PORT
+  - DB接続 + ping + プール設定
+  - embed.FSマイグレーション実行
   - DI: adapter/postgres → engine.New + engine.NewBackgroundWorker → adapter/grpc.NewHandler(eng, eng, eng)
-  - gRPCサーバー起動
-  - BackgroundWorker.RunActivityTimeoutChecker, RunTaskRecovery をgoroutineで起動
-  - graceful shutdown（context cancel → バックグラウンド停止 → gRPC停止）
-- [ ] gRPCurlで全APIの動作確認
+  - gRPCサーバー起動（reflection.Register でgRPCurl対応）
+  - BackgroundWorker.RunActivityTimeoutChecker(5s), RunTaskRecovery(10s) をgoroutineで起動
+  - graceful shutdown（SIGINT/SIGTERM → context cancel → GracefulStop → db.Close）
+- [x] go build ./cmd/dandori, go vet ./..., go test ./internal/engine/... がクリーン
+
+実装上の設計判断:
+
+- マイグレーションに golang-migrate を使わず embed.FS + 冪等チェック（information_schema.tables）で実現。外部依存を削減
+- PollWorkflowTask で WorkflowType を返すために、engine 層でワークフロー取得を追加。PollWorkflowTaskResponse の workflow_type フィールドを活用
+- gRPC reflection を有効化し、grpcurl でのデバッグを容易にした
 
 完了条件:
 
-- サーバーが起動し、gRPCurlでStartWorkflow → DescribeWorkflowが動作する
-- 同一IDでStartWorkflow 2回 → ALREADY_EXISTS (gRPC)
-- 存在しないIDでDescribeWorkflow → NOT_FOUND (gRPC)
-- COMPLETED状態のWFにTerminateWorkflow → FAILED_PRECONDITION (gRPC)
-- PollWorkflowTaskでタスクなし → 空レスポンス（エラーなし）
-- FailWorkflowTask, FailActivityTask（non_retryable含む）が正常に動作する
-- adapter/grpc/ が engine/ を import していないことを確認
+- [x] サーバーが起動し、gRPCurlでStartWorkflow → DescribeWorkflowが動作する
+- [x] 同一IDでStartWorkflow 2回 → ALREADY_EXISTS (gRPC)
+- [x] 存在しないIDでDescribeWorkflow → NOT_FOUND (gRPC)
+- [x] COMPLETED状態のWFにTerminateWorkflow → FAILED_PRECONDITION (gRPC)
+- [x] PollWorkflowTaskでタスクなし → 空レスポンス（エラーなし）
+- [x] FailWorkflowTask, FailActivityTask（non_retryable含む）が正常に動作する
+- [x] adapter/grpc/ が engine/ を import していないことを確認
 
 ### Sprint 5 - テストと品質
 

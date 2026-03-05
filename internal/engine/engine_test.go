@@ -254,7 +254,11 @@ func TestPollWorkflowTask_NoTask(t *testing.T) {
 func TestPollWorkflowTask_WithTask(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
-		&mockWorkflowRepo{},
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, WorkflowType: "OrderWorkflow", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
 		&mockEventRepo{
 			GetByWorkflowIDFn: func(_ context.Context, _ uuid.UUID) ([]domain.HistoryEvent, error) {
 				return []domain.HistoryEvent{{ID: 1, WorkflowID: wfID}}, nil
@@ -274,6 +278,7 @@ func TestPollWorkflowTask_WithTask(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, int64(1), result.Task.ID)
 	assert.Len(t, result.Events, 1)
+	assert.Equal(t, "OrderWorkflow", result.WorkflowType)
 }
 
 // --- CompleteWorkflowTask ---

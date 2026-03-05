@@ -374,7 +374,7 @@ w.Start(ctx)
 
 - gRPC: google.golang.org/grpc + protoc-gen-go
 - PostgreSQLドライバ: database/sql + github.com/lib/pq
-- マイグレーション: github.com/golang-migrate/migrate
+- マイグレーション: embed.FS（標準ライブラリ、外部依存なし）
 - CLI: github.com/spf13/cobra（Phase 2）
 - ログ: 標準ライブラリ log/slog
 - UUID: github.com/google/uuid

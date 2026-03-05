@@ -156,14 +156,20 @@ func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerI
 		return nil, err
 	}
 
+	wf, err := e.workflows.Get(ctx, task.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+
 	events, err := e.events.GetByWorkflowID(ctx, task.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &port.WorkflowTaskResult{
-		Task:   *task,
-		Events: events,
+		Task:         *task,
+		Events:       events,
+		WorkflowType: wf.WorkflowType,
 	}, nil
 }
 

@@ -92,6 +92,7 @@ dandori/
 │   │       ├── migration/                    # SQLマイグレーション
 │   │       │   ├── 000001_initial.up.sql
 │   │       │   └── 000001_initial.down.sql
+│   │       ├── migrate.go                    # embed.FSマイグレーションランナー
 │   │       ├── store.go                      # コネクションプール、TxManager
 │   │       ├── event.go                      # EventRepository実装
 │   │       ├── workflow_task.go               # WorkflowTaskRepository実装
@@ -353,8 +354,9 @@ type StartWorkflowParams struct {
 
 // WorkflowTaskResult はPollWorkflowTaskの結果
 type WorkflowTaskResult struct {
-    Task    domain.WorkflowTask
-    Events  []domain.HistoryEvent
+    Task         domain.WorkflowTask
+    Events       []domain.HistoryEvent
+    WorkflowType string
 }
 ```
 
@@ -570,13 +572,18 @@ func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerI
     if err != nil {
         return nil, err
     }
+    wf, err := e.workflows.Get(ctx, task.WorkflowID)
+    if err != nil {
+        return nil, err
+    }
     events, err := e.events.GetByWorkflowID(ctx, task.WorkflowID)
     if err != nil {
         return nil, err
     }
     return &port.WorkflowTaskResult{
-        Task:   *task,
-        Events: events,
+        Task:         *task,
+        Events:       events,
+        WorkflowType: wf.WorkflowType,
     }, nil
 }
 
@@ -698,26 +705,24 @@ func (e *Engine) FailActivityTask(ctx context.Context, taskID int64, failure dom
 // BackgroundWorker はバックグラウンドプロセスを管理する。
 // Engine (リクエスト処理) とは別の構造体として定義し、責務を分離する。
 type BackgroundWorker struct {
+    workflows     port.WorkflowRepository
     events        port.EventRepository
     workflowTasks port.WorkflowTaskRepository
     activityTasks port.ActivityTaskRepository
-    workflows     port.WorkflowRepository
-    timers        port.TimerRepository
     tx            port.TxManager
 }
 
 func NewBackgroundWorker(
+    workflows port.WorkflowRepository,
     events port.EventRepository,
     workflowTasks port.WorkflowTaskRepository,
     activityTasks port.ActivityTaskRepository,
-    workflows port.WorkflowRepository,
-    timers port.TimerRepository,
     tx port.TxManager,
 ) *BackgroundWorker {
     return &BackgroundWorker{
-        events: events, workflowTasks: workflowTasks,
-        activityTasks: activityTasks, workflows: workflows,
-        timers: timers, tx: tx,
+        workflows: workflows, events: events,
+        workflowTasks: workflowTasks,
+        activityTasks: activityTasks, tx: tx,
     }
 }
 
@@ -883,8 +888,12 @@ func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowT
         // タスクなし: 空レスポンスを返す（エラーではない）
         return &apiv1.PollWorkflowTaskResponse{}, nil
     }
-    // proto型への変換...
-    return &apiv1.PollWorkflowTaskResponse{...}, nil
+    return &apiv1.PollWorkflowTaskResponse{
+        TaskId:       result.Task.ID,
+        WorkflowId:   result.Task.WorkflowID.String(),
+        WorkflowType: result.WorkflowType,
+        Events:       domainEventsToProto(result.Events),
+    }, nil
 }
 
 // domainErrorToGRPC はドメインエラーをgRPCステータスコードに変換する。
@@ -947,6 +956,19 @@ func (s *Store) Timers() port.TimerRepository                { return &TimerStor
 
 ```go
 func main() {
+    // 環境変数（DATABASE_URL, GRPC_PORT）
+    databaseURL := envOrDefault("DATABASE_URL", "postgres://dandori:dandori@localhost:5432/dandori?sslmode=disable")
+    grpcPort := envOrDefault("GRPC_PORT", "7233")
+
+    // DB接続 + ping + プール設定
+    db, _ := sql.Open("postgres", databaseURL)
+    db.SetMaxOpenConns(25)
+    db.SetMaxIdleConns(5)
+    db.SetConnMaxLifetime(5 * time.Minute)
+
+    // embed.FSマイグレーション（冪等: テーブル存在チェック）
+    postgres.RunMigrations(context.Background(), db)
+
     // Outbound Adapter
     store := postgres.New(db)
 
@@ -962,26 +984,33 @@ func main() {
 
     // Background Worker（Engineとは別の構造体）
     bgWorker := engine.NewBackgroundWorker(
+        store.Workflows(),
         store.Events(),
         store.WorkflowTasks(),
         store.ActivityTasks(),
-        store.Workflows(),
-        store.Timers(),
         store,
     )
 
     // Inbound Adapter（役割別にインターフェースを渡す）
-    hdl := grpc.NewHandler(eng, eng, eng)
+    handler := grpcadapter.NewHandler(eng, eng, eng)
 
-    // gRPCサーバー起動
-    go runGRPCServer(hdl)
+    ctx, cancel := context.WithCancel(context.Background())
 
     // バックグラウンドプロセス起動（Engineとは独立したライフサイクル）
     go bgWorker.RunActivityTimeoutChecker(ctx, 5*time.Second)
     go bgWorker.RunTaskRecovery(ctx, 10*time.Second)
 
-    // graceful shutdown
-    waitForShutdown(ctx)
+    // gRPCサーバー起動（reflection有効）
+    srv := grpc.NewServer()
+    apiv1.RegisterDandoriServiceServer(srv, handler)
+    reflection.Register(srv)
+    go srv.Serve(lis)
+
+    // graceful shutdown（SIGINT/SIGTERM → cancel → GracefulStop → db.Close）
+    sig := <-sigCh
+    cancel()
+    srv.GracefulStop()
+    db.Close()
 }
 ```
 

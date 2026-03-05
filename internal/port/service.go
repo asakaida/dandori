@@ -35,6 +35,7 @@ type StartWorkflowParams struct {
 }
 
 type WorkflowTaskResult struct {
-	Task   domain.WorkflowTask
-	Events []domain.HistoryEvent
+	Task         domain.WorkflowTask
+	Events       []domain.HistoryEvent
+	WorkflowType string
 }
