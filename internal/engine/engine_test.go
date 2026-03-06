@@ -713,6 +713,101 @@ func TestRecordActivityHeartbeat(t *testing.T) {
 	assert.Equal(t, int64(42), updatedTaskID)
 }
 
+// --- ListWorkflows ---
+
+func TestListWorkflows_DefaultPageSize(t *testing.T) {
+	var gotParams port.ListWorkflowsParams
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			ListFn: func(_ context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
+				gotParams = params
+				return nil, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	_, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{})
+	require.NoError(t, err)
+	assert.Equal(t, 21, gotParams.PageSize) // default 20 + 1
+}
+
+func TestListWorkflows_MaxPageSize(t *testing.T) {
+	var gotParams port.ListWorkflowsParams
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			ListFn: func(_ context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
+				gotParams = params
+				return nil, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	_, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{PageSize: 200})
+	require.NoError(t, err)
+	assert.Equal(t, 101, gotParams.PageSize) // capped to 100 + 1
+}
+
+func TestListWorkflows_NextCursor(t *testing.T) {
+	now := time.Now()
+	workflows := make([]domain.WorkflowExecution, 4)
+	for i := range workflows {
+		workflows[i] = domain.WorkflowExecution{
+			ID:        uuid.New(),
+			CreatedAt: now.Add(-time.Duration(i) * time.Minute),
+		}
+	}
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			ListFn: func(_ context.Context, _ port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
+				return workflows, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	result, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{PageSize: 3})
+	require.NoError(t, err)
+	assert.Len(t, result.Workflows, 3)
+	require.NotNil(t, result.NextCursor)
+	assert.Equal(t, workflows[2].ID, result.NextCursor.ID)
+	assert.Equal(t, workflows[2].CreatedAt, result.NextCursor.CreatedAt)
+}
+
+func TestListWorkflows_NoNextCursor(t *testing.T) {
+	workflows := []domain.WorkflowExecution{
+		{ID: uuid.New(), CreatedAt: time.Now()},
+	}
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			ListFn: func(_ context.Context, _ port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
+				return workflows, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	result, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{PageSize: 3})
+	require.NoError(t, err)
+	assert.Len(t, result.Workflows, 1)
+	assert.Nil(t, result.NextCursor)
+}
+
 func TestRecordActivityHeartbeat_TaskNotFound(t *testing.T) {
 	e := newTestEngine(
 		&mockWorkflowRepo{},

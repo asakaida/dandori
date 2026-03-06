@@ -25,6 +25,7 @@ const (
 	DandoriService_TerminateWorkflow_FullMethodName       = "/dandori.api.v1.DandoriService/TerminateWorkflow"
 	DandoriService_SignalWorkflow_FullMethodName          = "/dandori.api.v1.DandoriService/SignalWorkflow"
 	DandoriService_CancelWorkflow_FullMethodName          = "/dandori.api.v1.DandoriService/CancelWorkflow"
+	DandoriService_ListWorkflows_FullMethodName           = "/dandori.api.v1.DandoriService/ListWorkflows"
 	DandoriService_PollWorkflowTask_FullMethodName        = "/dandori.api.v1.DandoriService/PollWorkflowTask"
 	DandoriService_CompleteWorkflowTask_FullMethodName    = "/dandori.api.v1.DandoriService/CompleteWorkflowTask"
 	DandoriService_FailWorkflowTask_FullMethodName        = "/dandori.api.v1.DandoriService/FailWorkflowTask"
@@ -45,6 +46,7 @@ type DandoriServiceClient interface {
 	TerminateWorkflow(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*TerminateWorkflowResponse, error)
 	SignalWorkflow(ctx context.Context, in *SignalWorkflowRequest, opts ...grpc.CallOption) (*SignalWorkflowResponse, error)
 	CancelWorkflow(ctx context.Context, in *CancelWorkflowRequest, opts ...grpc.CallOption) (*CancelWorkflowResponse, error)
+	ListWorkflows(ctx context.Context, in *ListWorkflowsRequest, opts ...grpc.CallOption) (*ListWorkflowsResponse, error)
 	// Worker API: Workflow Task
 	PollWorkflowTask(ctx context.Context, in *PollWorkflowTaskRequest, opts ...grpc.CallOption) (*PollWorkflowTaskResponse, error)
 	CompleteWorkflowTask(ctx context.Context, in *CompleteWorkflowTaskRequest, opts ...grpc.CallOption) (*CompleteWorkflowTaskResponse, error)
@@ -119,6 +121,16 @@ func (c *dandoriServiceClient) CancelWorkflow(ctx context.Context, in *CancelWor
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CancelWorkflowResponse)
 	err := c.cc.Invoke(ctx, DandoriService_CancelWorkflow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *dandoriServiceClient) ListWorkflows(ctx context.Context, in *ListWorkflowsRequest, opts ...grpc.CallOption) (*ListWorkflowsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWorkflowsResponse)
+	err := c.cc.Invoke(ctx, DandoriService_ListWorkflows_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +218,7 @@ type DandoriServiceServer interface {
 	TerminateWorkflow(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error)
 	SignalWorkflow(context.Context, *SignalWorkflowRequest) (*SignalWorkflowResponse, error)
 	CancelWorkflow(context.Context, *CancelWorkflowRequest) (*CancelWorkflowResponse, error)
+	ListWorkflows(context.Context, *ListWorkflowsRequest) (*ListWorkflowsResponse, error)
 	// Worker API: Workflow Task
 	PollWorkflowTask(context.Context, *PollWorkflowTaskRequest) (*PollWorkflowTaskResponse, error)
 	CompleteWorkflowTask(context.Context, *CompleteWorkflowTaskRequest) (*CompleteWorkflowTaskResponse, error)
@@ -243,6 +256,9 @@ func (UnimplementedDandoriServiceServer) SignalWorkflow(context.Context, *Signal
 }
 func (UnimplementedDandoriServiceServer) CancelWorkflow(context.Context, *CancelWorkflowRequest) (*CancelWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelWorkflow not implemented")
+}
+func (UnimplementedDandoriServiceServer) ListWorkflows(context.Context, *ListWorkflowsRequest) (*ListWorkflowsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListWorkflows not implemented")
 }
 func (UnimplementedDandoriServiceServer) PollWorkflowTask(context.Context, *PollWorkflowTaskRequest) (*PollWorkflowTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowTask not implemented")
@@ -390,6 +406,24 @@ func _DandoriService_CancelWorkflow_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DandoriServiceServer).CancelWorkflow(ctx, req.(*CancelWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DandoriService_ListWorkflows_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkflowsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DandoriServiceServer).ListWorkflows(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DandoriService_ListWorkflows_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DandoriServiceServer).ListWorkflows(ctx, req.(*ListWorkflowsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -550,6 +584,10 @@ var DandoriService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelWorkflow",
 			Handler:    _DandoriService_CancelWorkflow_Handler,
+		},
+		{
+			MethodName: "ListWorkflows",
+			Handler:    _DandoriService_ListWorkflows_Handler,
 		},
 		{
 			MethodName: "PollWorkflowTask",

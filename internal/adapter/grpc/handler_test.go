@@ -321,6 +321,45 @@ func TestRecordActivityHeartbeat_TaskNotFound(t *testing.T) {
 	}
 }
 
+func TestListWorkflows_Success(t *testing.T) {
+	wfID := uuid.New()
+	h := adaptgrpc.NewHandler(
+		&mockClientService{ListWorkflowsFn: func(_ context.Context, params port.ListWorkflowsParams) (*port.ListWorkflowsResult, error) {
+			return &port.ListWorkflowsResult{
+				Workflows: []domain.WorkflowExecution{
+					{ID: wfID, WorkflowType: "TestWF", TaskQueue: "q", Status: domain.WorkflowStatusRunning},
+				},
+			}, nil
+		}},
+		&mockWorkflowTaskService{},
+		&mockActivityTaskService{},
+	)
+	resp, err := h.ListWorkflows(context.Background(), &apiv1.ListWorkflowsRequest{PageSize: 10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.GetWorkflows()) != 1 {
+		t.Fatalf("expected 1 workflow, got %d", len(resp.GetWorkflows()))
+	}
+	if resp.GetWorkflows()[0].GetId() != wfID.String() {
+		t.Errorf("got id %s, want %s", resp.GetWorkflows()[0].GetId(), wfID.String())
+	}
+}
+
+func TestListWorkflows_InvalidToken(t *testing.T) {
+	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
+	_, err := h.ListWorkflows(context.Background(), &apiv1.ListWorkflowsRequest{
+		NextPageToken: "not-valid-base64!!!",
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.InvalidArgument {
+		t.Errorf("got code %v, want InvalidArgument", st.Code())
+	}
+}
+
 func TestCompleteWorkflowTask_InvalidCommand(t *testing.T) {
 	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
 	_, err := h.CompleteWorkflowTask(context.Background(), &apiv1.CompleteWorkflowTaskRequest{

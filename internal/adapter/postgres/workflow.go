@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/asakaida/dandori/internal/domain"
+	"github.com/asakaida/dandori/internal/port"
 	"github.com/google/uuid"
 )
 
@@ -71,6 +73,68 @@ func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.Workflow
 		wf.ClosedAt = &closedAt.Time
 	}
 	return &wf, nil
+}
+
+func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
+	query := `SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at
+		 FROM workflow_executions WHERE 1=1`
+	args := []any{}
+	argIdx := 1
+
+	if params.StatusFilter != "" {
+		query += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, params.StatusFilter)
+		argIdx++
+	}
+	if params.TypeFilter != "" {
+		query += fmt.Sprintf(" AND workflow_type = $%d", argIdx)
+		args = append(args, params.TypeFilter)
+		argIdx++
+	}
+	if params.QueueFilter != "" {
+		query += fmt.Sprintf(" AND task_queue = $%d", argIdx)
+		args = append(args, params.QueueFilter)
+		argIdx++
+	}
+	if params.Cursor != nil {
+		query += fmt.Sprintf(" AND (created_at < $%d OR (created_at = $%d AND id < $%d))", argIdx, argIdx, argIdx+1)
+		args = append(args, params.Cursor.CreatedAt, params.Cursor.ID)
+		argIdx += 2
+	}
+
+	query += " ORDER BY created_at DESC, id DESC"
+	query += fmt.Sprintf(" LIMIT $%d", argIdx)
+	args = append(args, params.PageSize)
+
+	rows, err := s.store.conn(ctx).QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var workflows []domain.WorkflowExecution
+	for rows.Next() {
+		var wf domain.WorkflowExecution
+		var input, result []byte
+		var errMsg sql.NullString
+		var closedAt sql.NullTime
+		if err := rows.Scan(
+			&wf.ID, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
+			&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
+		); err != nil {
+			return nil, err
+		}
+		wf.Input = input
+		wf.Result = result
+		if errMsg.Valid {
+			wf.Error = errMsg.String
+		}
+		if closedAt.Valid {
+			wf.ClosedAt = &closedAt.Time
+		}
+		workflows = append(workflows, wf)
+	}
+	return workflows, rows.Err()
 }
 
 func (s *WorkflowStore) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error {

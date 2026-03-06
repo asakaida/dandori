@@ -13,6 +13,7 @@ type WorkflowRepository interface {
 	Create(ctx context.Context, wf domain.WorkflowExecution) error
 	Get(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error
+	List(ctx context.Context, params ListWorkflowsParams) ([]domain.WorkflowExecution, error)
 }
 
 type EventRepository interface {

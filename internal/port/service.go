@@ -3,6 +3,7 @@ package port
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/asakaida/dandori/internal/domain"
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ type ClientService interface {
 	TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error
 	SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
 	CancelWorkflow(ctx context.Context, id uuid.UUID) error
+	ListWorkflows(ctx context.Context, params ListWorkflowsParams) (*ListWorkflowsResult, error)
 }
 
 type WorkflowTaskService interface {
@@ -41,4 +43,22 @@ type WorkflowTaskResult struct {
 	Task         domain.WorkflowTask
 	Events       []domain.HistoryEvent
 	WorkflowType string
+}
+
+type ListWorkflowsParams struct {
+	PageSize     int
+	Cursor       *ListWorkflowsCursor
+	StatusFilter string
+	TypeFilter   string
+	QueueFilter  string
+}
+
+type ListWorkflowsCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+}
+
+type ListWorkflowsResult struct {
+	Workflows  []domain.WorkflowExecution
+	NextCursor *ListWorkflowsCursor
 }

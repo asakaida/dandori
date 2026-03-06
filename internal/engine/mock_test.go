@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/asakaida/dandori/internal/domain"
+	"github.com/asakaida/dandori/internal/port"
 	"github.com/google/uuid"
 )
 
@@ -19,6 +20,7 @@ type mockWorkflowRepo struct {
 	CreateFn       func(ctx context.Context, wf domain.WorkflowExecution) error
 	GetFn          func(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
 	UpdateStatusFn func(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error
+	ListFn         func(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error)
 }
 
 func (m *mockWorkflowRepo) Create(ctx context.Context, wf domain.WorkflowExecution) error {
@@ -40,6 +42,13 @@ func (m *mockWorkflowRepo) UpdateStatus(ctx context.Context, id uuid.UUID, statu
 		return m.UpdateStatusFn(ctx, id, status, result, errMsg)
 	}
 	return nil
+}
+
+func (m *mockWorkflowRepo) List(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
+	if m.ListFn != nil {
+		return m.ListFn(ctx, params)
+	}
+	return nil, nil
 }
 
 type mockEventRepo struct {

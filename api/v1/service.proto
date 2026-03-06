@@ -15,6 +15,7 @@ service DandoriService {
   rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
   rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
   rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
 
   // Worker API: Workflow Task
   rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
@@ -138,6 +139,19 @@ message CancelWorkflowRequest {
 }
 
 message CancelWorkflowResponse {}
+
+message ListWorkflowsRequest {
+  int32 page_size = 1;
+  string next_page_token = 2;
+  string status_filter = 3;
+  string type_filter = 4;
+  string queue_filter = 5;
+}
+
+message ListWorkflowsResponse {
+  repeated WorkflowExecution workflows = 1;
+  string next_page_token = 2;
+}
 
 message RecordActivityHeartbeatRequest {
   int64 task_id = 1;

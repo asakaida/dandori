@@ -176,6 +176,37 @@ func (e *Engine) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName st
 	})
 }
 
+func (e *Engine) ListWorkflows(ctx context.Context, params port.ListWorkflowsParams) (*port.ListWorkflowsResult, error) {
+	if params.PageSize <= 0 {
+		params.PageSize = 20
+	}
+	if params.PageSize > 100 {
+		params.PageSize = 100
+	}
+
+	params.PageSize++ // fetch one extra to detect next page
+	workflows, err := e.workflows.List(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	params.PageSize-- // restore original
+
+	var nextCursor *port.ListWorkflowsCursor
+	if len(workflows) > params.PageSize {
+		last := workflows[params.PageSize-1]
+		nextCursor = &port.ListWorkflowsCursor{
+			CreatedAt: last.CreatedAt,
+			ID:        last.ID,
+		}
+		workflows = workflows[:params.PageSize]
+	}
+
+	return &port.ListWorkflowsResult{
+		Workflows:  workflows,
+		NextCursor: nextCursor,
+	}, nil
+}
+
 func (e *Engine) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
 	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
 		wf, err := e.workflows.Get(ctx, id)

@@ -3,6 +3,7 @@ package grpc_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -343,5 +344,82 @@ func TestIntegration_PollWorkflowTask_Empty(t *testing.T) {
 	}
 	if resp.GetTaskId() != 0 {
 		t.Errorf("expected empty response, got task_id=%d", resp.GetTaskId())
+	}
+}
+
+func TestIntegration_ListWorkflows(t *testing.T) {
+	if testDB == nil {
+		t.Skip("no test database")
+	}
+	h := newTestHandler(t)
+	ctx := context.Background()
+
+	// Create 3 workflows with different types and queues
+	for i := 0; i < 3; i++ {
+		_, err := h.StartWorkflow(ctx, &apiv1.StartWorkflowRequest{
+			WorkflowType: fmt.Sprintf("ListTestWF-%d", i),
+			TaskQueue:    "list-test-queue",
+			Input:        []byte(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("StartWorkflow %d: %v", i, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// List all
+	listResp, err := h.ListWorkflows(ctx, &apiv1.ListWorkflowsRequest{PageSize: 10})
+	if err != nil {
+		t.Fatalf("ListWorkflows: %v", err)
+	}
+	if len(listResp.GetWorkflows()) != 3 {
+		t.Errorf("expected 3 workflows, got %d", len(listResp.GetWorkflows()))
+	}
+
+	// Filter by type
+	typeResp, err := h.ListWorkflows(ctx, &apiv1.ListWorkflowsRequest{
+		PageSize:   10,
+		TypeFilter: "ListTestWF-1",
+	})
+	if err != nil {
+		t.Fatalf("ListWorkflows with type filter: %v", err)
+	}
+	if len(typeResp.GetWorkflows()) != 1 {
+		t.Errorf("expected 1 workflow with type filter, got %d", len(typeResp.GetWorkflows()))
+	}
+
+	// Pagination: page_size=2, then use next_page_token
+	page1, err := h.ListWorkflows(ctx, &apiv1.ListWorkflowsRequest{PageSize: 2})
+	if err != nil {
+		t.Fatalf("ListWorkflows page1: %v", err)
+	}
+	if len(page1.GetWorkflows()) != 2 {
+		t.Errorf("expected 2 workflows in page1, got %d", len(page1.GetWorkflows()))
+	}
+	if page1.GetNextPageToken() == "" {
+		t.Fatal("expected next_page_token in page1")
+	}
+
+	page2, err := h.ListWorkflows(ctx, &apiv1.ListWorkflowsRequest{
+		PageSize:      2,
+		NextPageToken: page1.GetNextPageToken(),
+	})
+	if err != nil {
+		t.Fatalf("ListWorkflows page2: %v", err)
+	}
+	if len(page2.GetWorkflows()) != 1 {
+		t.Errorf("expected 1 workflow in page2, got %d", len(page2.GetWorkflows()))
+	}
+
+	// Filter by status RUNNING
+	statusResp, err := h.ListWorkflows(ctx, &apiv1.ListWorkflowsRequest{
+		PageSize:     10,
+		StatusFilter: "RUNNING",
+	})
+	if err != nil {
+		t.Fatalf("ListWorkflows with status filter: %v", err)
+	}
+	if len(statusResp.GetWorkflows()) != 3 {
+		t.Errorf("expected 3 RUNNING workflows, got %d", len(statusResp.GetWorkflows()))
 	}
 }

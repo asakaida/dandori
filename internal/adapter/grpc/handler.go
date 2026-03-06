@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 
@@ -101,6 +102,39 @@ func (h *Handler) SignalWorkflow(ctx context.Context, req *apiv1.SignalWorkflowR
 		return nil, domainErrorToGRPC(err)
 	}
 	return &apiv1.SignalWorkflowResponse{}, nil
+}
+
+func (h *Handler) ListWorkflows(ctx context.Context, req *apiv1.ListWorkflowsRequest) (*apiv1.ListWorkflowsResponse, error) {
+	params := port.ListWorkflowsParams{
+		PageSize:     int(req.GetPageSize()),
+		StatusFilter: req.GetStatusFilter(),
+		TypeFilter:   req.GetTypeFilter(),
+		QueueFilter:  req.GetQueueFilter(),
+	}
+
+	if token := req.GetNextPageToken(); token != "" {
+		cursor, err := decodeCursor(token)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid next_page_token: %v", err)
+		}
+		params.Cursor = cursor
+	}
+
+	result, err := h.client.ListWorkflows(ctx, params)
+	if err != nil {
+		return nil, domainErrorToGRPC(err)
+	}
+
+	pbWorkflows := make([]*apiv1.WorkflowExecution, len(result.Workflows))
+	for i := range result.Workflows {
+		pbWorkflows[i] = domainWorkflowToProto(&result.Workflows[i])
+	}
+
+	resp := &apiv1.ListWorkflowsResponse{Workflows: pbWorkflows}
+	if result.NextCursor != nil {
+		resp.NextPageToken = encodeCursor(result.NextCursor)
+	}
+	return resp, nil
 }
 
 func (h *Handler) CancelWorkflow(ctx context.Context, req *apiv1.CancelWorkflowRequest) (*apiv1.CancelWorkflowResponse, error) {
@@ -281,6 +315,23 @@ func protoCommandsToDomain(cmds []*apiv1.Command) ([]domain.Command, error) {
 		}
 	}
 	return result, nil
+}
+
+func encodeCursor(c *port.ListWorkflowsCursor) string {
+	data, _ := json.Marshal(c)
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+func decodeCursor(token string) (*port.ListWorkflowsCursor, error) {
+	data, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return nil, err
+	}
+	var c port.ListWorkflowsCursor
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 func commandTypeFromProto(ct apiv1.CommandType) (domain.CommandType, error) {
