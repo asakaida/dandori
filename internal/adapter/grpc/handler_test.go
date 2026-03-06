@@ -360,6 +360,48 @@ func TestListWorkflows_InvalidToken(t *testing.T) {
 	}
 }
 
+func TestQueryWorkflow_InvalidUUID(t *testing.T) {
+	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
+	_, err := h.QueryWorkflow(context.Background(), &apiv1.QueryWorkflowRequest{
+		WorkflowId: "not-a-uuid",
+		QueryType:  "getState",
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.InvalidArgument {
+		t.Errorf("got code %v, want InvalidArgument", st.Code())
+	}
+}
+
+func TestRespondQueryTask_Success(t *testing.T) {
+	var called bool
+	h := adaptgrpc.NewHandler(
+		&mockClientService{},
+		&mockWorkflowTaskService{
+			RespondQueryTaskFn: func(_ context.Context, queryID int64, result json.RawMessage, errMsg string) error {
+				called = true
+				if queryID != 42 {
+					t.Errorf("got queryID %d, want 42", queryID)
+				}
+				return nil
+			},
+		},
+		&mockActivityTaskService{},
+	)
+	_, err := h.RespondQueryTask(context.Background(), &apiv1.RespondQueryTaskRequest{
+		QueryId: 42,
+		Result:  []byte(`"ok"`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("RespondQueryTask was not called")
+	}
+}
+
 func TestCompleteWorkflowTask_InvalidCommand(t *testing.T) {
 	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
 	_, err := h.CompleteWorkflowTask(context.Background(), &apiv1.CompleteWorkflowTaskRequest{

@@ -37,6 +37,10 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
 			if err := e.processStartChildWorkflow(ctx, workflowID, taskQueue, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
+		case domain.CommandRecordSideEffect:
+			if err := e.processRecordSideEffect(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown command type: %s", cmd.Type)
 		}
@@ -269,6 +273,21 @@ func (e *Engine) processStartChildWorkflow(ctx context.Context, workflowID uuid.
 		QueueName:   childQueue,
 		WorkflowID:  childID,
 		ScheduledAt: time.Now(),
+	})
+}
+
+func (e *Engine) processRecordSideEffect(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
+	var a domain.RecordSideEffectAttributes
+	if err := json.Unmarshal(attrs, &a); err != nil {
+		return fmt.Errorf("unmarshal RecordSideEffectAttributes: %w", err)
+	}
+
+	eventData, err := marshalEventData(a, metadata)
+	if err != nil {
+		return err
+	}
+	return e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: workflowID, Type: domain.EventSideEffectRecorded, Data: eventData},
 	})
 }
 

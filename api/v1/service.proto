@@ -16,6 +16,7 @@ service DandoriService {
   rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
   rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
+  rpc QueryWorkflow(QueryWorkflowRequest) returns (QueryWorkflowResponse);
 
   // Worker API: Workflow Task
   rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
@@ -26,6 +27,9 @@ service DandoriService {
   rpc PollActivityTask(PollActivityTaskRequest) returns (PollActivityTaskResponse);
   rpc CompleteActivityTask(CompleteActivityTaskRequest) returns (CompleteActivityTaskResponse);
   rpc FailActivityTask(FailActivityTaskRequest) returns (FailActivityTaskResponse);
+
+  // Worker API: Query
+  rpc RespondQueryTask(RespondQueryTaskRequest) returns (RespondQueryTaskResponse);
 
   // Heartbeat API
   rpc RecordActivityHeartbeat(RecordActivityHeartbeatRequest) returns (RecordActivityHeartbeatResponse);
@@ -87,6 +91,7 @@ message PollWorkflowTaskResponse {
   string workflow_id = 2;
   string workflow_type = 3;
   repeated HistoryEvent events = 4;
+  repeated PendingQuery pending_queries = 5;
 }
 
 message CompleteWorkflowTaskRequest {
@@ -160,3 +165,22 @@ message RecordActivityHeartbeatRequest {
 }
 
 message RecordActivityHeartbeatResponse {}
+
+message QueryWorkflowRequest {
+  string workflow_id = 1;
+  string query_type = 2;
+  bytes input = 3;
+}
+
+message QueryWorkflowResponse {
+  bytes result = 1;
+  string error_message = 2;
+}
+
+message RespondQueryTaskRequest {
+  int64 query_id = 1;
+  bytes result = 2;
+  string error_message = 3;
+}
+
+message RespondQueryTaskResponse {}

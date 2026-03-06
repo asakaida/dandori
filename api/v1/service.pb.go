@@ -547,13 +547,14 @@ func (x *PollWorkflowTaskRequest) GetWorkerId() string {
 }
 
 type PollWorkflowTaskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	WorkflowType  string                 `protobuf:"bytes,3,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	Events        []*HistoryEvent        `protobuf:"bytes,4,rep,name=events,proto3" json:"events,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TaskId         int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	WorkflowId     string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	WorkflowType   string                 `protobuf:"bytes,3,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	Events         []*HistoryEvent        `protobuf:"bytes,4,rep,name=events,proto3" json:"events,omitempty"`
+	PendingQueries []*PendingQuery        `protobuf:"bytes,5,rep,name=pending_queries,json=pendingQueries,proto3" json:"pending_queries,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PollWorkflowTaskResponse) Reset() {
@@ -610,6 +611,13 @@ func (x *PollWorkflowTaskResponse) GetWorkflowType() string {
 func (x *PollWorkflowTaskResponse) GetEvents() []*HistoryEvent {
 	if x != nil {
 		return x.Events
+	}
+	return nil
+}
+
+func (x *PollWorkflowTaskResponse) GetPendingQueries() []*PendingQuery {
+	if x != nil {
+		return x.PendingQueries
 	}
 	return nil
 }
@@ -1414,6 +1422,214 @@ func (*RecordActivityHeartbeatResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_service_proto_rawDescGZIP(), []int{27}
 }
 
+type QueryWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	QueryType     string                 `protobuf:"bytes,2,opt,name=query_type,json=queryType,proto3" json:"query_type,omitempty"`
+	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryWorkflowRequest) Reset() {
+	*x = QueryWorkflowRequest{}
+	mi := &file_api_v1_service_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryWorkflowRequest) ProtoMessage() {}
+
+func (x *QueryWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_service_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*QueryWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_service_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *QueryWorkflowRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *QueryWorkflowRequest) GetQueryType() string {
+	if x != nil {
+		return x.QueryType
+	}
+	return ""
+}
+
+func (x *QueryWorkflowRequest) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+type QueryWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        []byte                 `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryWorkflowResponse) Reset() {
+	*x = QueryWorkflowResponse{}
+	mi := &file_api_v1_service_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryWorkflowResponse) ProtoMessage() {}
+
+func (x *QueryWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_service_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*QueryWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_service_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *QueryWorkflowResponse) GetResult() []byte {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *QueryWorkflowResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type RespondQueryTaskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	QueryId       int64                  `protobuf:"varint,1,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
+	Result        []byte                 `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RespondQueryTaskRequest) Reset() {
+	*x = RespondQueryTaskRequest{}
+	mi := &file_api_v1_service_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondQueryTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondQueryTaskRequest) ProtoMessage() {}
+
+func (x *RespondQueryTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_service_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondQueryTaskRequest.ProtoReflect.Descriptor instead.
+func (*RespondQueryTaskRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_service_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *RespondQueryTaskRequest) GetQueryId() int64 {
+	if x != nil {
+		return x.QueryId
+	}
+	return 0
+}
+
+func (x *RespondQueryTaskRequest) GetResult() []byte {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *RespondQueryTaskRequest) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type RespondQueryTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RespondQueryTaskResponse) Reset() {
+	*x = RespondQueryTaskResponse{}
+	mi := &file_api_v1_service_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondQueryTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondQueryTaskResponse) ProtoMessage() {}
+
+func (x *RespondQueryTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_service_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondQueryTaskResponse.ProtoReflect.Descriptor instead.
+func (*RespondQueryTaskResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_service_proto_rawDescGZIP(), []int{31}
+}
+
 var File_api_v1_service_proto protoreflect.FileDescriptor
 
 const file_api_v1_service_proto_rawDesc = "" +
@@ -1454,13 +1670,14 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\x17PollWorkflowTaskRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1b\n" +
-	"\tworker_id\x18\x02 \x01(\tR\bworkerId\"\xaf\x01\n" +
+	"\tworker_id\x18\x02 \x01(\tR\bworkerId\"\xf6\x01\n" +
 	"\x18PollWorkflowTaskResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12#\n" +
 	"\rworkflow_type\x18\x03 \x01(\tR\fworkflowType\x124\n" +
-	"\x06events\x18\x04 \x03(\v2\x1c.dandori.api.v1.HistoryEventR\x06events\"\xff\x01\n" +
+	"\x06events\x18\x04 \x03(\v2\x1c.dandori.api.v1.HistoryEventR\x06events\x12E\n" +
+	"\x0fpending_queries\x18\x05 \x03(\v2\x1c.dandori.api.v1.PendingQueryR\x0ependingQueries\"\xff\x01\n" +
 	"\x1bCompleteWorkflowTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x123\n" +
 	"\bcommands\x18\x02 \x03(\v2\x17.dandori.api.v1.CommandR\bcommands\x12U\n" +
@@ -1511,7 +1728,21 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\x1eRecordActivityHeartbeatRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x18\n" +
 	"\adetails\x18\x02 \x01(\fR\adetails\"!\n" +
-	"\x1fRecordActivityHeartbeatResponse2\xca\v\n" +
+	"\x1fRecordActivityHeartbeatResponse\"l\n" +
+	"\x14QueryWorkflowRequest\x12\x1f\n" +
+	"\vworkflow_id\x18\x01 \x01(\tR\n" +
+	"workflowId\x12\x1d\n" +
+	"\n" +
+	"query_type\x18\x02 \x01(\tR\tqueryType\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\"T\n" +
+	"\x15QueryWorkflowResponse\x12\x16\n" +
+	"\x06result\x18\x01 \x01(\fR\x06result\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"q\n" +
+	"\x17RespondQueryTaskRequest\x12\x19\n" +
+	"\bquery_id\x18\x01 \x01(\x03R\aqueryId\x12\x16\n" +
+	"\x06result\x18\x02 \x01(\fR\x06result\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\x1a\n" +
+	"\x18RespondQueryTaskResponse2\x8f\r\n" +
 	"\x0eDandoriService\x12\\\n" +
 	"\rStartWorkflow\x12$.dandori.api.v1.StartWorkflowRequest\x1a%.dandori.api.v1.StartWorkflowResponse\x12e\n" +
 	"\x10DescribeWorkflow\x12'.dandori.api.v1.DescribeWorkflowRequest\x1a(.dandori.api.v1.DescribeWorkflowResponse\x12k\n" +
@@ -1519,13 +1750,15 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\x11TerminateWorkflow\x12(.dandori.api.v1.TerminateWorkflowRequest\x1a).dandori.api.v1.TerminateWorkflowResponse\x12_\n" +
 	"\x0eSignalWorkflow\x12%.dandori.api.v1.SignalWorkflowRequest\x1a&.dandori.api.v1.SignalWorkflowResponse\x12_\n" +
 	"\x0eCancelWorkflow\x12%.dandori.api.v1.CancelWorkflowRequest\x1a&.dandori.api.v1.CancelWorkflowResponse\x12\\\n" +
-	"\rListWorkflows\x12$.dandori.api.v1.ListWorkflowsRequest\x1a%.dandori.api.v1.ListWorkflowsResponse\x12e\n" +
+	"\rListWorkflows\x12$.dandori.api.v1.ListWorkflowsRequest\x1a%.dandori.api.v1.ListWorkflowsResponse\x12\\\n" +
+	"\rQueryWorkflow\x12$.dandori.api.v1.QueryWorkflowRequest\x1a%.dandori.api.v1.QueryWorkflowResponse\x12e\n" +
 	"\x10PollWorkflowTask\x12'.dandori.api.v1.PollWorkflowTaskRequest\x1a(.dandori.api.v1.PollWorkflowTaskResponse\x12q\n" +
 	"\x14CompleteWorkflowTask\x12+.dandori.api.v1.CompleteWorkflowTaskRequest\x1a,.dandori.api.v1.CompleteWorkflowTaskResponse\x12e\n" +
 	"\x10FailWorkflowTask\x12'.dandori.api.v1.FailWorkflowTaskRequest\x1a(.dandori.api.v1.FailWorkflowTaskResponse\x12e\n" +
 	"\x10PollActivityTask\x12'.dandori.api.v1.PollActivityTaskRequest\x1a(.dandori.api.v1.PollActivityTaskResponse\x12q\n" +
 	"\x14CompleteActivityTask\x12+.dandori.api.v1.CompleteActivityTaskRequest\x1a,.dandori.api.v1.CompleteActivityTaskResponse\x12e\n" +
-	"\x10FailActivityTask\x12'.dandori.api.v1.FailActivityTaskRequest\x1a(.dandori.api.v1.FailActivityTaskResponse\x12z\n" +
+	"\x10FailActivityTask\x12'.dandori.api.v1.FailActivityTaskRequest\x1a(.dandori.api.v1.FailActivityTaskResponse\x12e\n" +
+	"\x10RespondQueryTask\x12'.dandori.api.v1.RespondQueryTaskRequest\x1a(.dandori.api.v1.RespondQueryTaskResponse\x12z\n" +
 	"\x17RecordActivityHeartbeat\x12..dandori.api.v1.RecordActivityHeartbeatRequest\x1a/.dandori.api.v1.RecordActivityHeartbeatResponseB*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
 
 var (
@@ -1540,7 +1773,7 @@ func file_api_v1_service_proto_rawDescGZIP() []byte {
 	return file_api_v1_service_proto_rawDescData
 }
 
-var file_api_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_api_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_api_v1_service_proto_goTypes = []any{
 	(*StartWorkflowRequest)(nil),            // 0: dandori.api.v1.StartWorkflowRequest
 	(*StartWorkflowResponse)(nil),           // 1: dandori.api.v1.StartWorkflowResponse
@@ -1570,55 +1803,65 @@ var file_api_v1_service_proto_goTypes = []any{
 	(*ListWorkflowsResponse)(nil),           // 25: dandori.api.v1.ListWorkflowsResponse
 	(*RecordActivityHeartbeatRequest)(nil),  // 26: dandori.api.v1.RecordActivityHeartbeatRequest
 	(*RecordActivityHeartbeatResponse)(nil), // 27: dandori.api.v1.RecordActivityHeartbeatResponse
-	nil,                                     // 28: dandori.api.v1.CompleteWorkflowTaskRequest.MetadataEntry
-	(*WorkflowExecution)(nil),               // 29: dandori.api.v1.WorkflowExecution
-	(*HistoryEvent)(nil),                    // 30: dandori.api.v1.HistoryEvent
-	(*Command)(nil),                         // 31: dandori.api.v1.Command
-	(*timestamppb.Timestamp)(nil),           // 32: google.protobuf.Timestamp
-	(*ActivityFailure)(nil),                 // 33: dandori.api.v1.ActivityFailure
+	(*QueryWorkflowRequest)(nil),            // 28: dandori.api.v1.QueryWorkflowRequest
+	(*QueryWorkflowResponse)(nil),           // 29: dandori.api.v1.QueryWorkflowResponse
+	(*RespondQueryTaskRequest)(nil),         // 30: dandori.api.v1.RespondQueryTaskRequest
+	(*RespondQueryTaskResponse)(nil),        // 31: dandori.api.v1.RespondQueryTaskResponse
+	nil,                                     // 32: dandori.api.v1.CompleteWorkflowTaskRequest.MetadataEntry
+	(*WorkflowExecution)(nil),               // 33: dandori.api.v1.WorkflowExecution
+	(*HistoryEvent)(nil),                    // 34: dandori.api.v1.HistoryEvent
+	(*PendingQuery)(nil),                    // 35: dandori.api.v1.PendingQuery
+	(*Command)(nil),                         // 36: dandori.api.v1.Command
+	(*timestamppb.Timestamp)(nil),           // 37: google.protobuf.Timestamp
+	(*ActivityFailure)(nil),                 // 38: dandori.api.v1.ActivityFailure
 }
 var file_api_v1_service_proto_depIdxs = []int32{
-	29, // 0: dandori.api.v1.DescribeWorkflowResponse.workflow_execution:type_name -> dandori.api.v1.WorkflowExecution
-	30, // 1: dandori.api.v1.GetWorkflowHistoryResponse.events:type_name -> dandori.api.v1.HistoryEvent
-	30, // 2: dandori.api.v1.PollWorkflowTaskResponse.events:type_name -> dandori.api.v1.HistoryEvent
-	31, // 3: dandori.api.v1.CompleteWorkflowTaskRequest.commands:type_name -> dandori.api.v1.Command
-	28, // 4: dandori.api.v1.CompleteWorkflowTaskRequest.metadata:type_name -> dandori.api.v1.CompleteWorkflowTaskRequest.MetadataEntry
-	32, // 5: dandori.api.v1.PollActivityTaskResponse.scheduled_at:type_name -> google.protobuf.Timestamp
-	33, // 6: dandori.api.v1.FailActivityTaskRequest.failure:type_name -> dandori.api.v1.ActivityFailure
-	29, // 7: dandori.api.v1.ListWorkflowsResponse.workflows:type_name -> dandori.api.v1.WorkflowExecution
-	0,  // 8: dandori.api.v1.DandoriService.StartWorkflow:input_type -> dandori.api.v1.StartWorkflowRequest
-	2,  // 9: dandori.api.v1.DandoriService.DescribeWorkflow:input_type -> dandori.api.v1.DescribeWorkflowRequest
-	4,  // 10: dandori.api.v1.DandoriService.GetWorkflowHistory:input_type -> dandori.api.v1.GetWorkflowHistoryRequest
-	6,  // 11: dandori.api.v1.DandoriService.TerminateWorkflow:input_type -> dandori.api.v1.TerminateWorkflowRequest
-	8,  // 12: dandori.api.v1.DandoriService.SignalWorkflow:input_type -> dandori.api.v1.SignalWorkflowRequest
-	22, // 13: dandori.api.v1.DandoriService.CancelWorkflow:input_type -> dandori.api.v1.CancelWorkflowRequest
-	24, // 14: dandori.api.v1.DandoriService.ListWorkflows:input_type -> dandori.api.v1.ListWorkflowsRequest
-	10, // 15: dandori.api.v1.DandoriService.PollWorkflowTask:input_type -> dandori.api.v1.PollWorkflowTaskRequest
-	12, // 16: dandori.api.v1.DandoriService.CompleteWorkflowTask:input_type -> dandori.api.v1.CompleteWorkflowTaskRequest
-	14, // 17: dandori.api.v1.DandoriService.FailWorkflowTask:input_type -> dandori.api.v1.FailWorkflowTaskRequest
-	16, // 18: dandori.api.v1.DandoriService.PollActivityTask:input_type -> dandori.api.v1.PollActivityTaskRequest
-	18, // 19: dandori.api.v1.DandoriService.CompleteActivityTask:input_type -> dandori.api.v1.CompleteActivityTaskRequest
-	20, // 20: dandori.api.v1.DandoriService.FailActivityTask:input_type -> dandori.api.v1.FailActivityTaskRequest
-	26, // 21: dandori.api.v1.DandoriService.RecordActivityHeartbeat:input_type -> dandori.api.v1.RecordActivityHeartbeatRequest
-	1,  // 22: dandori.api.v1.DandoriService.StartWorkflow:output_type -> dandori.api.v1.StartWorkflowResponse
-	3,  // 23: dandori.api.v1.DandoriService.DescribeWorkflow:output_type -> dandori.api.v1.DescribeWorkflowResponse
-	5,  // 24: dandori.api.v1.DandoriService.GetWorkflowHistory:output_type -> dandori.api.v1.GetWorkflowHistoryResponse
-	7,  // 25: dandori.api.v1.DandoriService.TerminateWorkflow:output_type -> dandori.api.v1.TerminateWorkflowResponse
-	9,  // 26: dandori.api.v1.DandoriService.SignalWorkflow:output_type -> dandori.api.v1.SignalWorkflowResponse
-	23, // 27: dandori.api.v1.DandoriService.CancelWorkflow:output_type -> dandori.api.v1.CancelWorkflowResponse
-	25, // 28: dandori.api.v1.DandoriService.ListWorkflows:output_type -> dandori.api.v1.ListWorkflowsResponse
-	11, // 29: dandori.api.v1.DandoriService.PollWorkflowTask:output_type -> dandori.api.v1.PollWorkflowTaskResponse
-	13, // 30: dandori.api.v1.DandoriService.CompleteWorkflowTask:output_type -> dandori.api.v1.CompleteWorkflowTaskResponse
-	15, // 31: dandori.api.v1.DandoriService.FailWorkflowTask:output_type -> dandori.api.v1.FailWorkflowTaskResponse
-	17, // 32: dandori.api.v1.DandoriService.PollActivityTask:output_type -> dandori.api.v1.PollActivityTaskResponse
-	19, // 33: dandori.api.v1.DandoriService.CompleteActivityTask:output_type -> dandori.api.v1.CompleteActivityTaskResponse
-	21, // 34: dandori.api.v1.DandoriService.FailActivityTask:output_type -> dandori.api.v1.FailActivityTaskResponse
-	27, // 35: dandori.api.v1.DandoriService.RecordActivityHeartbeat:output_type -> dandori.api.v1.RecordActivityHeartbeatResponse
-	22, // [22:36] is the sub-list for method output_type
-	8,  // [8:22] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	33, // 0: dandori.api.v1.DescribeWorkflowResponse.workflow_execution:type_name -> dandori.api.v1.WorkflowExecution
+	34, // 1: dandori.api.v1.GetWorkflowHistoryResponse.events:type_name -> dandori.api.v1.HistoryEvent
+	34, // 2: dandori.api.v1.PollWorkflowTaskResponse.events:type_name -> dandori.api.v1.HistoryEvent
+	35, // 3: dandori.api.v1.PollWorkflowTaskResponse.pending_queries:type_name -> dandori.api.v1.PendingQuery
+	36, // 4: dandori.api.v1.CompleteWorkflowTaskRequest.commands:type_name -> dandori.api.v1.Command
+	32, // 5: dandori.api.v1.CompleteWorkflowTaskRequest.metadata:type_name -> dandori.api.v1.CompleteWorkflowTaskRequest.MetadataEntry
+	37, // 6: dandori.api.v1.PollActivityTaskResponse.scheduled_at:type_name -> google.protobuf.Timestamp
+	38, // 7: dandori.api.v1.FailActivityTaskRequest.failure:type_name -> dandori.api.v1.ActivityFailure
+	33, // 8: dandori.api.v1.ListWorkflowsResponse.workflows:type_name -> dandori.api.v1.WorkflowExecution
+	0,  // 9: dandori.api.v1.DandoriService.StartWorkflow:input_type -> dandori.api.v1.StartWorkflowRequest
+	2,  // 10: dandori.api.v1.DandoriService.DescribeWorkflow:input_type -> dandori.api.v1.DescribeWorkflowRequest
+	4,  // 11: dandori.api.v1.DandoriService.GetWorkflowHistory:input_type -> dandori.api.v1.GetWorkflowHistoryRequest
+	6,  // 12: dandori.api.v1.DandoriService.TerminateWorkflow:input_type -> dandori.api.v1.TerminateWorkflowRequest
+	8,  // 13: dandori.api.v1.DandoriService.SignalWorkflow:input_type -> dandori.api.v1.SignalWorkflowRequest
+	22, // 14: dandori.api.v1.DandoriService.CancelWorkflow:input_type -> dandori.api.v1.CancelWorkflowRequest
+	24, // 15: dandori.api.v1.DandoriService.ListWorkflows:input_type -> dandori.api.v1.ListWorkflowsRequest
+	28, // 16: dandori.api.v1.DandoriService.QueryWorkflow:input_type -> dandori.api.v1.QueryWorkflowRequest
+	10, // 17: dandori.api.v1.DandoriService.PollWorkflowTask:input_type -> dandori.api.v1.PollWorkflowTaskRequest
+	12, // 18: dandori.api.v1.DandoriService.CompleteWorkflowTask:input_type -> dandori.api.v1.CompleteWorkflowTaskRequest
+	14, // 19: dandori.api.v1.DandoriService.FailWorkflowTask:input_type -> dandori.api.v1.FailWorkflowTaskRequest
+	16, // 20: dandori.api.v1.DandoriService.PollActivityTask:input_type -> dandori.api.v1.PollActivityTaskRequest
+	18, // 21: dandori.api.v1.DandoriService.CompleteActivityTask:input_type -> dandori.api.v1.CompleteActivityTaskRequest
+	20, // 22: dandori.api.v1.DandoriService.FailActivityTask:input_type -> dandori.api.v1.FailActivityTaskRequest
+	30, // 23: dandori.api.v1.DandoriService.RespondQueryTask:input_type -> dandori.api.v1.RespondQueryTaskRequest
+	26, // 24: dandori.api.v1.DandoriService.RecordActivityHeartbeat:input_type -> dandori.api.v1.RecordActivityHeartbeatRequest
+	1,  // 25: dandori.api.v1.DandoriService.StartWorkflow:output_type -> dandori.api.v1.StartWorkflowResponse
+	3,  // 26: dandori.api.v1.DandoriService.DescribeWorkflow:output_type -> dandori.api.v1.DescribeWorkflowResponse
+	5,  // 27: dandori.api.v1.DandoriService.GetWorkflowHistory:output_type -> dandori.api.v1.GetWorkflowHistoryResponse
+	7,  // 28: dandori.api.v1.DandoriService.TerminateWorkflow:output_type -> dandori.api.v1.TerminateWorkflowResponse
+	9,  // 29: dandori.api.v1.DandoriService.SignalWorkflow:output_type -> dandori.api.v1.SignalWorkflowResponse
+	23, // 30: dandori.api.v1.DandoriService.CancelWorkflow:output_type -> dandori.api.v1.CancelWorkflowResponse
+	25, // 31: dandori.api.v1.DandoriService.ListWorkflows:output_type -> dandori.api.v1.ListWorkflowsResponse
+	29, // 32: dandori.api.v1.DandoriService.QueryWorkflow:output_type -> dandori.api.v1.QueryWorkflowResponse
+	11, // 33: dandori.api.v1.DandoriService.PollWorkflowTask:output_type -> dandori.api.v1.PollWorkflowTaskResponse
+	13, // 34: dandori.api.v1.DandoriService.CompleteWorkflowTask:output_type -> dandori.api.v1.CompleteWorkflowTaskResponse
+	15, // 35: dandori.api.v1.DandoriService.FailWorkflowTask:output_type -> dandori.api.v1.FailWorkflowTaskResponse
+	17, // 36: dandori.api.v1.DandoriService.PollActivityTask:output_type -> dandori.api.v1.PollActivityTaskResponse
+	19, // 37: dandori.api.v1.DandoriService.CompleteActivityTask:output_type -> dandori.api.v1.CompleteActivityTaskResponse
+	21, // 38: dandori.api.v1.DandoriService.FailActivityTask:output_type -> dandori.api.v1.FailActivityTaskResponse
+	31, // 39: dandori.api.v1.DandoriService.RespondQueryTask:output_type -> dandori.api.v1.RespondQueryTaskResponse
+	27, // 40: dandori.api.v1.DandoriService.RecordActivityHeartbeat:output_type -> dandori.api.v1.RecordActivityHeartbeatResponse
+	25, // [25:41] is the sub-list for method output_type
+	9,  // [9:25] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_service_proto_init() }
@@ -1633,7 +1876,7 @@ func file_api_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_service_proto_rawDesc), len(file_api_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -71,6 +71,7 @@ func newTestHandler(t *testing.T) *adaptgrpc.Handler {
 		store.WorkflowTasks(),
 		store.ActivityTasks(),
 		store.Timers(),
+		store.Queries(),
 		store,
 	)
 	return adaptgrpc.NewHandler(eng, eng, eng)
@@ -78,7 +79,7 @@ func newTestHandler(t *testing.T) *adaptgrpc.Handler {
 
 func truncateAll(t *testing.T) {
 	t.Helper()
-	tables := []string{"timers", "activity_tasks", "workflow_tasks", "workflow_events", "workflow_executions"}
+	tables := []string{"workflow_queries", "timers", "activity_tasks", "workflow_tasks", "workflow_events", "workflow_executions"}
 	for _, table := range tables {
 		if _, err := testDB.ExecContext(context.Background(), fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table)); err != nil {
 			t.Fatalf("failed to truncate %s: %v", table, err)

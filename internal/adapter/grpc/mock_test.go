@@ -19,6 +19,7 @@ type mockClientService struct {
 	SignalWorkflowFn    func(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
 	CancelWorkflowFn   func(ctx context.Context, id uuid.UUID) error
 	ListWorkflowsFn    func(ctx context.Context, params port.ListWorkflowsParams) (*port.ListWorkflowsResult, error)
+	QueryWorkflowFn    func(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error)
 }
 
 func (m *mockClientService) StartWorkflow(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error) {
@@ -70,12 +71,20 @@ func (m *mockClientService) ListWorkflows(ctx context.Context, params port.ListW
 	return &port.ListWorkflowsResult{}, nil
 }
 
+func (m *mockClientService) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
+	if m.QueryWorkflowFn != nil {
+		return m.QueryWorkflowFn(ctx, id, queryType, input)
+	}
+	return nil, nil
+}
+
 // --- mockWorkflowTaskService ---
 
 type mockWorkflowTaskService struct {
 	PollWorkflowTaskFn     func(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error)
 	CompleteWorkflowTaskFn func(ctx context.Context, taskID int64, commands []domain.Command) error
 	FailWorkflowTaskFn     func(ctx context.Context, taskID int64, cause string, message string) error
+	RespondQueryTaskFn     func(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error
 }
 
 func (m *mockWorkflowTaskService) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
@@ -95,6 +104,13 @@ func (m *mockWorkflowTaskService) CompleteWorkflowTask(ctx context.Context, task
 func (m *mockWorkflowTaskService) FailWorkflowTask(ctx context.Context, taskID int64, cause string, message string) error {
 	if m.FailWorkflowTaskFn != nil {
 		return m.FailWorkflowTaskFn(ctx, taskID, cause, message)
+	}
+	return nil
+}
+
+func (m *mockWorkflowTaskService) RespondQueryTask(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error {
+	if m.RespondQueryTaskFn != nil {
+		return m.RespondQueryTaskFn(ctx, queryID, result, errMsg)
 	}
 	return nil
 }

@@ -279,12 +279,56 @@ func (m *mockTimerRepo) DeleteByWorkflowID(ctx context.Context, workflowID uuid.
 	return nil
 }
 
+type mockQueryRepo struct {
+	CreateFn                func(ctx context.Context, query domain.WorkflowQuery) (int64, error)
+	GetByIDFn              func(ctx context.Context, queryID int64) (*domain.WorkflowQuery, error)
+	GetPendingByWorkflowIDFn func(ctx context.Context, workflowID uuid.UUID) ([]domain.WorkflowQuery, error)
+	SetResultFn            func(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error
+	DeleteByWorkflowIDFn   func(ctx context.Context, workflowID uuid.UUID) error
+}
+
+func (m *mockQueryRepo) Create(ctx context.Context, query domain.WorkflowQuery) (int64, error) {
+	if m.CreateFn != nil {
+		return m.CreateFn(ctx, query)
+	}
+	return 0, nil
+}
+
+func (m *mockQueryRepo) GetByID(ctx context.Context, queryID int64) (*domain.WorkflowQuery, error) {
+	if m.GetByIDFn != nil {
+		return m.GetByIDFn(ctx, queryID)
+	}
+	return nil, domain.ErrQueryNotFound
+}
+
+func (m *mockQueryRepo) GetPendingByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]domain.WorkflowQuery, error) {
+	if m.GetPendingByWorkflowIDFn != nil {
+		return m.GetPendingByWorkflowIDFn(ctx, workflowID)
+	}
+	return nil, nil
+}
+
+func (m *mockQueryRepo) SetResult(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error {
+	if m.SetResultFn != nil {
+		return m.SetResultFn(ctx, queryID, result, errMsg)
+	}
+	return nil
+}
+
+func (m *mockQueryRepo) DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error {
+	if m.DeleteByWorkflowIDFn != nil {
+		return m.DeleteByWorkflowIDFn(ctx, workflowID)
+	}
+	return nil
+}
+
 func newTestEngine(
 	wf *mockWorkflowRepo,
 	ev *mockEventRepo,
 	wt *mockWorkflowTaskRepo,
 	at *mockActivityTaskRepo,
 	tm *mockTimerRepo,
+	qr *mockQueryRepo,
 ) *Engine {
-	return New(wf, ev, wt, at, tm, &mockTxManager{})
+	return New(wf, ev, wt, at, tm, qr, &mockTxManager{})
 }

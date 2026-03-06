@@ -61,3 +61,4 @@ func (s *Store) Events() port.EventRepository           { return &EventStore{sto
 func (s *Store) WorkflowTasks() port.WorkflowTaskRepository { return &WorkflowTaskStore{store: s} }
 func (s *Store) ActivityTasks() port.ActivityTaskRepository  { return &ActivityTaskStore{store: s} }
 func (s *Store) Timers() port.TimerRepository            { return &TimerStore{store: s} }
+func (s *Store) Queries() port.QueryRepository           { return &QueryStore{store: s} }

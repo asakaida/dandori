@@ -601,7 +601,7 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 14 - SideEffect + Query
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: SideEffect（非決定的な値の記録）とQuery（ワークフロー状態の問い合わせ）を実装する
 
@@ -610,33 +610,41 @@ Sprint 12の位置づけの根拠:
 - SideEffect: `RecordSideEffect` コマンド → `SideEffectRecorded` イベント記録のみ（WorkflowTask生成なし）。リプレイ時にイベントから値を復元
 - Query: 非同期方式。`workflow_queries` テーブルにクエリを投入 → WorkflowTask投入 → ワーカーがクエリ結果をRespondQueryTaskで返す
 - QueryはRUNNINGワークフローのみ対象
+- マイグレーション番号は000005（最新が000004のため）
+- proto CommandTypeの`RECORD_SIDE_EFFECT`は欠番の6を使用
+- QueryWorkflowのポーリング待ちはEngine層で100msインターバル、タイムアウト10秒（テスト時に短縮可能）
 
 タスク:
 
-- [ ] internal/adapter/postgres/migration/000006_query.up.sql — `workflow_queries` テーブル作成（id, workflow_id, query_type, query_input, result, status, created_at, answered_at）
-- [ ] internal/adapter/postgres/migration/000006_query.down.sql
-- [ ] internal/domain/event.go — 新EventType追加: `SideEffectRecorded`
-- [ ] internal/domain/command.go — 新CommandType追加: `RecordSideEffect`。`RecordSideEffectAttributes`（result）定義
-- [ ] internal/domain/query.go（新規）— `WorkflowQuery` 型（ID, WorkflowID, QueryType, Input, Result, Status, CreatedAt, AnsweredAt）、QueryStatus（PENDING, ANSWERED）
-- [ ] internal/port/service.go — `ClientService` に `QueryWorkflow(ctx, workflowID, queryType, input) (QueryResult, error)` 追加。`WorkflowTaskService` に `RespondQueryTask(ctx, queryID, result) error` 追加
-- [ ] internal/port/repository.go — `QueryRepository` インターフェース追加: `Create`, `GetPendingByWorkflowID`, `SetResult`
-- [ ] internal/adapter/postgres/query.go（新規）— `QueryRepository` 実装
-- [ ] internal/engine/command_processor.go — `processRecordSideEffect`: SideEffectRecordedイベント記録のみ
-- [ ] internal/engine/engine.go — `QueryWorkflow` 実装: RUNNING確認 → クエリ作成 → WorkflowTask投入 → ポーリングで結果待ち。`RespondQueryTask` 実装: クエリ結果設定
-- [ ] api/v1/service.proto — `QueryWorkflow` RPC、`RespondQueryTask` RPC追加
-- [ ] api/v1/types.proto — `CommandType` に `RECORD_SIDE_EFFECT = 8` 追加。`EventType` に `SIDE_EFFECT_RECORDED` 追加。対応属性メッセージ追加
-- [ ] internal/adapter/grpc/handler.go — QueryWorkflow, RespondQueryTask ハンドラ実装。SideEffect関連マッピング追加
-- [ ] internal/adapter/postgres/query_test.go — QueryRepository テスト
-- [ ] internal/engine/engine_test.go — SideEffect/Query ユニットテスト
-- [ ] test/e2e/ — SideEffect記録・リプレイ検証、Query送信→応答のE2Eテスト
+- [x] internal/adapter/postgres/migration/000005_query.up.sql — `workflow_queries` テーブル作成（id, workflow_id, query_type, input, result, error_message, status, created_at, answered_at）+ 部分インデックス
+- [x] internal/adapter/postgres/migration/000005_query.down.sql
+- [x] internal/domain/event.go — 新EventType追加: `SideEffectRecorded`
+- [x] internal/domain/command.go — 新CommandType追加: `RecordSideEffect`。`RecordSideEffectAttributes`（SeqID, Value）定義
+- [x] internal/domain/errors.go — `ErrQueryNotFound`, `ErrQueryTimedOut` 追加
+- [x] internal/domain/query.go（新規）— `WorkflowQuery` 型（ID, WorkflowID, QueryType, Input, Result, ErrorMessage, Status, CreatedAt, AnsweredAt）、QueryStatus（PENDING, ANSWERED）
+- [x] internal/port/service.go — `ClientService` に `QueryWorkflow` 追加。`WorkflowTaskService` に `RespondQueryTask` 追加。`WorkflowTaskResult` に `PendingQueries` フィールド追加
+- [x] internal/port/repository.go — `QueryRepository` インターフェース追加: `Create`, `GetByID`, `GetPendingByWorkflowID`, `SetResult`, `DeleteByWorkflowID`
+- [x] internal/adapter/postgres/query.go（新規）— `QueryRepository` 実装（QueryStore構造体、store.conn(ctx)パターン）
+- [x] internal/adapter/postgres/store.go — `Queries()` ファクトリメソッド追加
+- [x] internal/engine/command_processor.go — `processRecordSideEffect`: SideEffectRecordedイベント記録のみ（WorkflowTask未生成）
+- [x] internal/engine/engine.go — `QueryWorkflow` 実装: RUNNING確認 → クエリ作成 → WorkflowTask投入 → ポーリングで結果待ち。`RespondQueryTask` 実装: クエリ結果設定。`PollWorkflowTask` にpending queries含む
+- [x] api/v1/service.proto — `QueryWorkflow` RPC、`RespondQueryTask` RPC追加。`PollWorkflowTaskResponse` に `pending_queries` 追加
+- [x] api/v1/types.proto — `CommandType` に `RECORD_SIDE_EFFECT = 6` 追加。`RecordSideEffectAttributes`, `PendingQuery` メッセージ追加
+- [x] internal/adapter/grpc/handler.go — QueryWorkflow, RespondQueryTask ハンドラ実装。SideEffect関連マッピング追加。エラーマッピングにErrQueryNotFound, ErrQueryTimedOut追加
+- [x] cmd/dandori/main.go — engine.New に store.Queries() 追加
+- [x] internal/adapter/postgres/query_test.go — QueryRepository テスト（5テスト）
+- [x] internal/engine/engine_test.go — SideEffect/Query ユニットテスト（6テスト追加）
+- [x] internal/adapter/grpc/handler_test.go — QueryWorkflow/RespondQueryTask テスト（2テスト追加）
+- [x] test/e2e/sideeffect_test.go — SideEffect記録のE2Eテスト
+- [x] test/e2e/query_test.go — Query送信→応答、非RUNNINGエラー、エラー応答のE2Eテスト（3テスト）
 
 完了条件:
 
-- [ ] RecordSideEffectコマンド → SideEffectRecordedイベント記録（WorkflowTask未生成）
-- [ ] QueryWorkflow → クエリ投入 + WorkflowTask → ワーカー応答 → 結果取得
-- [ ] 非RUNNINGワークフローへのQuery → FAILED_PRECONDITION
-- [ ] `go test -v -race ./...` — 全テスト通過
-- [ ] `go vet ./...` — クリーン
+- [x] RecordSideEffectコマンド → SideEffectRecordedイベント記録（WorkflowTask未生成）
+- [x] QueryWorkflow → クエリ投入 + WorkflowTask → ワーカー応答 → 結果取得
+- [x] 非RUNNINGワークフローへのQuery → FAILED_PRECONDITION
+- [x] `go test -v -race ./...` — 全テスト通過
+- [x] `go vet ./...` — クリーン
 
 ### Sprint 15 - Cron / Schedule + Continue-as-New
 

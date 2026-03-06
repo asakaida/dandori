@@ -14,6 +14,7 @@ const (
 	CommandStartTimer           CommandType = "StartTimer"
 	CommandCancelTimer          CommandType = "CancelTimer"
 	CommandStartChildWorkflow   CommandType = "StartChildWorkflow"
+	CommandRecordSideEffect    CommandType = "RecordSideEffect"
 )
 
 type Command struct {
@@ -57,4 +58,9 @@ type StartChildWorkflowAttributes struct {
 	WorkflowType string          `json:"workflow_type"`
 	TaskQueue    string          `json:"task_queue,omitempty"`
 	Input        json.RawMessage `json:"input"`
+}
+
+type RecordSideEffectAttributes struct {
+	SeqID int64           `json:"seq_id"`
+	Value json.RawMessage `json:"value"`
 }

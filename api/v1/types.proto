@@ -22,6 +22,7 @@ enum CommandType {
   COMMAND_TYPE_FAIL_WORKFLOW = 3;
   COMMAND_TYPE_START_TIMER = 4;
   COMMAND_TYPE_CANCEL_TIMER = 5;
+  COMMAND_TYPE_RECORD_SIDE_EFFECT = 6;
   COMMAND_TYPE_START_CHILD_WORKFLOW = 7;
 }
 
@@ -102,6 +103,17 @@ message StartChildWorkflowAttributes {
   string workflow_type = 3;
   string task_queue = 4;
   bytes input = 5;
+}
+
+message RecordSideEffectAttributes {
+  int64 seq_id = 1;
+  bytes value = 2;
+}
+
+message PendingQuery {
+  int64 query_id = 1;
+  string query_type = 2;
+  bytes input = 3;
 }
 
 message WorkflowSignaledAttributes {

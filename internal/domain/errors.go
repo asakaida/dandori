@@ -9,4 +9,6 @@ var (
 	ErrTaskNotFound          = errors.New("task not found")
 	ErrTaskAlreadyCompleted  = errors.New("task already completed")
 	ErrNoTaskAvailable       = errors.New("no task available")
+	ErrQueryNotFound         = errors.New("query not found")
+	ErrQueryTimedOut         = errors.New("query timed out")
 )

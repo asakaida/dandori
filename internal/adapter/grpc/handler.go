@@ -149,6 +149,22 @@ func (h *Handler) CancelWorkflow(ctx context.Context, req *apiv1.CancelWorkflowR
 	return &apiv1.CancelWorkflowResponse{}, nil
 }
 
+func (h *Handler) QueryWorkflow(ctx context.Context, req *apiv1.QueryWorkflowRequest) (*apiv1.QueryWorkflowResponse, error) {
+	id, err := uuid.Parse(req.GetWorkflowId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
+	}
+
+	q, err := h.client.QueryWorkflow(ctx, id, req.GetQueryType(), json.RawMessage(req.GetInput()))
+	if err != nil {
+		return nil, domainErrorToGRPC(err)
+	}
+	return &apiv1.QueryWorkflowResponse{
+		Result:       q.Result,
+		ErrorMessage: q.ErrorMessage,
+	}, nil
+}
+
 // --- Workflow Task API ---
 
 func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowTaskRequest) (*apiv1.PollWorkflowTaskResponse, error) {
@@ -159,11 +175,20 @@ func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowT
 	if result == nil {
 		return &apiv1.PollWorkflowTaskResponse{}, nil
 	}
+	var pendingQueries []*apiv1.PendingQuery
+	for _, q := range result.PendingQueries {
+		pendingQueries = append(pendingQueries, &apiv1.PendingQuery{
+			QueryId:   q.ID,
+			QueryType: q.QueryType,
+			Input:     q.Input,
+		})
+	}
 	return &apiv1.PollWorkflowTaskResponse{
-		TaskId:       result.Task.ID,
-		WorkflowId:   result.Task.WorkflowID.String(),
-		WorkflowType: result.WorkflowType,
-		Events:       domainEventsToProto(result.Events),
+		TaskId:         result.Task.ID,
+		WorkflowId:     result.Task.WorkflowID.String(),
+		WorkflowType:   result.WorkflowType,
+		Events:         domainEventsToProto(result.Events),
+		PendingQueries: pendingQueries,
 	}, nil
 }
 
@@ -188,6 +213,13 @@ func (h *Handler) FailWorkflowTask(ctx context.Context, req *apiv1.FailWorkflowT
 		return nil, domainErrorToGRPC(err)
 	}
 	return &apiv1.FailWorkflowTaskResponse{}, nil
+}
+
+func (h *Handler) RespondQueryTask(ctx context.Context, req *apiv1.RespondQueryTaskRequest) (*apiv1.RespondQueryTaskResponse, error) {
+	if err := h.wfTask.RespondQueryTask(ctx, req.GetQueryId(), json.RawMessage(req.GetResult()), req.GetErrorMessage()); err != nil {
+		return nil, domainErrorToGRPC(err)
+	}
+	return &apiv1.RespondQueryTaskResponse{}, nil
 }
 
 // --- Activity Task API ---
@@ -253,6 +285,10 @@ func domainErrorToGRPC(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, domain.ErrTaskAlreadyCompleted):
 		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, domain.ErrQueryNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, domain.ErrQueryTimedOut):
+		return status.Error(codes.DeadlineExceeded, err.Error())
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -355,6 +391,8 @@ func commandTypeFromProto(ct apiv1.CommandType) (domain.CommandType, error) {
 		return domain.CommandStartTimer, nil
 	case apiv1.CommandType_COMMAND_TYPE_CANCEL_TIMER:
 		return domain.CommandCancelTimer, nil
+	case apiv1.CommandType_COMMAND_TYPE_RECORD_SIDE_EFFECT:
+		return domain.CommandRecordSideEffect, nil
 	case apiv1.CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW:
 		return domain.CommandStartChildWorkflow, nil
 	default:

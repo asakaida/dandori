@@ -17,12 +17,14 @@ type ClientService interface {
 	SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
 	CancelWorkflow(ctx context.Context, id uuid.UUID) error
 	ListWorkflows(ctx context.Context, params ListWorkflowsParams) (*ListWorkflowsResult, error)
+	QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error)
 }
 
 type WorkflowTaskService interface {
 	PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*WorkflowTaskResult, error)
 	CompleteWorkflowTask(ctx context.Context, taskID int64, commands []domain.Command) error
 	FailWorkflowTask(ctx context.Context, taskID int64, cause string, message string) error
+	RespondQueryTask(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error
 }
 
 type ActivityTaskService interface {
@@ -40,9 +42,10 @@ type StartWorkflowParams struct {
 }
 
 type WorkflowTaskResult struct {
-	Task         domain.WorkflowTask
-	Events       []domain.HistoryEvent
-	WorkflowType string
+	Task           domain.WorkflowTask
+	Events         []domain.HistoryEvent
+	WorkflowType   string
+	PendingQueries []domain.WorkflowQuery
 }
 
 type ListWorkflowsParams struct {

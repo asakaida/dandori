@@ -55,6 +55,14 @@ type TimerRepository interface {
 	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 }
 
+type QueryRepository interface {
+	Create(ctx context.Context, query domain.WorkflowQuery) (int64, error)
+	GetByID(ctx context.Context, queryID int64) (*domain.WorkflowQuery, error)
+	GetPendingByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]domain.WorkflowQuery, error)
+	SetResult(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error
+	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
+}
+
 type TxManager interface {
 	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

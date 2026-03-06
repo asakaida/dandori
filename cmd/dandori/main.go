@@ -56,6 +56,7 @@ func main() {
 		store.WorkflowTasks(),
 		store.ActivityTasks(),
 		store.Timers(),
+		store.Queries(),
 		store,
 	)
 	bgWorker := engine.NewBackgroundWorker(

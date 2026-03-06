@@ -25,6 +25,7 @@ func TestProcessCommands_ScheduleActivity_FallbackTaskQueue(t *testing.T) {
 			},
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	wfID := uuid.New()
@@ -59,6 +60,7 @@ func TestProcessCommands_ScheduleActivity_ExplicitTaskQueue(t *testing.T) {
 			},
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	wfID := uuid.New()
@@ -90,6 +92,7 @@ func TestProcessCommands_ScheduleActivity_RetryPolicyPropagation(t *testing.T) {
 			},
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	wfID := uuid.New()
@@ -134,6 +137,7 @@ func TestProcessCommands_CompleteWorkflow(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{
@@ -170,6 +174,7 @@ func TestProcessCommands_FailWorkflow(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.FailWorkflowAttributes{
@@ -192,6 +197,7 @@ func TestProcessCommands_UnknownCommand(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	commands := []domain.Command{

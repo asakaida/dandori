@@ -17,7 +17,9 @@ type Engine struct {
 	workflowTasks port.WorkflowTaskRepository
 	activityTasks port.ActivityTaskRepository
 	timers        port.TimerRepository
+	queries       port.QueryRepository
 	tx            port.TxManager
+	queryTimeout  time.Duration
 }
 
 var _ port.ClientService = (*Engine)(nil)
@@ -30,6 +32,7 @@ func New(
 	workflowTasks port.WorkflowTaskRepository,
 	activityTasks port.ActivityTaskRepository,
 	timers port.TimerRepository,
+	queries port.QueryRepository,
 	tx port.TxManager,
 ) *Engine {
 	return &Engine{
@@ -38,7 +41,9 @@ func New(
 		workflowTasks: workflowTasks,
 		activityTasks: activityTasks,
 		timers:        timers,
+		queries:       queries,
 		tx:            tx,
+		queryTimeout:  10 * time.Second,
 	}
 }
 
@@ -71,6 +76,9 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 				return err
 			}
 			if err := e.timers.DeleteByWorkflowID(ctx, params.ID); err != nil {
+				return err
+			}
+			if err := e.queries.DeleteByWorkflowID(ctx, params.ID); err != nil {
 				return err
 			}
 		}
@@ -252,10 +260,16 @@ func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerI
 		return nil, err
 	}
 
+	pendingQueries, err := e.queries.GetPendingByWorkflowID(ctx, task.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &port.WorkflowTaskResult{
-		Task:         *task,
-		Events:       events,
-		WorkflowType: wf.WorkflowType,
+		Task:           *task,
+		Events:         events,
+		WorkflowType:   wf.WorkflowType,
+		PendingQueries: pendingQueries,
 	}, nil
 }
 
@@ -314,6 +328,63 @@ func (e *Engine) FailWorkflowTask(ctx context.Context, taskID int64, cause strin
 			"error_message":     message,
 		})
 	})
+}
+
+func (e *Engine) RespondQueryTask(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error {
+	return e.queries.SetResult(ctx, queryID, result, errMsg)
+}
+
+func (e *Engine) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
+	var queryID int64
+	err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
+		wf, err := e.workflows.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if wf.Status != domain.WorkflowStatusRunning {
+			return domain.ErrWorkflowNotRunning
+		}
+
+		queryID, err = e.queries.Create(ctx, domain.WorkflowQuery{
+			WorkflowID: id,
+			QueryType:  queryType,
+			Input:      input,
+			Status:     domain.QueryStatusPending,
+		})
+		if err != nil {
+			return err
+		}
+
+		return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			QueueName:   wf.TaskQueue,
+			WorkflowID:  id,
+			ScheduledAt: time.Now(),
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	deadline := time.After(e.queryTimeout)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline:
+			return nil, domain.ErrQueryTimedOut
+		case <-ticker.C:
+			q, err := e.queries.GetByID(ctx, queryID)
+			if err != nil {
+				return nil, err
+			}
+			if q.Status == domain.QueryStatusAnswered {
+				return q, nil
+			}
+		}
+	}
 }
 
 // --- ActivityTaskService ---

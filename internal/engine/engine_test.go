@@ -33,6 +33,7 @@ func TestStartWorkflow_NewWorkflow(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	wfID := uuid.New()
@@ -62,6 +63,7 @@ func TestStartWorkflow_AutoGenerateID(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	wf, err := e.StartWorkflow(context.Background(), port.StartWorkflowParams{
@@ -84,6 +86,7 @@ func TestStartWorkflow_AlreadyRunning(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	_, err := e.StartWorkflow(context.Background(), port.StartWorkflowParams{
@@ -117,6 +120,7 @@ func TestStartWorkflow_RecreateTerminal(t *testing.T) {
 		&mockTimerRepo{
 			DeleteByWorkflowIDFn: func(_ context.Context, _ uuid.UUID) error { deletedTimers = true; return nil },
 		},
+		&mockQueryRepo{},
 	)
 
 	wf, err := e.StartWorkflow(context.Background(), port.StartWorkflowParams{
@@ -145,6 +149,7 @@ func TestDescribeWorkflow(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	wf, err := e.DescribeWorkflow(context.Background(), wfID)
@@ -159,6 +164,7 @@ func TestDescribeWorkflow_NotFound(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	_, err := e.DescribeWorkflow(context.Background(), uuid.New())
@@ -178,6 +184,7 @@ func TestGetWorkflowHistory(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	events, err := e.GetWorkflowHistory(context.Background(), wfID)
@@ -208,6 +215,7 @@ func TestTerminateWorkflow(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.TerminateWorkflow(context.Background(), wfID, "test reason")
@@ -229,6 +237,7 @@ func TestTerminateWorkflow_NotRunning(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.TerminateWorkflow(context.Background(), wfID, "reason")
@@ -256,6 +265,7 @@ func TestSignalWorkflow(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.SignalWorkflow(context.Background(), wfID, "approval", json.RawMessage(`{"approved":true}`))
@@ -279,6 +289,7 @@ func TestSignalWorkflow_NotRunning(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.SignalWorkflow(context.Background(), wfID, "approval", json.RawMessage(`{}`))
@@ -306,6 +317,7 @@ func TestCancelWorkflow(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.CancelWorkflow(context.Background(), wfID)
@@ -329,6 +341,7 @@ func TestCancelWorkflow_NotRunning(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.CancelWorkflow(context.Background(), wfID)
@@ -354,6 +367,7 @@ func TestSignalWorkflow_MultipleSignals(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	for i := 0; i < 3; i++ {
@@ -373,6 +387,7 @@ func TestPollWorkflowTask_NoTask(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	result, err := e.PollWorkflowTask(context.Background(), "default", "worker-1")
@@ -400,6 +415,7 @@ func TestPollWorkflowTask_WithTask(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	result, err := e.PollWorkflowTask(context.Background(), "default", "worker-1")
@@ -432,6 +448,7 @@ func TestCompleteWorkflowTask(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	commands := []domain.Command{
@@ -470,6 +487,7 @@ func TestFailWorkflowTask(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.FailWorkflowTask(context.Background(), 1, "panic", "something broke")
@@ -486,6 +504,7 @@ func TestPollActivityTask_NoTask(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	task, err := e.PollActivityTask(context.Background(), "default", "worker-1")
@@ -505,6 +524,7 @@ func TestPollActivityTask_WithTask(t *testing.T) {
 			},
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	task, err := e.PollActivityTask(context.Background(), "default", "worker-1")
@@ -539,6 +559,7 @@ func TestCompleteActivityTask(t *testing.T) {
 			CompleteFn: func(_ context.Context, _ int64) error { return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.CompleteActivityTask(context.Background(), 1, json.RawMessage(`{"ok":true}`))
@@ -570,6 +591,7 @@ func TestCompleteActivityTask_TerminalWorkflow(t *testing.T) {
 			CompleteFn: func(_ context.Context, _ int64) error { return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.CompleteActivityTask(context.Background(), 1, json.RawMessage(`{}`))
@@ -603,6 +625,7 @@ func TestFailActivityTask_NonRetryable(t *testing.T) {
 			CompleteFn: func(_ context.Context, _ int64) error { return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.FailActivityTask(context.Background(), 1, domain.ActivityFailure{
@@ -634,6 +657,7 @@ func TestFailActivityTask_MaxAttemptsReached(t *testing.T) {
 			CompleteFn: func(_ context.Context, _ int64) error { completed = true; return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.FailActivityTask(context.Background(), 1, domain.ActivityFailure{Message: "error"})
@@ -660,6 +684,7 @@ func TestFailActivityTask_Retry(t *testing.T) {
 			RequeueFn: func(_ context.Context, _ int64, _ time.Time) error { requeued = true; return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.FailActivityTask(context.Background(), 1, domain.ActivityFailure{Message: "transient error"})
@@ -686,6 +711,7 @@ func TestFailActivityTask_TerminalWorkflow(t *testing.T) {
 			CompleteFn: func(_ context.Context, _ int64) error { completed = true; return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.FailActivityTask(context.Background(), 1, domain.ActivityFailure{Message: "error"})
@@ -709,6 +735,7 @@ func TestRecordActivityHeartbeat(t *testing.T) {
 			},
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.RecordActivityHeartbeat(context.Background(), 42, json.RawMessage(`{"progress":50}`))
@@ -731,6 +758,7 @@ func TestListWorkflows_DefaultPageSize(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	_, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{})
@@ -751,6 +779,7 @@ func TestListWorkflows_MaxPageSize(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	_, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{PageSize: 200})
@@ -778,6 +807,7 @@ func TestListWorkflows_NextCursor(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	result, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{PageSize: 3})
@@ -803,6 +833,7 @@ func TestListWorkflows_NoNextCursor(t *testing.T) {
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	result, err := e.ListWorkflows(context.Background(), port.ListWorkflowsParams{PageSize: 3})
@@ -822,6 +853,7 @@ func TestRecordActivityHeartbeat_TaskNotFound(t *testing.T) {
 			},
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.RecordActivityHeartbeat(context.Background(), 999, nil)
@@ -851,6 +883,7 @@ func TestProcessCommands_ScheduleActivity_WithScheduleToCloseTimeout(t *testing.
 			EnqueueFn: func(_ context.Context, task domain.ActivityTask) error { enqueuedTask = task; return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.ScheduleActivityTaskAttributes{
@@ -891,6 +924,7 @@ func TestProcessCommands_ScheduleActivity_WithScheduleToStartTimeout(t *testing.
 			EnqueueFn: func(_ context.Context, task domain.ActivityTask) error { enqueuedTask = task; return nil },
 		},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.ScheduleActivityTaskAttributes{
@@ -936,6 +970,7 @@ func TestProcessCommands_StartTimer(t *testing.T) {
 		&mockTimerRepo{
 			CreateFn: func(_ context.Context, timer domain.Timer) error { createdTimer = timer; return nil },
 		},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.StartTimerAttributes{SeqID: 1, Duration: 5 * time.Second})
@@ -973,6 +1008,7 @@ func TestProcessCommands_CancelTimer_Pending(t *testing.T) {
 		&mockTimerRepo{
 			CancelFn: func(_ context.Context, _ uuid.UUID, _ int64) (bool, error) { return true, nil },
 		},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.CancelTimerAttributes{SeqID: 1})
@@ -1007,6 +1043,7 @@ func TestProcessCommands_CancelTimer_AlreadyFired(t *testing.T) {
 		&mockTimerRepo{
 			CancelFn: func(_ context.Context, _ uuid.UUID, _ int64) (bool, error) { return false, nil },
 		},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.CancelTimerAttributes{SeqID: 1})
@@ -1050,6 +1087,7 @@ func TestProcessCommands_StartChildWorkflow(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.StartChildWorkflowAttributes{
@@ -1105,6 +1143,7 @@ func TestProcessCommands_StartChildWorkflow_TaskQueueFallback(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	// With explicit task_queue
@@ -1163,6 +1202,7 @@ func TestProcessCommands_CompleteWorkflow_PropagateToParent(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{Result: json.RawMessage(`{"done":true}`)})
@@ -1210,6 +1250,7 @@ func TestProcessCommands_CompleteWorkflow_NoParent(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{Result: json.RawMessage(`{}`)})
@@ -1256,6 +1297,7 @@ func TestProcessCommands_CompleteWorkflow_ParentNotRunning(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{Result: json.RawMessage(`{}`)})
@@ -1308,6 +1350,7 @@ func TestProcessCommands_FailWorkflow_PropagateToParent(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	attrs, _ := json.Marshal(domain.FailWorkflowAttributes{ErrorMessage: "child failed"})
@@ -1368,6 +1411,7 @@ func TestFailWorkflowTask_PropagateToParent(t *testing.T) {
 		},
 		&mockActivityTaskRepo{},
 		&mockTimerRepo{},
+		&mockQueryRepo{},
 	)
 
 	err := e.FailWorkflowTask(context.Background(), 1, "panic", "something broke")
@@ -1381,4 +1425,186 @@ func TestFailWorkflowTask_PropagateToParent(t *testing.T) {
 
 	require.Len(t, enqueuedTasks, 1)
 	assert.Equal(t, parentID, enqueuedTasks[0].WorkflowID)
+}
+
+// --- RecordSideEffect ---
+
+func TestRecordSideEffect(t *testing.T) {
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTask *domain.WorkflowTask
+
+	wfID := uuid.New()
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "q", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = append(appendedEvents, events...)
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, _ int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: 1, WorkflowID: wfID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTask = &task
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.RecordSideEffectAttributes{SeqID: 1, Value: json.RawMessage(`"hello"`)})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandRecordSideEffect, Attributes: attrs},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventSideEffectRecorded, appendedEvents[0].Type)
+	assert.Equal(t, wfID, appendedEvents[0].WorkflowID)
+
+	// SideEffect should NOT generate a WorkflowTask
+	assert.Nil(t, enqueuedTask)
+}
+
+// --- QueryWorkflow ---
+
+func TestQueryWorkflow_Success(t *testing.T) {
+	wfID := uuid.New()
+	var createdQuery domain.WorkflowQuery
+	var enqueuedTask domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "q", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error { enqueuedTask = task; return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{
+			CreateFn: func(_ context.Context, query domain.WorkflowQuery) (int64, error) {
+				createdQuery = query
+				return 42, nil
+			},
+			GetByIDFn: func(_ context.Context, _ int64) (*domain.WorkflowQuery, error) {
+				return &domain.WorkflowQuery{
+					ID:     42,
+					Status: domain.QueryStatusAnswered,
+					Result: json.RawMessage(`"answer"`),
+				}, nil
+			},
+		},
+	)
+
+	q, err := e.QueryWorkflow(context.Background(), wfID, "getState", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	assert.Equal(t, json.RawMessage(`"answer"`), q.Result)
+	assert.Equal(t, "getState", createdQuery.QueryType)
+	assert.Equal(t, wfID, enqueuedTask.WorkflowID)
+}
+
+func TestQueryWorkflow_NotRunning(t *testing.T) {
+	wfID := uuid.New()
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{},
+	)
+
+	_, err := e.QueryWorkflow(context.Background(), wfID, "getState", nil)
+	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
+}
+
+func TestRespondQueryTask_Success(t *testing.T) {
+	var setResultCalled bool
+	e := newTestEngine(
+		&mockWorkflowRepo{},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{
+			SetResultFn: func(_ context.Context, queryID int64, result json.RawMessage, _ string) error {
+				setResultCalled = true
+				assert.Equal(t, int64(42), queryID)
+				assert.JSONEq(t, `"answer"`, string(result))
+				return nil
+			},
+		},
+	)
+
+	err := e.RespondQueryTask(context.Background(), 42, json.RawMessage(`"answer"`), "")
+	require.NoError(t, err)
+	assert.True(t, setResultCalled)
+}
+
+func TestRespondQueryTask_NotFound(t *testing.T) {
+	e := newTestEngine(
+		&mockWorkflowRepo{},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{
+			SetResultFn: func(_ context.Context, _ int64, _ json.RawMessage, _ string) error {
+				return domain.ErrQueryNotFound
+			},
+		},
+	)
+
+	err := e.RespondQueryTask(context.Background(), 999, nil, "")
+	assert.ErrorIs(t, err, domain.ErrQueryNotFound)
+}
+
+func TestPollWorkflowTask_IncludesPendingQueries(t *testing.T) {
+	wfID := uuid.New()
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, WorkflowType: "test-wf", TaskQueue: "q", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			PollFn: func(_ context.Context, _ string, _ string) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: 1, WorkflowID: wfID}, nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{
+			GetPendingByWorkflowIDFn: func(_ context.Context, _ uuid.UUID) ([]domain.WorkflowQuery, error) {
+				return []domain.WorkflowQuery{
+					{ID: 10, QueryType: "getState", Input: json.RawMessage(`{}`)},
+				}, nil
+			},
+		},
+	)
+
+	result, err := e.PollWorkflowTask(context.Background(), "q", "w1")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.PendingQueries, 1)
+	assert.Equal(t, int64(10), result.PendingQueries[0].ID)
+	assert.Equal(t, "getState", result.PendingQueries[0].QueryType)
 }
