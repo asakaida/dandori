@@ -35,9 +35,10 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 10. Continue-as-New管理（ワークフロー終了→新ワークフロー自動作成、continued_as_new_id追跡）
 11. Cronスケジュール管理（cron_schedule検証、CompleteWorkflow時の自動Continue-as-New）
 12. HTTP API提供（grpc-gatewayによるRESTful HTTPエンドポイント、OpenAPI仕様の提供）
-13. Observability提供（OpenTelemetryトレーシング、Prometheusメトリクス、gRPC/HTTPヘルスチェック）
+13. Observability提供（OpenTelemetryトレーシング、Prometheusメトリクス、gRPC/HTTPヘルスチェック、pprofプロファイリング）
 14. Namespace管理（マルチテナント分離、デフォルトnamespace "default"、全エンティティにnamespaceを付与）
 15. Web UI提供（embed.FSでバイナリに組み込んだSPAを`/ui/`パスで配信、ワークフロー一覧・詳細・履歴の閲覧）
+16. pprofプロファイリング（`ENABLE_PPROF=true`で`/debug/pprof/`エンドポイントを有効化）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
 
@@ -138,7 +139,9 @@ dandori/
 │   │       │   ├── 000006_cron.up.sql
 │   │       │   ├── 000006_cron.down.sql
 │   │       │   ├── 000007_namespace.up.sql
-│   │       │   └── 000007_namespace.down.sql
+│   │       │   ├── 000007_namespace.down.sql
+│   │       │   ├── 000009_partitioning.up.sql
+│   │       │   └── 000009_partitioning.down.sql
 │   │       ├── migrate.go                    # embed.FSマイグレーションランナー（schema_migrationsバージョン管理）
 │   │       ├── store.go                      # コネクションプール、TxManager
 │   │       ├── event.go                      # EventRepository実装
@@ -168,6 +171,9 @@ dandori/
 │       ├── service.go                        # Inbound Port: 役割別インターフェース
 │       └── repository.go                     # Outbound Port: 各Repository, TxManager
 ├── test/
+│   ├── bench/                                # ベンチマークテスト（testcontainers）
+│   │   ├── workflow_bench_test.go            # ワークフロー作成/イベント追記/タスクPoll・Completeのスループット
+│   │   └── concurrent_bench_test.go          # N並行ワーカーでのタスクスループット
 │   └── e2e/                                  # E2Eテスト（bufconn gRPC + httptest HTTP + testcontainers）
 │       ├── setup_test.go                     # TestMain, bufconn server, httptest server, helpers
 │       ├── sequential_activity_test.go       # 3ステップActivity + 結果取得
@@ -1319,13 +1325,19 @@ func main() {
     reflection.Register(srv)
     go srv.Serve(lis)
 
-    // HTTPサーバー（gRPC-Gateway + /healthz + /metrics + /ui/ Web UI）
+    // HTTPサーバー（gRPC-Gateway + /healthz + /metrics + /ui/ Web UI + pprof）
     gatewayMux, _ := httpadapter.NewGatewayMux(ctx, grpcAddr)
-    httpHandler := httpadapter.NewHTTPHandler(gatewayMux, map[string]http.Handler{
+    extraHandlers := map[string]http.Handler{
         "/healthz": httpadapter.NewHealthHandler(db),
         "/metrics": promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
         "/ui/":     httpadapter.NewUIHandler(),
-    })
+    }
+    // ENABLE_PPROF=true で /debug/pprof/ エンドポイントを有効化
+    if os.Getenv("ENABLE_PPROF") == "true" {
+        // net/http/pprof の Index, Cmdline, Profile, Symbol, Trace を登録
+        extraHandlers["/debug/pprof/"] = pprofMux
+    }
+    httpHandler := httpadapter.NewHTTPHandler(gatewayMux, extraHandlers)
     go httpSrv.ListenAndServe()
 
     // graceful shutdown（SIGINT/SIGTERM → cancel → HTTP Shutdown → GracefulStop → db.Close）
@@ -1855,18 +1867,25 @@ CREATE INDEX idx_workflow_executions_parent ON workflow_executions(parent_workfl
 
 ### workflow_events テーブル
 
+ハッシュパーティショニング（workflow_idベース、16分割）を採用。`WHERE workflow_id = $1` によるパーティションプルーニングが有効。マイグレーション000009で通常テーブルからパーティションテーブルに変換される（冪等）。
+
 ```sql
 CREATE TABLE workflow_events (
-    id              BIGSERIAL PRIMARY KEY,
-    workflow_id     UUID NOT NULL REFERENCES workflow_executions(id),
-    sequence_num    INT NOT NULL,
-    event_type      TEXT NOT NULL,
-    event_data      JSONB NOT NULL,
-    timestamp       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(workflow_id, sequence_num)
-);
+    id           BIGINT NOT NULL DEFAULT nextval('workflow_events_id_seq'),
+    workflow_id  UUID NOT NULL,
+    sequence_num INT NOT NULL,
+    event_type   TEXT NOT NULL,
+    event_data   JSONB NOT NULL,
+    timestamp    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (workflow_id, sequence_num)
+) PARTITION BY HASH (workflow_id);
 
-CREATE INDEX idx_workflow_events_workflow_id ON workflow_events(workflow_id);
+-- 16分割パーティション（p0〜p15）
+CREATE TABLE workflow_events_p0  PARTITION OF workflow_events FOR VALUES WITH (MODULUS 16, REMAINDER 0);
+-- ... p1〜p14 ...
+CREATE TABLE workflow_events_p15 PARTITION OF workflow_events FOR VALUES WITH (MODULUS 16, REMAINDER 15);
+
+CREATE INDEX idx_workflow_events_workflow_id ON workflow_events (workflow_id);
 ```
 
 ### workflow_tasks テーブル
@@ -2017,6 +2036,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_queries_pending
 - Advisory Lock: CompleteWorkflowTask時にworkflow_idハッシュでpg_advisory_xact_lockを取得し、同一ワークフローのWorkflow Task処理を直列化
 - UNIQUE(workflow_id, sequence_num): イベントの重複挿入を防止
 - タイムアウト検知: timeout_atカラムによるActivity StartToCloseTimeout監視、heartbeat_at + heartbeat_timeoutによるHeartbeatタイムアウト監視、schedule_to_close_timeout_atによるScheduleToCloseTimeout監視、schedule_to_start_timeout_atによるScheduleToStartTimeout監視
+- ハッシュパーティショニング: workflow_eventsテーブルをworkflow_idベースで16分割し、大量イベントの読み書きを高速化（パーティションプルーニング有効）
 - LISTEN/NOTIFY: タスク投入の即時通知（Phase 2）
 
 ## 8. gRPCサービス定義
@@ -2148,6 +2168,7 @@ MVPではDescribeWorkflowのポーリングで実現する。
 | インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 76 |
 | インテグレーションテスト | adapter/grpc (grpc_test) | testcontainers + Engine + PostgreSQL Storeの実スタック検証 | 8 |
 | E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + httptest HTTP + testcontainers + BackgroundWorker による全主要シナリオ検証 | 47 |
+| ベンチマーク | test/bench (bench_test) | testcontainers + PostgreSQL 16によるスループット・レイテンシ計測（ワークフロー作成、イベント追記、タスクPoll/Complete、N並行ワーカー） | 10 |
 
 ### テストパターン
 

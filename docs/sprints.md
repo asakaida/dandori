@@ -878,7 +878,7 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 20 - パフォーマンス最適化
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: 大規模ワークフロー環境でのパフォーマンスを改善し、ベンチマークで性能特性を可視化する
 
@@ -890,22 +890,22 @@ Sprint 12の位置づけの根拠:
 
 タスク:
 
-- [ ] internal/adapter/postgres/migration/000009_partitioning.up.sql — `workflow_events` テーブルをハッシュパーティショニングに変換（16分割）。既存データの移行SQL
-- [ ] internal/adapter/postgres/migration/000009_partitioning.down.sql
-- [ ] internal/adapter/postgres/event.go — パーティション対応のクエリ最適化（`WHERE workflow_id = $1` がパーティションプルーニングに効くことを確認）
-- [ ] test/bench/workflow_bench_test.go（新規）— ベンチマークテスト: ワークフロー作成スループット、イベント追記スループット、タスクPoll/Completeレイテンシ
-- [ ] test/bench/concurrent_bench_test.go（新規）— 並行ベンチマーク: N並行ワーカーでのタスクスループット
-- [ ] cmd/dandori/main.go — `net/http/pprof` エンドポイント追加（`/debug/pprof/`）。環境変数 `ENABLE_PPROF=true` でのみ有効化
-- [ ] internal/adapter/postgres/ — N+1クエリの検出と最適化（必要に応じてバッチクエリ化）
+- [x] internal/adapter/postgres/migration/000009_partitioning.up.sql — `workflow_events` テーブルをハッシュパーティショニングに変換（16分割）。既存データの移行SQL
+- [x] internal/adapter/postgres/migration/000009_partitioning.down.sql
+- [x] internal/adapter/postgres/event.go — パーティション対応のクエリ最適化（`WHERE workflow_id = $1` がパーティションプルーニングに効くことを確認）
+- [x] test/bench/workflow_bench_test.go（新規）— ベンチマークテスト: ワークフロー作成スループット、イベント追記スループット、タスクPoll/Completeレイテンシ
+- [x] test/bench/concurrent_bench_test.go（新規）— 並行ベンチマーク: N並行ワーカーでのタスクスループット
+- [x] cmd/dandori/main.go — `net/http/pprof` エンドポイント追加（`/debug/pprof/`）。環境変数 `ENABLE_PPROF=true` でのみ有効化
+- [x] internal/adapter/postgres/ — N+1クエリの検出と最適化（必要に応じてバッチクエリ化）
 
 完了条件:
 
-- [ ] `go test -bench=. ./test/bench/...` — ベンチマーク実行可能
-- [ ] パーティショニング後も全既存テストが通過する
-- [ ] `/debug/pprof/` でプロファイリングデータが取得できる（ENABLE_PPROF=true時）
-- [ ] migration 000009 が冪等に適用される
-- [ ] `go test -v -race ./...` — 全テスト通過
-- [ ] `go vet ./...` — クリーン
+- [x] `go test -bench=. ./test/bench/...` — ベンチマーク実行可能
+- [x] パーティショニング後も全既存テストが通過する
+- [x] `/debug/pprof/` でプロファイリングデータが取得できる（ENABLE_PPROF=true時）
+- [x] migration 000009 が冪等に適用される
+- [x] `go test -v -race ./...` — 全テスト通過
+- [x] `go vet ./...` — クリーン
 
 ### Sprint 21 - ドキュメント整備
 

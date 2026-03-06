@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	netpprof "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -157,11 +158,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpHandler := httpadapter.NewHTTPHandler(gatewayMux, map[string]http.Handler{
+	extraHandlers := map[string]http.Handler{
 		"/healthz": httpadapter.NewHealthHandler(db),
 		"/metrics": promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
 		"/ui/":     httpadapter.NewUIHandler(),
-	})
+	}
+
+	if os.Getenv("ENABLE_PPROF") == "true" {
+		pprofMux := http.NewServeMux()
+		pprofMux.HandleFunc("/debug/pprof/", netpprof.Index)
+		pprofMux.HandleFunc("/debug/pprof/cmdline", netpprof.Cmdline)
+		pprofMux.HandleFunc("/debug/pprof/profile", netpprof.Profile)
+		pprofMux.HandleFunc("/debug/pprof/symbol", netpprof.Symbol)
+		pprofMux.HandleFunc("/debug/pprof/trace", netpprof.Trace)
+		extraHandlers["/debug/pprof/"] = pprofMux
+		slog.Info("pprof enabled at /debug/pprof/")
+	}
+
+	httpHandler := httpadapter.NewHTTPHandler(gatewayMux, extraHandlers)
 	httpSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", httpPort),
 		Handler: httpHandler,

@@ -173,8 +173,9 @@ Phase 3:
 Phase 4:
 
 - Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供、ワークフロー一覧/詳細/履歴タイムライン）
-- イベントテーブルのパーティショニング
-- パフォーマンスベンチマーク
+- イベントテーブルのパーティショニング（実装済み: workflow_eventsのハッシュパーティショニング、workflow_idベース16分割）
+- パフォーマンスベンチマーク（実装済み: ワークフロー作成/イベント追記/タスクPoll・Complete、並行ワーカースループット）
+- pprofエンドポイント（実装済み: `ENABLE_PPROF=true` で `/debug/pprof/` 有効化）
 - ドキュメント整備
 
 ## 4. 非機能要件
@@ -209,6 +210,7 @@ Phase 4:
 - OpenTelemetryトレーシング（実装済み: デコレータパターン + otelgrpc interceptor）
 - Prometheusメトリクス（実装済み: `/metrics` エンドポイント）
 - ヘルスチェック（実装済み: gRPC `grpc.health.v1.Health` + HTTP `/healthz`）
+- pprofプロファイリング（実装済み: `ENABLE_PPROF=true` で `/debug/pprof/` 有効化）
 
 ### テスタビリティ
 
@@ -431,8 +433,9 @@ sagaパッケージはSDK側で提供する。サーバーにとっては補償A
 ### Phase 4: 運用性と最適化
 
 - Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供）
-- イベントテーブルのパーティショニング
-- パフォーマンスベンチマーク
+- イベントテーブルのパーティショニング（実装済み: workflow_eventsハッシュパーティショニング16分割、冪等マイグレーション）
+- パフォーマンスベンチマーク（実装済み: test/bench/、ワークフロー作成/イベント追記/タスクPoll・Complete/並行ワーカースループット）
+- pprofエンドポイント（実装済み: `ENABLE_PPROF=true` で `/debug/pprof/` 有効化）
 - ドキュメント整備
 
 ## 7. 技術選定
