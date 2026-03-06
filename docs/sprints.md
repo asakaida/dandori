@@ -845,7 +845,7 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 19 - Web UI
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: ワークフローの一覧・詳細・履歴をブラウザで確認できるWeb UIを提供する
 
@@ -854,24 +854,27 @@ Sprint 12の位置づけの根拠:
 - SPA（Single Page Application）を `embed.FS` でバイナリに組み込み
 - HTTP API（Sprint 16のgrpc-gateway）経由でデータ取得
 - `/ui/` パスで提供。最小限の機能に絞る（閲覧のみ、操作は将来拡張）
+- vanilla JS + Tailwind CSS v4（CDN）を採用。ビルドステップ不要
+- SPAクライアントサイドルーティング（pushState）でワークフロー一覧/詳細を切り替え
+- TailwindPlus UIコンポーネント（テーブル、説明リスト、フィード、パンくず、バッジ）を使用
 
 タスク:
 
-- [ ] web/（新規ディレクトリ）— フロントエンドプロジェクト初期化（軽量フレームワーク選定: Preact or vanilla JS + HTML templates）
-- [ ] web/index.html — メインページ（ワークフロー一覧）
-- [ ] web/workflow.html — ワークフロー詳細ページ（ステータス、履歴タイムライン）
-- [ ] web/static/ — CSS、JavaScript
-- [ ] internal/adapter/http/ui.go（新規）— `embed.FS` でweb/ディレクトリを組み込み、`/ui/` パスで提供。SPA用のフォールバックルーティング
-- [ ] cmd/dandori/main.go — UIハンドラをHTTPサーバーに統合
-- [ ] web/ のビルド・テスト手順をREADMEに追加
+- [x] web/（新規ディレクトリ）— フロントエンドプロジェクト初期化（vanilla JS + Tailwind CSS v4 CDN）
+- [x] web/index.html — SPAエントリポイント（ナビバー + コンテンツ領域）
+- [x] web/static/app.js — クライアントサイドルーティング、API呼び出し、ワークフロー一覧・詳細ビュー、履歴タイムライン
+- [x] web/static/style.css — カスタムアニメーション定義
+- [x] web/embed.go — `embed.FS` でフロントエンドアセットをエクスポート
+- [x] internal/adapter/http/ui.go（新規）— `embed.FS` でweb/ディレクトリを組み込み、`/ui/` パスで提供。SPA用のフォールバックルーティング
+- [x] cmd/dandori/main.go — UIハンドラをHTTPサーバーに統合（extraHandlersに `/ui/` を追加）
 
 完了条件:
 
-- [ ] `http://localhost:8080/ui/` でワークフロー一覧が表示される
-- [ ] ワークフロー詳細ページでステータスと履歴が表示される
-- [ ] バイナリ単体でUI含めてデプロイ可能（外部ファイル不要）
-- [ ] `go build ./cmd/dandori` — UI組み込みでビルド成功
-- [ ] `go vet ./...` — クリーン
+- [x] `http://localhost:8080/ui/` でワークフロー一覧が表示される
+- [x] ワークフロー詳細ページでステータスと履歴が表示される
+- [x] バイナリ単体でUI含めてデプロイ可能（外部ファイル不要）
+- [x] `go build ./cmd/dandori` — UI組み込みでビルド成功
+- [x] `go vet ./...` — クリーン
 
 ### Sprint 20 - パフォーマンス最適化
 

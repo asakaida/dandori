@@ -172,7 +172,7 @@ Phase 3:
 
 Phase 4:
 
-- Web UI
+- Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供、ワークフロー一覧/詳細/履歴タイムライン）
 - イベントテーブルのパーティショニング
 - パフォーマンスベンチマーク
 - ドキュメント整備
@@ -430,7 +430,7 @@ sagaパッケージはSDK側で提供する。サーバーにとっては補償A
 
 ### Phase 4: 運用性と最適化
 
-- Web UI
+- Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供）
 - イベントテーブルのパーティショニング
 - パフォーマンスベンチマーク
 - ドキュメント整備

@@ -160,6 +160,7 @@ func main() {
 	httpHandler := httpadapter.NewHTTPHandler(gatewayMux, map[string]http.Handler{
 		"/healthz": httpadapter.NewHealthHandler(db),
 		"/metrics": promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+		"/ui/":     httpadapter.NewUIHandler(),
 	})
 	httpSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", httpPort),

@@ -37,6 +37,7 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 12. HTTP API提供（grpc-gatewayによるRESTful HTTPエンドポイント、OpenAPI仕様の提供）
 13. Observability提供（OpenTelemetryトレーシング、Prometheusメトリクス、gRPC/HTTPヘルスチェック）
 14. Namespace管理（マルチテナント分離、デフォルトnamespace "default"、全エンティティにnamespaceを付与）
+15. Web UI提供（embed.FSでバイナリに組み込んだSPAを`/ui/`パスで配信、ワークフロー一覧・詳細・履歴の閲覧）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
 
@@ -111,11 +112,12 @@ dandori/
 │   │   │   ├── handler.go
 │   │   │   ├── interceptor.go               # OTelServerOptions（otelgrpc StatsHandler）
 │   │   │   └── health.go                    # grpc.health.v1.Health サービス実装
-│   │   ├── http/                             # Inbound Adapter: HTTP（grpc-gateway）
+│   │   ├── http/                             # Inbound Adapter: HTTP（grpc-gateway + Web UI）
 │   │   │   ├── gateway.go                    # NewGatewayMux, NewHTTPHandler
 │   │   │   ├── health.go                    # /healthz エンドポイント（DB ping）
 │   │   │   ├── swagger.go                    # /swagger.json エンドポイント（embed）
-│   │   │   └── swagger.json                  # OpenAPI v2仕様（embed用コピー）
+│   │   │   ├── swagger.json                  # OpenAPI v2仕様（embed用コピー）
+│   │   │   └── ui.go                         # /ui/ Web UIハンドラ（web.Content embed.FS、SPAフォールバック）
 │   │   ├── telemetry/                        # Observability（デコレータパターン）
 │   │   │   ├── tracer.go                    # OpenTelemetry TracerProvider初期化
 │   │   │   ├── decorator.go                 # Tracing*Service デコレータ（3インターフェース）
@@ -189,6 +191,12 @@ dandori/
 │       ├── cron_test.go                   # Cron自動再起動・失敗時再起動なし
 │       ├── http_api_test.go              # HTTP API（開始・取得・終了・履歴・一覧・フィルタ）
 │       └── observability_test.go        # /healthz レスポンス検証
+├── web/                                       # Web UI（vanilla JS SPA、embed.FSでバイナリ組み込み）
+│   ├── embed.go                              # embed.FSエクスポート（web.Content）
+│   ├── index.html                            # SPAエントリポイント（Tailwind CSS v4 CDN）
+│   └── static/
+│       ├── app.js                            # クライアントサイドルーティング、API呼び出し、ビュー描画
+│       └── style.css                         # カスタムアニメーション定義
 ├── third_party/
 │   └── google/api/                           # grpc-gateway用protoインクルード
 │       ├── annotations.proto
@@ -214,7 +222,8 @@ cmd/dandori/main.go（依存の組み立て）
 - `port/`: Inbound Port と Outbound Port の定義。domain/ のみに依存
 - `engine/`: ビジネスロジック。port/ と domain/ に依存。adapter/ には依存しない
 - `adapter/grpc/`: Inbound Adapter。port/ と domain/ に依存。**engine/ には依存しない**（エラー判定は domain/ のエラーを使う）
-- `adapter/http/`: Inbound Adapter。grpc-gatewayの生成コード（api/v1）に依存。gRPCサーバーへのリバースプロキシとしてHTTP APIを提供
+- `adapter/http/`: Inbound Adapter。grpc-gatewayの生成コード（api/v1）と web/ パッケージに依存。gRPCサーバーへのリバースプロキシとしてHTTP APIを提供し、`/ui/` パスでWeb UIを配信
+- `web/`: フロントエンドアセット。embed.FSでエクスポートし、adapter/http/ から参照される。他のinternal/ パッケージには依存しない
 - `adapter/postgres/`: Outbound Adapter。port/ と domain/ に依存。engine/ には依存しない
 - `cmd/dandori/`: 全パッケージをimportし、依存を組み立てるエントリーポイント
 - `cmd/dandori-cli/`: CLIツール。api/v1の生成コードとgRPCクライアントのみに依存。internal/は参照しない
@@ -1310,11 +1319,12 @@ func main() {
     reflection.Register(srv)
     go srv.Serve(lis)
 
-    // HTTPサーバー（gRPC-Gateway + /healthz + /metrics）
+    // HTTPサーバー（gRPC-Gateway + /healthz + /metrics + /ui/ Web UI）
     gatewayMux, _ := httpadapter.NewGatewayMux(ctx, grpcAddr)
     httpHandler := httpadapter.NewHTTPHandler(gatewayMux, map[string]http.Handler{
         "/healthz": httpadapter.NewHealthHandler(db),
         "/metrics": promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+        "/ui/":     httpadapter.NewUIHandler(),
     })
     go httpSrv.ListenAndServe()
 
