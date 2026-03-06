@@ -165,8 +165,9 @@ Phase 3:
 - Cron / スケジュール実行（実装済み: cron_schedule指定、CompleteWorkflow時にContinue-as-Newで自動再起動）
 - Continue-as-New（実装済み: ContinueAsNewコマンド、CONTINUED_AS_NEWステータス、continued_as_new_id追跡）
 - HTTP API（実装済み: grpc-gateway、リソース志向URL設計、OpenAPI v2自動生成、`/swagger.json`エンドポイント）
-- OpenTelemetryトレーシング
-- Prometheusメトリクス
+- OpenTelemetryトレーシング（実装済み: OTLPエクスポーター、デコレータパターンによるスパン生成）
+- Prometheusメトリクス（実装済み: カウンター、ヒストグラム、ゲージ、`/metrics`エンドポイント）
+- ヘルスチェック（実装済み: gRPC Health v1、HTTP `/healthz`）
 
 Phase 4:
 
@@ -205,8 +206,9 @@ Phase 4:
 ### 可観測性
 
 - 構造化ログ（slog）
-- OpenTelemetryトレーシング（Phase 2以降）
-- Prometheusメトリクス（Phase 2以降）
+- OpenTelemetryトレーシング（実装済み: デコレータパターン + otelgrpc interceptor）
+- Prometheusメトリクス（実装済み: `/metrics` エンドポイント）
+- ヘルスチェック（実装済み: gRPC `grpc.health.v1.Health` + HTTP `/healthz`）
 
 ### テスタビリティ
 
@@ -421,8 +423,9 @@ sagaパッケージはSDK側で提供する。サーバーにとっては補償A
 - Cron / スケジュール実行（実装済み）
 - Continue-as-New（実装済み）
 - HTTP API（実装済み: grpc-gateway、リソース志向URL設計、OpenAPI v2自動生成）
-- OpenTelemetryトレーシング
-- Prometheusメトリクス
+- OpenTelemetryトレーシング（実装済み）
+- Prometheusメトリクス（実装済み）
+- ヘルスチェック（実装済み: gRPC Health v1 + HTTP `/healthz`）
 
 ### Phase 4: 運用性と最適化
 

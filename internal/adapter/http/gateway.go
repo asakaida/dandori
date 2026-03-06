@@ -33,10 +33,14 @@ func NewGatewayMux(ctx context.Context, grpcAddr string) (*runtime.ServeMux, err
 	return mux, nil
 }
 
-// NewHTTPHandler creates an http.Handler that routes to the gateway mux and swagger endpoint.
-func NewHTTPHandler(gatewayMux *runtime.ServeMux) http.Handler {
+// NewHTTPHandler creates an http.Handler that routes to the gateway mux, swagger, and additional handlers.
+// extraHandlers allows registering additional path/handler pairs (e.g., /healthz, /metrics).
+func NewHTTPHandler(gatewayMux *runtime.ServeMux, extraHandlers map[string]http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/swagger.json", swaggerHandler())
+	for path, handler := range extraHandlers {
+		mux.Handle(path, handler)
+	}
 	mux.Handle("/", gatewayMux)
 	return mux
 }

@@ -35,6 +35,7 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 10. Continue-as-New管理（ワークフロー終了→新ワークフロー自動作成、continued_as_new_id追跡）
 11. Cronスケジュール管理（cron_schedule検証、CompleteWorkflow時の自動Continue-as-New）
 12. HTTP API提供（grpc-gatewayによるRESTful HTTPエンドポイント、OpenAPI仕様の提供）
+13. Observability提供（OpenTelemetryトレーシング、Prometheusメトリクス、gRPC/HTTPヘルスチェック）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
 
@@ -69,7 +70,7 @@ Hexagonal Architecture（Ports and Adapters）を採用する。
     |  grpc-gateway    |   |      +----------------------+   |
     +------------------+   |                |                |     +------------------------+
                            |                v                |     |  adapter/telemetry/    |
-    +------------------+   |           domain/               |     |  (Phase 2-3)           |
+    +------------------+   |           domain/               |     |  (実装済み)             |
     |adapter/telemetry/|-->|           純粋な型定義           |     |                        |
     |  Inbound Port の |   |           エラー定義             |     |  Outbound Port の      |
     |  デコレータ      |                                     +---->|  デコレータ            |
@@ -106,11 +107,19 @@ dandori/
 ├── internal/
 │   ├── adapter/
 │   │   ├── grpc/                             # Inbound Adapter: gRPC
-│   │   │   └── handler.go
+│   │   │   ├── handler.go
+│   │   │   ├── interceptor.go               # OTelServerOptions（otelgrpc StatsHandler）
+│   │   │   └── health.go                    # grpc.health.v1.Health サービス実装
 │   │   ├── http/                             # Inbound Adapter: HTTP（grpc-gateway）
 │   │   │   ├── gateway.go                    # NewGatewayMux, NewHTTPHandler
+│   │   │   ├── health.go                    # /healthz エンドポイント（DB ping）
 │   │   │   ├── swagger.go                    # /swagger.json エンドポイント（embed）
 │   │   │   └── swagger.json                  # OpenAPI v2仕様（embed用コピー）
+│   │   ├── telemetry/                        # Observability（デコレータパターン）
+│   │   │   ├── tracer.go                    # OpenTelemetry TracerProvider初期化
+│   │   │   ├── decorator.go                 # Tracing*Service デコレータ（3インターフェース）
+│   │   │   ├── metrics.go                   # Prometheus メトリクス定義
+│   │   │   └── metrics_decorator.go         # Metrics*Service デコレータ（3インターフェース）
 │   │   └── postgres/                         # Outbound Adapter: PostgreSQL
 │   │       ├── migration/                    # SQLマイグレーション
 │   │       │   ├── 000001_initial.up.sql
@@ -173,7 +182,8 @@ dandori/
 │       ├── query_test.go                   # Query送信→応答
 │       ├── continue_as_new_test.go        # Continue-as-New（手動・型引き継ぎ）
 │       ├── cron_test.go                   # Cron自動再起動・失敗時再起動なし
-│       └── http_api_test.go              # HTTP API（開始・取得・終了・履歴・一覧・フィルタ）
+│       ├── http_api_test.go              # HTTP API（開始・取得・終了・履歴・一覧・フィルタ）
+│       └── observability_test.go        # /healthz レスポンス検証
 ├── third_party/
 │   └── google/api/                           # grpc-gateway用protoインクルード
 │       ├── annotations.proto
@@ -499,13 +509,19 @@ type WorkflowTaskResult struct {
 
 engine.Engineはこの3つのインターフェースを全て実装する。gRPCハンドラは必要なインターフェースのみを受け取る。
 
-telemetryデコレータは関心のあるインターフェースだけを装飾できる:
+telemetryデコレータは関心のあるインターフェースだけを装飾できる。トレーシングとメトリクスで2段のデコレータチェーンを構成する:
 
 ```go
-// 例: ClientServiceだけにメトリクスを付ける
-type metricsClientService struct {
+// トレーシングデコレータ（OpenTelemetryスパン生成）
+type TracingClientService struct {
+    next   port.ClientService
+    tracer trace.Tracer
+}
+
+// メトリクスデコレータ（Prometheusカウンター/ヒストグラム記録）
+type MetricsClientService struct {
     next    port.ClientService
-    metrics MetricsHandler
+    metrics *Metrics
 }
 ```
 
@@ -1172,9 +1188,19 @@ func (s *Store) Queries() port.QueryRepository               { return &QueryStor
 
 ```go
 func main() {
-    // 環境変数（DATABASE_URL, GRPC_PORT）
+    // 環境変数（DATABASE_URL, GRPC_PORT, HTTP_PORT）
     databaseURL := envOrDefault("DATABASE_URL", "postgres://dandori:dandori@localhost:5432/dandori?sslmode=disable")
     grpcPort := envOrDefault("GRPC_PORT", "7233")
+    httpPort := envOrDefault("HTTP_PORT", "8080")
+
+    // OpenTelemetry初期化（OTEL_EXPORTER_OTLP_ENDPOINT未設定時はno-op）
+    tracer, tracerShutdown, _ := telemetry.InitTracer(ctx)
+    defer tracerShutdown(context.Background())
+
+    // Prometheusレジストリ
+    reg := prometheus.NewRegistry()
+    reg.MustRegister(collectors.NewProcessCollector(...), collectors.NewGoCollector())
+    metrics := telemetry.NewMetrics(reg)
 
     // DB接続 + ping + プール設定
     db, _ := sql.Open("postgres", databaseURL)
@@ -1209,26 +1235,37 @@ func main() {
         store,
     )
 
-    // Inbound Adapter（役割別にインターフェースを渡す）
-    handler := grpcadapter.NewHandler(eng, eng, eng)
+    // Observabilityデコレータチェーン: engine → tracing → metrics → handler
+    tracedClient := telemetry.NewTracingClientService(eng, tracer)
+    tracedWFTask := telemetry.NewTracingWorkflowTaskService(eng, tracer)
+    tracedActTask := telemetry.NewTracingActivityTaskService(eng, tracer)
 
-    ctx, cancel := context.WithCancel(context.Background())
+    metricsClient := telemetry.NewMetricsClientService(tracedClient, metrics)
+    metricsWFTask := telemetry.NewMetricsWorkflowTaskService(tracedWFTask, metrics)
+    metricsActTask := telemetry.NewMetricsActivityTaskService(tracedActTask, metrics)
 
-    // バックグラウンドプロセス起動（Engineとは独立したライフサイクル）
-    go bgWorker.RunActivityTimeoutChecker(ctx, 5*time.Second)
-    go bgWorker.RunHeartbeatTimeoutChecker(ctx, 5*time.Second)
-    go bgWorker.RunTimerPoller(ctx, 1*time.Second)
-    go bgWorker.RunTaskRecovery(ctx, 10*time.Second)
+    // Inbound Adapter（デコレータ済みインターフェースを渡す）
+    handler := grpcadapter.NewHandler(metricsClient, metricsWFTask, metricsActTask)
 
-    // gRPCサーバー起動（reflection有効）
-    srv := grpc.NewServer()
+    // gRPCサーバー起動（OTel StatsHandler + Health + reflection有効）
+    srv := grpc.NewServer(grpcadapter.OTelServerOptions()...)
     apiv1.RegisterDandoriServiceServer(srv, handler)
+    grpc_health_v1.RegisterHealthServer(srv, grpcadapter.NewHealthServer(db))
     reflection.Register(srv)
     go srv.Serve(lis)
 
-    // graceful shutdown（SIGINT/SIGTERM → cancel → GracefulStop → db.Close）
+    // HTTPサーバー（gRPC-Gateway + /healthz + /metrics）
+    gatewayMux, _ := httpadapter.NewGatewayMux(ctx, grpcAddr)
+    httpHandler := httpadapter.NewHTTPHandler(gatewayMux, map[string]http.Handler{
+        "/healthz": httpadapter.NewHealthHandler(db),
+        "/metrics": promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+    })
+    go httpSrv.ListenAndServe()
+
+    // graceful shutdown（SIGINT/SIGTERM → cancel → HTTP Shutdown → GracefulStop → db.Close）
     sig := <-sigCh
     cancel()
+    httpSrv.Shutdown(shutdownCtx)
     srv.GracefulStop()
     db.Close()
 }

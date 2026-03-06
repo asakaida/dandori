@@ -12,13 +12,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	apiv1 "github.com/asakaida/dandori/api/v1"
 	grpcadapter "github.com/asakaida/dandori/internal/adapter/grpc"
 	httpadapter "github.com/asakaida/dandori/internal/adapter/http"
 	"github.com/asakaida/dandori/internal/adapter/postgres"
+	"github.com/asakaida/dandori/internal/adapter/telemetry"
 	"github.com/asakaida/dandori/internal/engine"
 	_ "github.com/lib/pq"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -29,6 +35,24 @@ func main() {
 	grpcPort := envOrDefault("GRPC_PORT", "7233")
 	httpPort := envOrDefault("HTTP_PORT", "8080")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// OpenTelemetry
+	tracer, tracerShutdown, err := telemetry.InitTracer(ctx)
+	if err != nil {
+		slog.Error("failed to init tracer", "error", err)
+		os.Exit(1)
+	}
+	defer tracerShutdown(context.Background())
+
+	// Prometheus
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	reg.MustRegister(collectors.NewGoCollector())
+	metrics := telemetry.NewMetrics(reg)
+
+	// Database
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
 		slog.Error("failed to open database", "error", err)
@@ -70,11 +94,19 @@ func main() {
 		store.Timers(),
 		store,
 	)
-	handler := grpcadapter.NewHandler(eng, eng, eng)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Decorators: engine -> tracing -> metrics -> handler
+	tracedClient := telemetry.NewTracingClientService(eng, tracer)
+	tracedWFTask := telemetry.NewTracingWorkflowTaskService(eng, tracer)
+	tracedActTask := telemetry.NewTracingActivityTaskService(eng, tracer)
 
+	metricsClient := telemetry.NewMetricsClientService(tracedClient, metrics)
+	metricsWFTask := telemetry.NewMetricsWorkflowTaskService(tracedWFTask, metrics)
+	metricsActTask := telemetry.NewMetricsActivityTaskService(tracedActTask, metrics)
+
+	handler := grpcadapter.NewHandler(metricsClient, metricsWFTask, metricsActTask)
+
+	// Background workers
 	go func() {
 		if err := bgWorker.RunActivityTimeoutChecker(ctx, 5*time.Second); err != nil && ctx.Err() == nil {
 			slog.Error("activity timeout checker stopped", "error", err)
@@ -103,8 +135,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpcadapter.OTelServerOptions()...)
 	apiv1.RegisterDandoriServiceServer(srv, handler)
+	grpc_health_v1.RegisterHealthServer(srv, grpcadapter.NewHealthServer(db))
 	reflection.Register(srv)
 
 	go func() {
@@ -115,7 +148,7 @@ func main() {
 		}
 	}()
 
-	// HTTP server (gRPC-Gateway)
+	// HTTP server (gRPC-Gateway + /healthz + /metrics)
 	grpcAddr := fmt.Sprintf("localhost:%s", grpcPort)
 	gatewayMux, err := httpadapter.NewGatewayMux(ctx, grpcAddr)
 	if err != nil {
@@ -123,7 +156,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpHandler := httpadapter.NewHTTPHandler(gatewayMux)
+	httpHandler := httpadapter.NewHTTPHandler(gatewayMux, map[string]http.Handler{
+		"/healthz": httpadapter.NewHealthHandler(db),
+		"/metrics": promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+	})
 	httpSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", httpPort),
 		Handler: httpHandler,

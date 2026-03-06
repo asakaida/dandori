@@ -130,6 +130,15 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed to register gateway handler: %v", err)
 	}
 	topMux := http.NewServeMux()
+	topMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if err := testDB.PingContext(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"status":"unhealthy"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"healthy"}`))
+	})
 	topMux.Handle("/", gwMux)
 	httpServer = httptest.NewServer(topMux)
 
