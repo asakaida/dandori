@@ -161,6 +161,157 @@ func TestBackgroundWorker_CheckHeartbeatTimeouts(t *testing.T) {
 	assert.Equal(t, wfID, enqueuedTask.WorkflowID)
 }
 
+func TestBackgroundWorker_CheckScheduleToCloseTimeout(t *testing.T) {
+	wfID := uuid.New()
+	var completedTaskID int64
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTask domain.WorkflowTask
+
+	w := NewBackgroundWorker(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = events
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTask = task
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{
+			GetTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return nil, nil
+			},
+			GetScheduleToCloseTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return []domain.ActivityTask{
+					{ID: 40, WorkflowID: wfID, ActivitySeqID: 3, Status: domain.TaskStatusRunning},
+				}, nil
+			},
+			GetScheduleToStartTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return nil, nil
+			},
+			CompleteFn: func(_ context.Context, taskID int64) error {
+				completedTaskID = taskID
+				return nil
+			},
+		},
+		&mockTimerRepo{},
+		&mockTxManager{},
+	)
+
+	err := w.checkActivityTimeouts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(40), completedTaskID)
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventActivityTaskTimedOut, appendedEvents[0].Type)
+	assert.Equal(t, wfID, enqueuedTask.WorkflowID)
+}
+
+func TestBackgroundWorker_CheckScheduleToStartTimeout(t *testing.T) {
+	wfID := uuid.New()
+	var completedPendingTaskID int64
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTask domain.WorkflowTask
+
+	w := NewBackgroundWorker(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = events
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTask = task
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{
+			GetTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return nil, nil
+			},
+			GetScheduleToCloseTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return nil, nil
+			},
+			GetScheduleToStartTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return []domain.ActivityTask{
+					{ID: 50, WorkflowID: wfID, ActivitySeqID: 4, Status: domain.TaskStatusPending},
+				}, nil
+			},
+			CompletePendingFn: func(_ context.Context, taskID int64) error {
+				completedPendingTaskID = taskID
+				return nil
+			},
+		},
+		&mockTimerRepo{},
+		&mockTxManager{},
+	)
+
+	err := w.checkActivityTimeouts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(50), completedPendingTaskID)
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventActivityTaskTimedOut, appendedEvents[0].Type)
+	assert.Equal(t, wfID, enqueuedTask.WorkflowID)
+}
+
+func TestBackgroundWorker_CheckScheduleToStartTimeout_TerminalWorkflow(t *testing.T) {
+	wfID := uuid.New()
+	var completedPendingTaskID int64
+	var eventAppended bool
+
+	w := NewBackgroundWorker(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, _ []domain.HistoryEvent) error {
+				eventAppended = true
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{
+			GetTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return nil, nil
+			},
+			GetScheduleToCloseTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return nil, nil
+			},
+			GetScheduleToStartTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return []domain.ActivityTask{
+					{ID: 60, WorkflowID: wfID, ActivitySeqID: 5, Status: domain.TaskStatusPending},
+				}, nil
+			},
+			CompletePendingFn: func(_ context.Context, taskID int64) error {
+				completedPendingTaskID = taskID
+				return nil
+			},
+		},
+		&mockTimerRepo{},
+		&mockTxManager{},
+	)
+
+	err := w.checkActivityTimeouts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(60), completedPendingTaskID)
+	assert.False(t, eventAppended)
+}
+
 func TestBackgroundWorker_PollFiredTimers(t *testing.T) {
 	wfID := uuid.New()
 	var appendedEvents []domain.HistoryEvent

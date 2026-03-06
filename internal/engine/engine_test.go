@@ -730,6 +730,88 @@ func TestRecordActivityHeartbeat_TaskNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrTaskNotFound)
 }
 
+// --- ProcessCommands: ScheduleActivity with Schedule Timeouts ---
+
+func TestProcessCommands_ScheduleActivity_WithScheduleToCloseTimeout(t *testing.T) {
+	wfID := uuid.New()
+	var enqueuedTask domain.ActivityTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: wfID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+		},
+		&mockActivityTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.ActivityTask) error { enqueuedTask = task; return nil },
+		},
+		&mockTimerRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.ScheduleActivityTaskAttributes{
+		SeqID:                  1,
+		ActivityType:           "test",
+		Input:                  json.RawMessage(`{}`),
+		StartToCloseTimeout:    10 * time.Second,
+		ScheduleToCloseTimeout: 30 * time.Second,
+	})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandScheduleActivityTask, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, enqueuedTask.ScheduleToCloseTimeout)
+	require.NotNil(t, enqueuedTask.ScheduleToCloseTimeoutAt)
+	assert.WithinDuration(t, time.Now().Add(30*time.Second), *enqueuedTask.ScheduleToCloseTimeoutAt, 2*time.Second)
+	assert.Nil(t, enqueuedTask.ScheduleToStartTimeoutAt)
+}
+
+func TestProcessCommands_ScheduleActivity_WithScheduleToStartTimeout(t *testing.T) {
+	wfID := uuid.New()
+	var enqueuedTask domain.ActivityTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: wfID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+		},
+		&mockActivityTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.ActivityTask) error { enqueuedTask = task; return nil },
+		},
+		&mockTimerRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.ScheduleActivityTaskAttributes{
+		SeqID:                  1,
+		ActivityType:           "test",
+		Input:                  json.RawMessage(`{}`),
+		StartToCloseTimeout:    10 * time.Second,
+		ScheduleToStartTimeout: 5 * time.Second,
+	})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandScheduleActivityTask, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Second, enqueuedTask.ScheduleToStartTimeout)
+	require.NotNil(t, enqueuedTask.ScheduleToStartTimeoutAt)
+	assert.WithinDuration(t, time.Now().Add(5*time.Second), *enqueuedTask.ScheduleToStartTimeoutAt, 2*time.Second)
+	assert.Nil(t, enqueuedTask.ScheduleToCloseTimeoutAt)
+}
+
 // --- ProcessCommands: Timer ---
 
 func TestProcessCommands_StartTimer(t *testing.T) {

@@ -41,6 +41,9 @@ type ActivityTaskRepository interface {
 	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
 	UpdateHeartbeat(ctx context.Context, taskID int64) error
 	GetHeartbeatTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
+	GetScheduleToCloseTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
+	GetScheduleToStartTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
+	CompletePending(ctx context.Context, taskID int64) error
 }
 
 type TimerRepository interface {

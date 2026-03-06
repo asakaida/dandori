@@ -37,8 +37,12 @@ type ActivityTask struct {
 	Status              TaskStatus
 	ScheduledAt         time.Time
 	TimeoutAt           *time.Time
-	HeartbeatAt         *time.Time
-	HeartbeatTimeout    time.Duration
+	HeartbeatAt              *time.Time
+	HeartbeatTimeout         time.Duration
+	ScheduleToCloseTimeout   time.Duration
+	ScheduleToCloseTimeoutAt *time.Time
+	ScheduleToStartTimeout   time.Duration
+	ScheduleToStartTimeoutAt *time.Time
 }
 
 type ActivityFailure struct {

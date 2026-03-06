@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -21,12 +21,15 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+
 	databaseURL := envOrDefault("DATABASE_URL", "postgres://dandori:dandori@localhost:5432/dandori?sslmode=disable")
 	grpcPort := envOrDefault("GRPC_PORT", "7233")
 
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
+		slog.Error("failed to open database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
@@ -35,14 +38,16 @@ func main() {
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("failed to ping database: %v", err)
+		slog.Error("failed to ping database", "error", err)
+		os.Exit(1)
 	}
-	log.Println("connected to database")
+	slog.Info("connected to database")
 
 	if err := postgres.RunMigrations(context.Background(), db); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
-	log.Println("migrations complete")
+	slog.Info("migrations complete")
 
 	store := postgres.New(db)
 	eng := engine.New(
@@ -68,28 +73,29 @@ func main() {
 
 	go func() {
 		if err := bgWorker.RunActivityTimeoutChecker(ctx, 5*time.Second); err != nil && ctx.Err() == nil {
-			log.Printf("activity timeout checker stopped: %v", err)
+			slog.Error("activity timeout checker stopped", "error", err)
 		}
 	}()
 	go func() {
 		if err := bgWorker.RunHeartbeatTimeoutChecker(ctx, 5*time.Second); err != nil && ctx.Err() == nil {
-			log.Printf("heartbeat timeout checker stopped: %v", err)
+			slog.Error("heartbeat timeout checker stopped", "error", err)
 		}
 	}()
 	go func() {
 		if err := bgWorker.RunTimerPoller(ctx, 1*time.Second); err != nil && ctx.Err() == nil {
-			log.Printf("timer poller stopped: %v", err)
+			slog.Error("timer poller stopped", "error", err)
 		}
 	}()
 	go func() {
 		if err := bgWorker.RunTaskRecovery(ctx, 10*time.Second); err != nil && ctx.Err() == nil {
-			log.Printf("task recovery stopped: %v", err)
+			slog.Error("task recovery stopped", "error", err)
 		}
 	}()
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", grpcPort))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		slog.Error("failed to listen", "error", err)
+		os.Exit(1)
 	}
 
 	srv := grpc.NewServer()
@@ -97,21 +103,22 @@ func main() {
 	reflection.Register(srv)
 
 	go func() {
-		log.Printf("dandori server listening on :%s", grpcPort)
+		slog.Info("dandori server listening", "port", grpcPort)
 		if err := srv.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			slog.Error("failed to serve", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigCh
-	log.Printf("received signal %v, shutting down...", sig)
+	slog.Info("received signal, shutting down", "signal", sig.String())
 
 	cancel()
 	srv.GracefulStop()
 	db.Close()
-	log.Println("shutdown complete")
+	slog.Info("shutdown complete")
 }
 
 func envOrDefault(key, defaultVal string) string {

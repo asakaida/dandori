@@ -389,16 +389,18 @@ func (x *Command) GetAttributes() []byte {
 }
 
 type ScheduleActivityTaskAttributes struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	SeqId               int64                  `protobuf:"varint,1,opt,name=seq_id,json=seqId,proto3" json:"seq_id,omitempty"`
-	ActivityType        string                 `protobuf:"bytes,2,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
-	Input               []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
-	TaskQueue           string                 `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	StartToCloseTimeout *durationpb.Duration   `protobuf:"bytes,5,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
-	RetryPolicy         *RetryPolicy           `protobuf:"bytes,6,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
-	HeartbeatTimeout    *durationpb.Duration   `protobuf:"bytes,7,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	SeqId                  int64                  `protobuf:"varint,1,opt,name=seq_id,json=seqId,proto3" json:"seq_id,omitempty"`
+	ActivityType           string                 `protobuf:"bytes,2,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
+	Input                  []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	TaskQueue              string                 `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	StartToCloseTimeout    *durationpb.Duration   `protobuf:"bytes,5,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
+	RetryPolicy            *RetryPolicy           `protobuf:"bytes,6,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
+	HeartbeatTimeout       *durationpb.Duration   `protobuf:"bytes,7,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
+	ScheduleToCloseTimeout int64                  `protobuf:"varint,8,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
+	ScheduleToStartTimeout int64                  `protobuf:"varint,9,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ScheduleActivityTaskAttributes) Reset() {
@@ -478,6 +480,20 @@ func (x *ScheduleActivityTaskAttributes) GetHeartbeatTimeout() *durationpb.Durat
 		return x.HeartbeatTimeout
 	}
 	return nil
+}
+
+func (x *ScheduleActivityTaskAttributes) GetScheduleToCloseTimeout() int64 {
+	if x != nil {
+		return x.ScheduleToCloseTimeout
+	}
+	return 0
+}
+
+func (x *ScheduleActivityTaskAttributes) GetScheduleToStartTimeout() int64 {
+	if x != nil {
+		return x.ScheduleToStartTimeout
+	}
+	return 0
 }
 
 type CompleteWorkflowAttributes struct {
@@ -878,7 +894,7 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\x0e2\x1b.dandori.api.v1.CommandTypeR\x04type\x12\x1e\n" +
 	"\n" +
 	"attributes\x18\x02 \x01(\fR\n" +
-	"attributes\"\xe9\x02\n" +
+	"attributes\"\xdf\x03\n" +
 	"\x1eScheduleActivityTaskAttributes\x12\x15\n" +
 	"\x06seq_id\x18\x01 \x01(\x03R\x05seqId\x12#\n" +
 	"\ractivity_type\x18\x02 \x01(\tR\factivityType\x12\x14\n" +
@@ -887,7 +903,9 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"task_queue\x18\x04 \x01(\tR\ttaskQueue\x12N\n" +
 	"\x16start_to_close_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x13startToCloseTimeout\x12>\n" +
 	"\fretry_policy\x18\x06 \x01(\v2\x1b.dandori.api.v1.RetryPolicyR\vretryPolicy\x12F\n" +
-	"\x11heartbeat_timeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\x10heartbeatTimeout\"4\n" +
+	"\x11heartbeat_timeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\x10heartbeatTimeout\x129\n" +
+	"\x19schedule_to_close_timeout\x18\b \x01(\x03R\x16scheduleToCloseTimeout\x129\n" +
+	"\x19schedule_to_start_timeout\x18\t \x01(\x03R\x16scheduleToStartTimeout\"4\n" +
 	"\x1aCompleteWorkflowAttributes\x12\x16\n" +
 	"\x06result\x18\x01 \x01(\fR\x06result\"=\n" +
 	"\x16FailWorkflowAttributes\x12#\n" +

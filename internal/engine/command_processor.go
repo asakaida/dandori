@@ -56,18 +56,29 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
 		maxAttempts = a.RetryPolicy.MaxAttempts
 	}
 
+	now := time.Now()
 	task := domain.ActivityTask{
-		QueueName:           queue,
-		WorkflowID:          workflowID,
-		ActivityType:        a.ActivityType,
-		ActivityInput:       a.Input,
-		ActivitySeqID:       a.SeqID,
-		StartToCloseTimeout: a.StartToCloseTimeout,
-		HeartbeatTimeout:    a.HeartbeatTimeout,
-		Attempt:             1,
-		MaxAttempts:         maxAttempts,
-		RetryPolicy:         a.RetryPolicy,
-		ScheduledAt:         time.Now(),
+		QueueName:              queue,
+		WorkflowID:             workflowID,
+		ActivityType:           a.ActivityType,
+		ActivityInput:          a.Input,
+		ActivitySeqID:          a.SeqID,
+		StartToCloseTimeout:    a.StartToCloseTimeout,
+		HeartbeatTimeout:       a.HeartbeatTimeout,
+		ScheduleToCloseTimeout: a.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
+		Attempt:                1,
+		MaxAttempts:            maxAttempts,
+		RetryPolicy:            a.RetryPolicy,
+		ScheduledAt:            now,
+	}
+	if a.ScheduleToCloseTimeout > 0 {
+		t := now.Add(a.ScheduleToCloseTimeout)
+		task.ScheduleToCloseTimeoutAt = &t
+	}
+	if a.ScheduleToStartTimeout > 0 {
+		t := now.Add(a.ScheduleToStartTimeout)
+		task.ScheduleToStartTimeoutAt = &t
 	}
 	if err := e.activityTasks.Enqueue(ctx, task); err != nil {
 		return err

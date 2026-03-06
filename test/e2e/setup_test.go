@@ -297,6 +297,32 @@ func scheduleActivityCmdWithHeartbeat(seqID int64, actType string, input json.Ra
 	}
 }
 
+// scheduleActivityCmdWithScheduleTimeouts creates a ScheduleActivityTask command with schedule timeouts.
+func scheduleActivityCmdWithScheduleTimeouts(seqID int64, actType string, input json.RawMessage, stcTimeout time.Duration, schedCloseTimeout time.Duration, schedStartTimeout time.Duration, retryPolicy map[string]any) *apiv1.Command {
+	attrs := map[string]any{
+		"seq_id":        seqID,
+		"activity_type": actType,
+		"input":         input,
+	}
+	if stcTimeout > 0 {
+		attrs["start_to_close_timeout"] = int64(stcTimeout)
+	}
+	if schedCloseTimeout > 0 {
+		attrs["schedule_to_close_timeout"] = int64(schedCloseTimeout)
+	}
+	if schedStartTimeout > 0 {
+		attrs["schedule_to_start_timeout"] = int64(schedStartTimeout)
+	}
+	if retryPolicy != nil {
+		attrs["retry_policy"] = retryPolicy
+	}
+	data, _ := json.Marshal(attrs)
+	return &apiv1.Command{
+		Type:       apiv1.CommandType_COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: data,
+	}
+}
+
 // cancelTimerCmd creates a CancelTimer command.
 func cancelTimerCmd(seqID int64) *apiv1.Command {
 	attrs, _ := json.Marshal(map[string]any{

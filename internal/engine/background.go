@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/asakaida/dandori/internal/domain"
@@ -47,23 +47,52 @@ func (w *BackgroundWorker) RunActivityTimeoutChecker(ctx context.Context, interv
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.checkActivityTimeouts(ctx); err != nil {
-				log.Printf("activity timeout check error: %v", err)
+				slog.Error("activity timeout check error", "error", err)
 			}
 		}
 	}
 }
 
 func (w *BackgroundWorker) checkActivityTimeouts(ctx context.Context) error {
+	// StartToClose timeouts (RUNNING tasks)
 	tasks, err := w.activityTasks.GetTimedOut(ctx)
 	if err != nil {
 		return err
 	}
-
 	for _, task := range tasks {
 		if err := w.handleTimedOutTask(ctx, task); err != nil {
-			log.Printf("handle timed out task %d error: %v", task.ID, err)
+			slog.Error("handle timed out task error", "task_id", task.ID, "error", err)
 		}
 	}
+
+	// ScheduleToClose timeouts (PENDING or RUNNING tasks)
+	schedCloseTasks, err := w.activityTasks.GetScheduleToCloseTimedOut(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range schedCloseTasks {
+		if task.Status == domain.TaskStatusPending {
+			if err := w.handleScheduleToStartTimedOutTask(ctx, task); err != nil {
+				slog.Error("handle schedule-to-close timed out pending task error", "task_id", task.ID, "error", err)
+			}
+		} else {
+			if err := w.handleTimedOutTask(ctx, task); err != nil {
+				slog.Error("handle schedule-to-close timed out task error", "task_id", task.ID, "error", err)
+			}
+		}
+	}
+
+	// ScheduleToStart timeouts (PENDING tasks only)
+	schedStartTasks, err := w.activityTasks.GetScheduleToStartTimedOut(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range schedStartTasks {
+		if err := w.handleScheduleToStartTimedOutTask(ctx, task); err != nil {
+			slog.Error("handle schedule-to-start timed out task error", "task_id", task.ID, "error", err)
+		}
+	}
+
 	return nil
 }
 
@@ -102,6 +131,41 @@ func (w *BackgroundWorker) handleTimedOutTask(ctx context.Context, task domain.A
 	})
 }
 
+func (w *BackgroundWorker) handleScheduleToStartTimedOutTask(ctx context.Context, task domain.ActivityTask) error {
+	return w.tx.RunInTx(ctx, func(ctx context.Context) error {
+		wf, err := w.workflows.Get(ctx, task.WorkflowID)
+		if err != nil {
+			return err
+		}
+
+		if err := w.activityTasks.CompletePending(ctx, task.ID); err != nil {
+			return err
+		}
+
+		if wf.Status.IsTerminal() {
+			return nil
+		}
+
+		eventData, err := json.Marshal(map[string]any{
+			"activity_seq_id": task.ActivitySeqID,
+		})
+		if err != nil {
+			return err
+		}
+		if err := w.events.Append(ctx, []domain.HistoryEvent{
+			{WorkflowID: task.WorkflowID, Type: domain.EventActivityTaskTimedOut, Data: eventData},
+		}); err != nil {
+			return err
+		}
+
+		return w.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			QueueName:   wf.TaskQueue,
+			WorkflowID:  task.WorkflowID,
+			ScheduledAt: time.Now(),
+		})
+	})
+}
+
 func (w *BackgroundWorker) RunHeartbeatTimeoutChecker(ctx context.Context, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -112,7 +176,7 @@ func (w *BackgroundWorker) RunHeartbeatTimeoutChecker(ctx context.Context, inter
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.checkHeartbeatTimeouts(ctx); err != nil {
-				log.Printf("heartbeat timeout check error: %v", err)
+				slog.Error("heartbeat timeout check error", "error", err)
 			}
 		}
 	}
@@ -126,7 +190,7 @@ func (w *BackgroundWorker) checkHeartbeatTimeouts(ctx context.Context) error {
 
 	for _, task := range tasks {
 		if err := w.handleTimedOutTask(ctx, task); err != nil {
-			log.Printf("handle heartbeat timed out task %d error: %v", task.ID, err)
+			slog.Error("handle heartbeat timed out task error", "task_id", task.ID, "error", err)
 		}
 	}
 	return nil
@@ -142,7 +206,7 @@ func (w *BackgroundWorker) RunTimerPoller(ctx context.Context, interval time.Dur
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.pollFiredTimers(ctx); err != nil {
-				log.Printf("timer poller error: %v", err)
+				slog.Error("timer poller error", "error", err)
 			}
 		}
 	}
@@ -156,7 +220,7 @@ func (w *BackgroundWorker) pollFiredTimers(ctx context.Context) error {
 
 	for _, timer := range timers {
 		if err := w.handleFiredTimer(ctx, timer); err != nil {
-			log.Printf("handle fired timer %d error: %v", timer.ID, err)
+			slog.Error("handle fired timer error", "timer_id", timer.ID, "error", err)
 		}
 	}
 	return nil
@@ -210,15 +274,15 @@ func (w *BackgroundWorker) RunTaskRecovery(ctx context.Context, interval time.Du
 			return ctx.Err()
 		case <-ticker.C:
 			if n, err := w.workflowTasks.RecoverStaleTasks(ctx); err != nil {
-				log.Printf("workflow task recovery error: %v", err)
+				slog.Error("workflow task recovery error", "error", err)
 			} else if n > 0 {
-				log.Printf("recovered %d stale workflow tasks", n)
+				slog.Info("recovered stale workflow tasks", "count", n)
 			}
 
 			if n, err := w.activityTasks.RecoverStaleTasks(ctx); err != nil {
-				log.Printf("activity task recovery error: %v", err)
+				slog.Error("activity task recovery error", "error", err)
 			} else if n > 0 {
-				log.Printf("recovered %d stale activity tasks", n)
+				slog.Info("recovered stale activity tasks", "count", n)
 			}
 		}
 	}

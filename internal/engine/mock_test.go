@@ -121,16 +121,19 @@ func (m *mockWorkflowTaskRepo) DeleteByWorkflowID(ctx context.Context, workflowI
 }
 
 type mockActivityTaskRepo struct {
-	EnqueueFn               func(ctx context.Context, task domain.ActivityTask) error
-	PollFn                  func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
-	CompleteFn              func(ctx context.Context, taskID int64) error
-	GetByIDFn               func(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
-	GetTimedOutFn           func(ctx context.Context) ([]domain.ActivityTask, error)
-	RequeueFn               func(ctx context.Context, taskID int64, scheduledAt time.Time) error
-	RecoverStaleTasksFn     func(ctx context.Context) (int, error)
-	DeleteByWorkflowIDFn    func(ctx context.Context, workflowID uuid.UUID) error
-	UpdateHeartbeatFn       func(ctx context.Context, taskID int64) error
-	GetHeartbeatTimedOutFn  func(ctx context.Context) ([]domain.ActivityTask, error)
+	EnqueueFn                  func(ctx context.Context, task domain.ActivityTask) error
+	PollFn                     func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+	CompleteFn                 func(ctx context.Context, taskID int64) error
+	CompletePendingFn          func(ctx context.Context, taskID int64) error
+	GetByIDFn                  func(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
+	GetTimedOutFn              func(ctx context.Context) ([]domain.ActivityTask, error)
+	RequeueFn                  func(ctx context.Context, taskID int64, scheduledAt time.Time) error
+	RecoverStaleTasksFn        func(ctx context.Context) (int, error)
+	DeleteByWorkflowIDFn       func(ctx context.Context, workflowID uuid.UUID) error
+	UpdateHeartbeatFn          func(ctx context.Context, taskID int64) error
+	GetHeartbeatTimedOutFn     func(ctx context.Context) ([]domain.ActivityTask, error)
+	GetScheduleToCloseTimedOutFn func(ctx context.Context) ([]domain.ActivityTask, error)
+	GetScheduleToStartTimedOutFn func(ctx context.Context) ([]domain.ActivityTask, error)
 }
 
 func (m *mockActivityTaskRepo) Enqueue(ctx context.Context, task domain.ActivityTask) error {
@@ -201,6 +204,27 @@ func (m *mockActivityTaskRepo) GetHeartbeatTimedOut(ctx context.Context) ([]doma
 		return m.GetHeartbeatTimedOutFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockActivityTaskRepo) GetScheduleToCloseTimedOut(ctx context.Context) ([]domain.ActivityTask, error) {
+	if m.GetScheduleToCloseTimedOutFn != nil {
+		return m.GetScheduleToCloseTimedOutFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockActivityTaskRepo) GetScheduleToStartTimedOut(ctx context.Context) ([]domain.ActivityTask, error) {
+	if m.GetScheduleToStartTimedOutFn != nil {
+		return m.GetScheduleToStartTimedOutFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockActivityTaskRepo) CompletePending(ctx context.Context, taskID int64) error {
+	if m.CompletePendingFn != nil {
+		return m.CompletePendingFn(ctx, taskID)
+	}
+	return nil
 }
 
 type mockTimerRepo struct {
