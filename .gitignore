@@ -8,6 +8,7 @@
 # Go build output
 /cmd/dandori/dandori
 /dandori
+/dandori-cli
 
 # Test binary
 *.test
