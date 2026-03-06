@@ -19,17 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DandoriService_StartWorkflow_FullMethodName        = "/dandori.api.v1.DandoriService/StartWorkflow"
-	DandoriService_DescribeWorkflow_FullMethodName     = "/dandori.api.v1.DandoriService/DescribeWorkflow"
-	DandoriService_GetWorkflowHistory_FullMethodName   = "/dandori.api.v1.DandoriService/GetWorkflowHistory"
-	DandoriService_TerminateWorkflow_FullMethodName    = "/dandori.api.v1.DandoriService/TerminateWorkflow"
-	DandoriService_SignalWorkflow_FullMethodName       = "/dandori.api.v1.DandoriService/SignalWorkflow"
-	DandoriService_PollWorkflowTask_FullMethodName     = "/dandori.api.v1.DandoriService/PollWorkflowTask"
-	DandoriService_CompleteWorkflowTask_FullMethodName = "/dandori.api.v1.DandoriService/CompleteWorkflowTask"
-	DandoriService_FailWorkflowTask_FullMethodName     = "/dandori.api.v1.DandoriService/FailWorkflowTask"
-	DandoriService_PollActivityTask_FullMethodName     = "/dandori.api.v1.DandoriService/PollActivityTask"
-	DandoriService_CompleteActivityTask_FullMethodName = "/dandori.api.v1.DandoriService/CompleteActivityTask"
-	DandoriService_FailActivityTask_FullMethodName     = "/dandori.api.v1.DandoriService/FailActivityTask"
+	DandoriService_StartWorkflow_FullMethodName           = "/dandori.api.v1.DandoriService/StartWorkflow"
+	DandoriService_DescribeWorkflow_FullMethodName        = "/dandori.api.v1.DandoriService/DescribeWorkflow"
+	DandoriService_GetWorkflowHistory_FullMethodName      = "/dandori.api.v1.DandoriService/GetWorkflowHistory"
+	DandoriService_TerminateWorkflow_FullMethodName       = "/dandori.api.v1.DandoriService/TerminateWorkflow"
+	DandoriService_SignalWorkflow_FullMethodName          = "/dandori.api.v1.DandoriService/SignalWorkflow"
+	DandoriService_CancelWorkflow_FullMethodName          = "/dandori.api.v1.DandoriService/CancelWorkflow"
+	DandoriService_PollWorkflowTask_FullMethodName        = "/dandori.api.v1.DandoriService/PollWorkflowTask"
+	DandoriService_CompleteWorkflowTask_FullMethodName    = "/dandori.api.v1.DandoriService/CompleteWorkflowTask"
+	DandoriService_FailWorkflowTask_FullMethodName        = "/dandori.api.v1.DandoriService/FailWorkflowTask"
+	DandoriService_PollActivityTask_FullMethodName        = "/dandori.api.v1.DandoriService/PollActivityTask"
+	DandoriService_CompleteActivityTask_FullMethodName    = "/dandori.api.v1.DandoriService/CompleteActivityTask"
+	DandoriService_FailActivityTask_FullMethodName        = "/dandori.api.v1.DandoriService/FailActivityTask"
+	DandoriService_RecordActivityHeartbeat_FullMethodName = "/dandori.api.v1.DandoriService/RecordActivityHeartbeat"
 )
 
 // DandoriServiceClient is the client API for DandoriService service.
@@ -42,6 +44,7 @@ type DandoriServiceClient interface {
 	GetWorkflowHistory(ctx context.Context, in *GetWorkflowHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowHistoryResponse, error)
 	TerminateWorkflow(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*TerminateWorkflowResponse, error)
 	SignalWorkflow(ctx context.Context, in *SignalWorkflowRequest, opts ...grpc.CallOption) (*SignalWorkflowResponse, error)
+	CancelWorkflow(ctx context.Context, in *CancelWorkflowRequest, opts ...grpc.CallOption) (*CancelWorkflowResponse, error)
 	// Worker API: Workflow Task
 	PollWorkflowTask(ctx context.Context, in *PollWorkflowTaskRequest, opts ...grpc.CallOption) (*PollWorkflowTaskResponse, error)
 	CompleteWorkflowTask(ctx context.Context, in *CompleteWorkflowTaskRequest, opts ...grpc.CallOption) (*CompleteWorkflowTaskResponse, error)
@@ -50,6 +53,8 @@ type DandoriServiceClient interface {
 	PollActivityTask(ctx context.Context, in *PollActivityTaskRequest, opts ...grpc.CallOption) (*PollActivityTaskResponse, error)
 	CompleteActivityTask(ctx context.Context, in *CompleteActivityTaskRequest, opts ...grpc.CallOption) (*CompleteActivityTaskResponse, error)
 	FailActivityTask(ctx context.Context, in *FailActivityTaskRequest, opts ...grpc.CallOption) (*FailActivityTaskResponse, error)
+	// Heartbeat API
+	RecordActivityHeartbeat(ctx context.Context, in *RecordActivityHeartbeatRequest, opts ...grpc.CallOption) (*RecordActivityHeartbeatResponse, error)
 }
 
 type dandoriServiceClient struct {
@@ -104,6 +109,16 @@ func (c *dandoriServiceClient) SignalWorkflow(ctx context.Context, in *SignalWor
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SignalWorkflowResponse)
 	err := c.cc.Invoke(ctx, DandoriService_SignalWorkflow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *dandoriServiceClient) CancelWorkflow(ctx context.Context, in *CancelWorkflowRequest, opts ...grpc.CallOption) (*CancelWorkflowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelWorkflowResponse)
+	err := c.cc.Invoke(ctx, DandoriService_CancelWorkflow_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +185,16 @@ func (c *dandoriServiceClient) FailActivityTask(ctx context.Context, in *FailAct
 	return out, nil
 }
 
+func (c *dandoriServiceClient) RecordActivityHeartbeat(ctx context.Context, in *RecordActivityHeartbeatRequest, opts ...grpc.CallOption) (*RecordActivityHeartbeatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordActivityHeartbeatResponse)
+	err := c.cc.Invoke(ctx, DandoriService_RecordActivityHeartbeat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DandoriServiceServer is the server API for DandoriService service.
 // All implementations must embed UnimplementedDandoriServiceServer
 // for forward compatibility.
@@ -180,6 +205,7 @@ type DandoriServiceServer interface {
 	GetWorkflowHistory(context.Context, *GetWorkflowHistoryRequest) (*GetWorkflowHistoryResponse, error)
 	TerminateWorkflow(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error)
 	SignalWorkflow(context.Context, *SignalWorkflowRequest) (*SignalWorkflowResponse, error)
+	CancelWorkflow(context.Context, *CancelWorkflowRequest) (*CancelWorkflowResponse, error)
 	// Worker API: Workflow Task
 	PollWorkflowTask(context.Context, *PollWorkflowTaskRequest) (*PollWorkflowTaskResponse, error)
 	CompleteWorkflowTask(context.Context, *CompleteWorkflowTaskRequest) (*CompleteWorkflowTaskResponse, error)
@@ -188,6 +214,8 @@ type DandoriServiceServer interface {
 	PollActivityTask(context.Context, *PollActivityTaskRequest) (*PollActivityTaskResponse, error)
 	CompleteActivityTask(context.Context, *CompleteActivityTaskRequest) (*CompleteActivityTaskResponse, error)
 	FailActivityTask(context.Context, *FailActivityTaskRequest) (*FailActivityTaskResponse, error)
+	// Heartbeat API
+	RecordActivityHeartbeat(context.Context, *RecordActivityHeartbeatRequest) (*RecordActivityHeartbeatResponse, error)
 	mustEmbedUnimplementedDandoriServiceServer()
 }
 
@@ -213,6 +241,9 @@ func (UnimplementedDandoriServiceServer) TerminateWorkflow(context.Context, *Ter
 func (UnimplementedDandoriServiceServer) SignalWorkflow(context.Context, *SignalWorkflowRequest) (*SignalWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignalWorkflow not implemented")
 }
+func (UnimplementedDandoriServiceServer) CancelWorkflow(context.Context, *CancelWorkflowRequest) (*CancelWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelWorkflow not implemented")
+}
 func (UnimplementedDandoriServiceServer) PollWorkflowTask(context.Context, *PollWorkflowTaskRequest) (*PollWorkflowTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowTask not implemented")
 }
@@ -230,6 +261,9 @@ func (UnimplementedDandoriServiceServer) CompleteActivityTask(context.Context, *
 }
 func (UnimplementedDandoriServiceServer) FailActivityTask(context.Context, *FailActivityTaskRequest) (*FailActivityTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method FailActivityTask not implemented")
+}
+func (UnimplementedDandoriServiceServer) RecordActivityHeartbeat(context.Context, *RecordActivityHeartbeatRequest) (*RecordActivityHeartbeatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RecordActivityHeartbeat not implemented")
 }
 func (UnimplementedDandoriServiceServer) mustEmbedUnimplementedDandoriServiceServer() {}
 func (UnimplementedDandoriServiceServer) testEmbeddedByValue()                        {}
@@ -342,6 +376,24 @@ func _DandoriService_SignalWorkflow_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DandoriService_CancelWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DandoriServiceServer).CancelWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DandoriService_CancelWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DandoriServiceServer).CancelWorkflow(ctx, req.(*CancelWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DandoriService_PollWorkflowTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PollWorkflowTaskRequest)
 	if err := dec(in); err != nil {
@@ -450,6 +502,24 @@ func _DandoriService_FailActivityTask_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DandoriService_RecordActivityHeartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordActivityHeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DandoriServiceServer).RecordActivityHeartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DandoriService_RecordActivityHeartbeat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DandoriServiceServer).RecordActivityHeartbeat(ctx, req.(*RecordActivityHeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DandoriService_ServiceDesc is the grpc.ServiceDesc for DandoriService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -478,6 +548,10 @@ var DandoriService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DandoriService_SignalWorkflow_Handler,
 		},
 		{
+			MethodName: "CancelWorkflow",
+			Handler:    _DandoriService_CancelWorkflow_Handler,
+		},
+		{
 			MethodName: "PollWorkflowTask",
 			Handler:    _DandoriService_PollWorkflowTask_Handler,
 		},
@@ -500,6 +574,10 @@ var DandoriService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FailActivityTask",
 			Handler:    _DandoriService_FailActivityTask_Handler,
+		},
+		{
+			MethodName: "RecordActivityHeartbeat",
+			Handler:    _DandoriService_RecordActivityHeartbeat_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

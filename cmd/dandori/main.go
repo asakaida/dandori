@@ -72,6 +72,11 @@ func main() {
 		}
 	}()
 	go func() {
+		if err := bgWorker.RunHeartbeatTimeoutChecker(ctx, 5*time.Second); err != nil && ctx.Err() == nil {
+			log.Printf("heartbeat timeout checker stopped: %v", err)
+		}
+	}()
+	go func() {
 		if err := bgWorker.RunTimerPoller(ctx, 1*time.Second); err != nil && ctx.Err() == nil {
 			log.Printf("timer poller stopped: %v", err)
 		}

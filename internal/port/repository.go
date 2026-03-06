@@ -39,6 +39,8 @@ type ActivityTaskRepository interface {
 	Requeue(ctx context.Context, taskID int64, scheduledAt time.Time) error
 	RecoverStaleTasks(ctx context.Context) (int, error)
 	DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
+	UpdateHeartbeat(ctx context.Context, taskID int64) error
+	GetHeartbeatTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
 }
 
 type TimerRepository interface {

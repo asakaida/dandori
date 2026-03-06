@@ -14,6 +14,7 @@ service DandoriService {
   rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
   rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
   rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
+  rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
 
   // Worker API: Workflow Task
   rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
@@ -24,6 +25,9 @@ service DandoriService {
   rpc PollActivityTask(PollActivityTaskRequest) returns (PollActivityTaskResponse);
   rpc CompleteActivityTask(CompleteActivityTaskRequest) returns (CompleteActivityTaskResponse);
   rpc FailActivityTask(FailActivityTaskRequest) returns (FailActivityTaskResponse);
+
+  // Heartbeat API
+  rpc RecordActivityHeartbeat(RecordActivityHeartbeatRequest) returns (RecordActivityHeartbeatResponse);
 }
 
 // === Client API Messages ===
@@ -128,3 +132,16 @@ message FailActivityTaskRequest {
 }
 
 message FailActivityTaskResponse {}
+
+message CancelWorkflowRequest {
+  string workflow_id = 1;
+}
+
+message CancelWorkflowResponse {}
+
+message RecordActivityHeartbeatRequest {
+  int64 task_id = 1;
+  bytes details = 2;
+}
+
+message RecordActivityHeartbeatResponse {}

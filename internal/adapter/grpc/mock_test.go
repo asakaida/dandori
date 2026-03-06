@@ -17,6 +17,7 @@ type mockClientService struct {
 	GetWorkflowHistoryFn func(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
 	TerminateWorkflowFn func(ctx context.Context, id uuid.UUID, reason string) error
 	SignalWorkflowFn    func(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
+	CancelWorkflowFn   func(ctx context.Context, id uuid.UUID) error
 }
 
 func (m *mockClientService) StartWorkflow(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error) {
@@ -54,6 +55,13 @@ func (m *mockClientService) SignalWorkflow(ctx context.Context, id uuid.UUID, si
 	return nil
 }
 
+func (m *mockClientService) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
+	if m.CancelWorkflowFn != nil {
+		return m.CancelWorkflowFn(ctx, id)
+	}
+	return nil
+}
+
 // --- mockWorkflowTaskService ---
 
 type mockWorkflowTaskService struct {
@@ -86,9 +94,10 @@ func (m *mockWorkflowTaskService) FailWorkflowTask(ctx context.Context, taskID i
 // --- mockActivityTaskService ---
 
 type mockActivityTaskService struct {
-	PollActivityTaskFn     func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
-	CompleteActivityTaskFn func(ctx context.Context, taskID int64, result json.RawMessage) error
-	FailActivityTaskFn     func(ctx context.Context, taskID int64, failure domain.ActivityFailure) error
+	PollActivityTaskFn         func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+	CompleteActivityTaskFn     func(ctx context.Context, taskID int64, result json.RawMessage) error
+	FailActivityTaskFn         func(ctx context.Context, taskID int64, failure domain.ActivityFailure) error
+	RecordActivityHeartbeatFn  func(ctx context.Context, taskID int64, details json.RawMessage) error
 }
 
 func (m *mockActivityTaskService) PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error) {
@@ -108,6 +117,13 @@ func (m *mockActivityTaskService) CompleteActivityTask(ctx context.Context, task
 func (m *mockActivityTaskService) FailActivityTask(ctx context.Context, taskID int64, failure domain.ActivityFailure) error {
 	if m.FailActivityTaskFn != nil {
 		return m.FailActivityTaskFn(ctx, taskID, failure)
+	}
+	return nil
+}
+
+func (m *mockActivityTaskService) RecordActivityHeartbeat(ctx context.Context, taskID int64, details json.RawMessage) error {
+	if m.RecordActivityHeartbeatFn != nil {
+		return m.RecordActivityHeartbeatFn(ctx, taskID, details)
 	}
 	return nil
 }

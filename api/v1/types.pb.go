@@ -396,6 +396,7 @@ type ScheduleActivityTaskAttributes struct {
 	TaskQueue           string                 `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	StartToCloseTimeout *durationpb.Duration   `protobuf:"bytes,5,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
 	RetryPolicy         *RetryPolicy           `protobuf:"bytes,6,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
+	HeartbeatTimeout    *durationpb.Duration   `protobuf:"bytes,7,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -468,6 +469,13 @@ func (x *ScheduleActivityTaskAttributes) GetStartToCloseTimeout() *durationpb.Du
 func (x *ScheduleActivityTaskAttributes) GetRetryPolicy() *RetryPolicy {
 	if x != nil {
 		return x.RetryPolicy
+	}
+	return nil
+}
+
+func (x *ScheduleActivityTaskAttributes) GetHeartbeatTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.HeartbeatTimeout
 	}
 	return nil
 }
@@ -870,7 +878,7 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\x0e2\x1b.dandori.api.v1.CommandTypeR\x04type\x12\x1e\n" +
 	"\n" +
 	"attributes\x18\x02 \x01(\fR\n" +
-	"attributes\"\xa1\x02\n" +
+	"attributes\"\xe9\x02\n" +
 	"\x1eScheduleActivityTaskAttributes\x12\x15\n" +
 	"\x06seq_id\x18\x01 \x01(\x03R\x05seqId\x12#\n" +
 	"\ractivity_type\x18\x02 \x01(\tR\factivityType\x12\x14\n" +
@@ -878,7 +886,8 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"task_queue\x18\x04 \x01(\tR\ttaskQueue\x12N\n" +
 	"\x16start_to_close_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x13startToCloseTimeout\x12>\n" +
-	"\fretry_policy\x18\x06 \x01(\v2\x1b.dandori.api.v1.RetryPolicyR\vretryPolicy\"4\n" +
+	"\fretry_policy\x18\x06 \x01(\v2\x1b.dandori.api.v1.RetryPolicyR\vretryPolicy\x12F\n" +
+	"\x11heartbeat_timeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\x10heartbeatTimeout\"4\n" +
 	"\x1aCompleteWorkflowAttributes\x12\x16\n" +
 	"\x06result\x18\x01 \x01(\fR\x06result\"=\n" +
 	"\x16FailWorkflowAttributes\x12#\n" +
@@ -955,14 +964,15 @@ var file_api_v1_types_proto_depIdxs = []int32{
 	1,  // 5: dandori.api.v1.Command.type:type_name -> dandori.api.v1.CommandType
 	14, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
 	8,  // 7: dandori.api.v1.ScheduleActivityTaskAttributes.retry_policy:type_name -> dandori.api.v1.RetryPolicy
-	14, // 8: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
-	14, // 9: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
-	14, // 10: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	14, // 8: dandori.api.v1.ScheduleActivityTaskAttributes.heartbeat_timeout:type_name -> google.protobuf.Duration
+	14, // 9: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
+	14, // 10: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
+	14, // 11: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_types_proto_init() }

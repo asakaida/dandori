@@ -63,6 +63,7 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
 		ActivityInput:       a.Input,
 		ActivitySeqID:       a.SeqID,
 		StartToCloseTimeout: a.StartToCloseTimeout,
+		HeartbeatTimeout:    a.HeartbeatTimeout,
 		Attempt:             1,
 		MaxAttempts:         maxAttempts,
 		RetryPolicy:         a.RetryPolicy,

@@ -119,6 +119,11 @@ func TestMain(m *testing.M) {
 		}
 	}()
 	go func() {
+		if err := bgWorker.RunHeartbeatTimeoutChecker(bgCtx, 500*time.Millisecond); err != nil && bgCtx.Err() == nil {
+			log.Printf("heartbeat timeout checker stopped: %v", err)
+		}
+	}()
+	go func() {
 		if err := bgWorker.RunTimerPoller(bgCtx, 500*time.Millisecond); err != nil && bgCtx.Err() == nil {
 			log.Printf("timer poller stopped: %v", err)
 		}
@@ -268,6 +273,27 @@ func startTimerCmd(seqID int64, duration time.Duration) *apiv1.Command {
 	return &apiv1.Command{
 		Type:       apiv1.CommandType_COMMAND_TYPE_START_TIMER,
 		Attributes: attrs,
+	}
+}
+
+// scheduleActivityCmdWithHeartbeat creates a ScheduleActivityTask command with heartbeat_timeout.
+func scheduleActivityCmdWithHeartbeat(seqID int64, actType string, input json.RawMessage, stcTimeout time.Duration, hbTimeout time.Duration, retryPolicy map[string]any) *apiv1.Command {
+	attrs := map[string]any{
+		"seq_id":            seqID,
+		"activity_type":    actType,
+		"input":            input,
+		"heartbeat_timeout": int64(hbTimeout),
+	}
+	if stcTimeout > 0 {
+		attrs["start_to_close_timeout"] = int64(stcTimeout)
+	}
+	if retryPolicy != nil {
+		attrs["retry_policy"] = retryPolicy
+	}
+	data, _ := json.Marshal(attrs)
+	return &apiv1.Command{
+		Type:       apiv1.CommandType_COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: data,
 	}
 }
 

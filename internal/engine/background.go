@@ -102,6 +102,36 @@ func (w *BackgroundWorker) handleTimedOutTask(ctx context.Context, task domain.A
 	})
 }
 
+func (w *BackgroundWorker) RunHeartbeatTimeoutChecker(ctx context.Context, interval time.Duration) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if err := w.checkHeartbeatTimeouts(ctx); err != nil {
+				log.Printf("heartbeat timeout check error: %v", err)
+			}
+		}
+	}
+}
+
+func (w *BackgroundWorker) checkHeartbeatTimeouts(ctx context.Context) error {
+	tasks, err := w.activityTasks.GetHeartbeatTimedOut(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, task := range tasks {
+		if err := w.handleTimedOutTask(ctx, task); err != nil {
+			log.Printf("handle heartbeat timed out task %d error: %v", task.ID, err)
+		}
+	}
+	return nil
+}
+
 func (w *BackgroundWorker) RunTimerPoller(ctx context.Context, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

@@ -22,6 +22,7 @@ const (
 	EventTimerFired                 EventType = "TimerFired"
 	EventTimerCanceled              EventType = "TimerCanceled"
 	EventWorkflowSignaled           EventType = "WorkflowSignaled"
+	EventWorkflowCancelRequested    EventType = "WorkflowCancelRequested"
 )
 
 type HistoryEvent struct {

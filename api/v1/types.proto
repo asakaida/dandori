@@ -58,6 +58,7 @@ message ScheduleActivityTaskAttributes {
   string task_queue = 4;
   google.protobuf.Duration start_to_close_timeout = 5;
   RetryPolicy retry_policy = 6;
+  google.protobuf.Duration heartbeat_timeout = 7;
 }
 
 message CompleteWorkflowAttributes {

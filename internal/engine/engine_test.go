@@ -285,6 +285,56 @@ func TestSignalWorkflow_NotRunning(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
 }
 
+// --- CancelWorkflow ---
+
+func TestCancelWorkflow(t *testing.T) {
+	wfID := uuid.New()
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTask domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error { appendedEvents = events; return nil },
+		},
+		&mockWorkflowTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error { enqueuedTask = task; return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	err := e.CancelWorkflow(context.Background(), wfID)
+	require.NoError(t, err)
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventWorkflowCancelRequested, appendedEvents[0].Type)
+	assert.Equal(t, wfID, appendedEvents[0].WorkflowID)
+	assert.Equal(t, wfID, enqueuedTask.WorkflowID)
+	assert.Equal(t, "default", enqueuedTask.QueueName)
+}
+
+func TestCancelWorkflow_NotRunning(t *testing.T) {
+	wfID := uuid.New()
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	err := e.CancelWorkflow(context.Background(), wfID)
+	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
+}
+
 func TestSignalWorkflow_MultipleSignals(t *testing.T) {
 	wfID := uuid.New()
 	var appendCount int
@@ -638,6 +688,46 @@ func TestFailActivityTask_TerminalWorkflow(t *testing.T) {
 	err := e.FailActivityTask(context.Background(), 1, domain.ActivityFailure{Message: "error"})
 	require.NoError(t, err)
 	assert.True(t, completed)
+}
+
+// --- RecordActivityHeartbeat ---
+
+func TestRecordActivityHeartbeat(t *testing.T) {
+	var updatedTaskID int64
+
+	e := newTestEngine(
+		&mockWorkflowRepo{},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{
+			UpdateHeartbeatFn: func(_ context.Context, taskID int64) error {
+				updatedTaskID = taskID
+				return nil
+			},
+		},
+		&mockTimerRepo{},
+	)
+
+	err := e.RecordActivityHeartbeat(context.Background(), 42, json.RawMessage(`{"progress":50}`))
+	require.NoError(t, err)
+	assert.Equal(t, int64(42), updatedTaskID)
+}
+
+func TestRecordActivityHeartbeat_TaskNotFound(t *testing.T) {
+	e := newTestEngine(
+		&mockWorkflowRepo{},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{
+			UpdateHeartbeatFn: func(_ context.Context, _ int64) error {
+				return domain.ErrTaskNotFound
+			},
+		},
+		&mockTimerRepo{},
+	)
+
+	err := e.RecordActivityHeartbeat(context.Background(), 999, nil)
+	assert.ErrorIs(t, err, domain.ErrTaskNotFound)
 }
 
 // --- ProcessCommands: Timer ---

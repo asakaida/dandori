@@ -27,8 +27,9 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 2. ワーカーから返されたコマンドの処理（コマンド→イベント変換）
 3. タスクキューの管理（Workflow Task + Activity Taskの2種類）
 4. タイマーの管理（発火時刻到達の検知）
-5. 外部APIの提供（StartWorkflow, DescribeWorkflow, SignalWorkflow等）
+5. 外部APIの提供（StartWorkflow, DescribeWorkflow, SignalWorkflow, CancelWorkflow等）
 6. Activityタイムアウトの監視（StartToCloseTimeout超過の検知）
+7. Activityハートビートの管理（heartbeat_at更新、heartbeat_timeout超過の検知）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
 
@@ -91,8 +92,10 @@ dandori/
 │   │   └── postgres/                         # Outbound Adapter: PostgreSQL
 │   │       ├── migration/                    # SQLマイグレーション
 │   │       │   ├── 000001_initial.up.sql
-│   │       │   └── 000001_initial.down.sql
-│   │       ├── migrate.go                    # embed.FSマイグレーションランナー
+│   │       │   ├── 000001_initial.down.sql
+│   │       │   ├── 000002_heartbeat.up.sql
+│   │       │   └── 000002_heartbeat.down.sql
+│   │       ├── migrate.go                    # embed.FSマイグレーションランナー（schema_migrationsバージョン管理）
 │   │       ├── store.go                      # コネクションプール、TxManager
 │   │       ├── event.go                      # EventRepository実装
 │   │       ├── workflow_task.go               # WorkflowTaskRepository実装
@@ -125,7 +128,10 @@ dandori/
 │       ├── timeout_test.go                   # Activityタイムアウト
 │       ├── terminate_test.go                 # Terminate + 結果破棄
 │       ├── nondeterminism_test.go            # 非決定性エラー
-│       └── signal_test.go                    # Signal送信・受信・複数Signal
+│       ├── signal_test.go                    # Signal送信・受信・複数Signal
+│       ├── cancel_test.go                    # CancelWorkflow
+│       ├── parallel_activity_test.go         # 並行Activity実行
+│       └── heartbeat_test.go                 # Heartbeatタイムアウト・keepalive
 ├── docker-compose.yml
 └── go.mod
 ```
@@ -189,10 +195,7 @@ const (
     EventTimerCanceled              EventType = "TimerCanceled"
 
     EventWorkflowSignaled           EventType = "WorkflowSignaled"
-
-    // Phase 2 で追加:
-    // EventWorkflowExecutionCancelRequested
-    // EventWorkflowExecutionCanceled
+    EventWorkflowCancelRequested    EventType = "WorkflowCancelRequested"
 )
 
 type HistoryEvent struct {
@@ -228,6 +231,7 @@ type ScheduleActivityTaskAttributes struct {
     Input               json.RawMessage `json:"input"`
     TaskQueue           string          `json:"task_queue,omitempty"`
     StartToCloseTimeout time.Duration   `json:"start_to_close_timeout"`
+    HeartbeatTimeout    time.Duration   `json:"heartbeat_timeout,omitempty"`
     RetryPolicy         *RetryPolicy    `json:"retry_policy,omitempty"`
 }
 
@@ -316,6 +320,8 @@ type ActivityTask struct {
     ActivityInput       json.RawMessage
     ActivitySeqID       int64
     StartToCloseTimeout time.Duration
+    HeartbeatTimeout    time.Duration
+    HeartbeatAt         *time.Time
     Attempt             int
     MaxAttempts         int
     RetryPolicy         *RetryPolicy
@@ -349,6 +355,7 @@ type ClientService interface {
     GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
     TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error
     SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
+    CancelWorkflow(ctx context.Context, id uuid.UUID) error
 }
 
 // WorkflowTaskService はワーカーのWorkflow Task操作を定義する。
@@ -363,6 +370,7 @@ type ActivityTaskService interface {
     PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
     CompleteActivityTask(ctx context.Context, taskID int64, result json.RawMessage) error
     FailActivityTask(ctx context.Context, taskID int64, failure domain.ActivityFailure) error
+    RecordActivityHeartbeat(ctx context.Context, taskID int64, details json.RawMessage) error
 }
 
 // StartWorkflowParams はワークフロー開始のパラメータ
@@ -425,6 +433,8 @@ type ActivityTaskRepository interface {
     Complete(ctx context.Context, taskID int64) error
     GetByID(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
     GetTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
+    GetHeartbeatTimedOut(ctx context.Context) ([]domain.ActivityTask, error)
+    UpdateHeartbeat(ctx context.Context, taskID int64) error
     Requeue(ctx context.Context, taskID int64, scheduledAt time.Time) error
     RecoverStaleTasks(ctx context.Context) (int, error)
     DeleteByWorkflowID(ctx context.Context, workflowID uuid.UUID) error
@@ -762,6 +772,7 @@ type BackgroundWorker struct {
     events        port.EventRepository
     workflowTasks port.WorkflowTaskRepository
     activityTasks port.ActivityTaskRepository
+    timers        port.TimerRepository
     tx            port.TxManager
 }
 
@@ -770,12 +781,14 @@ func NewBackgroundWorker(
     events port.EventRepository,
     workflowTasks port.WorkflowTaskRepository,
     activityTasks port.ActivityTaskRepository,
+    timers port.TimerRepository,
     tx port.TxManager,
 ) *BackgroundWorker {
     return &BackgroundWorker{
         workflows: workflows, events: events,
         workflowTasks: workflowTasks,
-        activityTasks: activityTasks, tx: tx,
+        activityTasks: activityTasks,
+        timers: timers, tx: tx,
     }
 }
 
@@ -874,6 +887,7 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
         ActivityInput:       a.Input,
         ActivitySeqID:       a.SeqID,
         StartToCloseTimeout: a.StartToCloseTimeout,
+        HeartbeatTimeout:    a.HeartbeatTimeout,
         Attempt:             1,
         MaxAttempts:         maxAttempts,
         RetryPolicy:         a.RetryPolicy,
@@ -1019,7 +1033,7 @@ func main() {
     db.SetMaxIdleConns(5)
     db.SetConnMaxLifetime(5 * time.Minute)
 
-    // embed.FSマイグレーション（冪等: テーブル存在チェック）
+    // embed.FSマイグレーション（schema_migrationsテーブルによるバージョン管理）
     postgres.RunMigrations(context.Background(), db)
 
     // Outbound Adapter
@@ -1041,6 +1055,7 @@ func main() {
         store.Events(),
         store.WorkflowTasks(),
         store.ActivityTasks(),
+        store.Timers(),
         store,
     )
 
@@ -1051,6 +1066,8 @@ func main() {
 
     // バックグラウンドプロセス起動（Engineとは独立したライフサイクル）
     go bgWorker.RunActivityTimeoutChecker(ctx, 5*time.Second)
+    go bgWorker.RunHeartbeatTimeoutChecker(ctx, 5*time.Second)
+    go bgWorker.RunTimerPoller(ctx, 1*time.Second)
     go bgWorker.RunTaskRecovery(ctx, 10*time.Second)
 
     // gRPCサーバー起動（reflection有効）
@@ -1080,6 +1097,7 @@ func main() {
 | FailActivityTask | ワークフロー状態チェック + リトライ判定 + イベント記録 + タスク再投入 or Workflow Task投入 |
 | TerminateWorkflow | ワークフロー状態チェック + イベント記録 + ステータスをTERMINATEDに更新 |
 | SignalWorkflow | ワークフロー状態チェック（RUNNING確認） + WorkflowSignaledイベント記録 + Workflow Task投入 |
+| CancelWorkflow | ワークフロー状態チェック（RUNNING確認） + WorkflowCancelRequestedイベント記録 + Workflow Task投入 |
 
 ### バックグラウンドプロセス
 
@@ -1087,6 +1105,7 @@ BackgroundWorkerが管理する:
 
 - タスクタイムアウト回収（`RunTaskRecovery`）: locked_untilを超えたタスクをPENDINGに戻す（visibility timeout）
 - Activityタイムアウト監視（`RunActivityTimeoutChecker`）: timeout_atを超えたActivity Taskを検知し、ActivityTaskTimedOutイベントを記録してWorkflow Taskを生成する
+- Heartbeatタイムアウト監視（`RunHeartbeatTimeoutChecker`）: heartbeat_at + heartbeat_timeout を超過したActivity Taskを検知し、ActivityTaskTimedOutイベントを記録してWorkflow Taskを生成する（handleTimedOutTaskを再利用）
 - タイマーポーラー（`RunTimerPoller`）: 発火時刻到達のtimerを検知し、`MarkFired`（PENDINGガード付き）で二重発火を防止した上で、TimerFiredイベントを記録してWorkflow Taskを生成する
 
 各プロセスはcontext.Done()でグレースフルに停止する。
@@ -1102,12 +1121,14 @@ BackgroundWorkerが管理する:
 | GetWorkflowHistory | []HistoryEvent | ErrWorkflowNotFound |
 | TerminateWorkflow | nil | ErrWorkflowNotFound, ErrWorkflowNotRunning |
 | SignalWorkflow | nil | ErrWorkflowNotFound, ErrWorkflowNotRunning |
+| CancelWorkflow | nil | ErrWorkflowNotFound, ErrWorkflowNotRunning |
 | PollWorkflowTask | *WorkflowTaskResult (nil=タスクなし) | — |
 | CompleteWorkflowTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
 | FailWorkflowTask | nil | ErrTaskNotFound |
 | PollActivityTask | *ActivityTask (nil=タスクなし) | — |
 | CompleteActivityTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
 | FailActivityTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
+| RecordActivityHeartbeat | nil | ErrTaskNotFound |
 
 gRPCハンドラはdomainErrorToGRPC()で一元的にgRPCステータスコードに変換する:
 
@@ -1197,12 +1218,12 @@ Phase 3 で追加: StartChildWorkflow。なおSaga関連のコマンドはない
 | タイマー発火検知（TimerPoller） | TimerFired | Workflow Task生成 |
 | TerminateWorkflow API | WorkflowExecutionTerminated | ステータスをTERMINATEDに更新 |
 | SignalWorkflow API | WorkflowSignaled | Workflow Task生成 |
+| CancelWorkflow API | WorkflowCancelRequested | Workflow Task生成（ワークフロー状態は変更しない） |
+| Heartbeatタイムアウト検知 | ActivityTaskTimedOut | Workflow Task生成 |
 
 ### イベントタイプ一覧
 
-MVP + Phase 2実装済み: WorkflowExecutionStarted, WorkflowExecutionCompleted, WorkflowExecutionFailed, WorkflowExecutionTerminated, ActivityTaskScheduled, ActivityTaskCompleted, ActivityTaskFailed, ActivityTaskTimedOut, TimerStarted, TimerFired, TimerCanceled, WorkflowSignaled
-
-Phase 2（残り）: WorkflowExecutionCancelRequested, WorkflowExecutionCanceled
+MVP + Phase 2実装済み: WorkflowExecutionStarted, WorkflowExecutionCompleted, WorkflowExecutionFailed, WorkflowExecutionTerminated, ActivityTaskScheduled, ActivityTaskCompleted, ActivityTaskFailed, ActivityTaskTimedOut, TimerStarted, TimerFired, TimerCanceled, WorkflowSignaled, WorkflowCancelRequested
 
 ## 5. Saga / 補償トランザクションの設計
 
@@ -1448,6 +1469,8 @@ CREATE TABLE activity_tasks (
     activity_input         JSONB,
     activity_seq_id        BIGINT NOT NULL,
     start_to_close_timeout INTERVAL,
+    heartbeat_timeout      INTERVAL,
+    heartbeat_at           TIMESTAMPTZ,
     retry_policy           JSONB,
     attempt                INT NOT NULL DEFAULT 1,
     max_attempts           INT NOT NULL DEFAULT 3,
@@ -1467,6 +1490,10 @@ CREATE INDEX idx_activity_tasks_poll
 CREATE INDEX idx_activity_tasks_timeout
     ON activity_tasks(timeout_at)
     WHERE status = 'RUNNING' AND timeout_at IS NOT NULL;
+
+CREATE INDEX idx_activity_tasks_heartbeat
+    ON activity_tasks(heartbeat_at)
+    WHERE status = 'RUNNING' AND heartbeat_timeout IS NOT NULL;
 ```
 
 タスク取得クエリ（Activity Task）:
@@ -1480,6 +1507,11 @@ SET status = 'RUNNING',
     timeout_at = CASE
         WHEN start_to_close_timeout IS NOT NULL
         THEN NOW() + start_to_close_timeout
+        ELSE NULL
+    END,
+    heartbeat_at = CASE
+        WHEN heartbeat_timeout IS NOT NULL
+        THEN NOW()
         ELSE NULL
     END
 WHERE id = (
@@ -1515,7 +1547,7 @@ CREATE INDEX idx_timers_pending ON timers(fire_at) WHERE status = 'PENDING';
 - JSONB: ワークフロー入出力、イベントデータ、RetryPolicyの柔軟な格納
 - Advisory Lock: CompleteWorkflowTask時にworkflow_idハッシュでpg_advisory_xact_lockを取得し、同一ワークフローのWorkflow Task処理を直列化
 - UNIQUE(workflow_id, sequence_num): イベントの重複挿入を防止
-- タイムアウト検知: timeout_atカラムによるActivity StartToCloseTimeout監視
+- タイムアウト検知: timeout_atカラムによるActivity StartToCloseTimeout監視、heartbeat_at + heartbeat_timeoutによるHeartbeatタイムアウト監視
 - LISTEN/NOTIFY: タスク投入の即時通知（Phase 2）
 
 ## 8. gRPCサービス定義
@@ -1528,10 +1560,7 @@ service DandoriService {
   rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
   rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
   rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
-
-  // Phase 2:
-  // rpc CancelWorkflow(...);
-  // rpc ListWorkflows(...);
+  rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
 
   // === ワーカー向け API: Workflow Task ===
   rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
@@ -1542,9 +1571,7 @@ service DandoriService {
   rpc PollActivityTask(PollActivityTaskRequest) returns (PollActivityTaskResponse);
   rpc CompleteActivityTask(CompleteActivityTaskRequest) returns (CompleteActivityTaskResponse);
   rpc FailActivityTask(FailActivityTaskRequest) returns (FailActivityTaskResponse);
-
-  // Phase 2:
-  // rpc RecordActivityHeartbeat(...);
+  rpc RecordActivityHeartbeat(RecordActivityHeartbeatRequest) returns (RecordActivityHeartbeatResponse);
 }
 ```
 
@@ -1628,11 +1655,11 @@ MVPではDescribeWorkflowのポーリングで実現する。
 
 | テスト層 | パッケージ | テスト内容 | テスト数 |
 |---------|-----------|-----------|---------|
-| ユニットテスト | engine | モック構造体によるビジネスロジック検証 | 44 |
-| ユニットテスト | adapter/grpc (grpc_test) | モックサービスによるハンドラ・エラーマッピング検証 | 14 |
-| インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 45 |
+| ユニットテスト | engine | モック構造体によるビジネスロジック検証 | 49 |
+| ユニットテスト | adapter/grpc (grpc_test) | モックサービスによるハンドラ・エラーマッピング検証 | 17 |
+| インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 50 |
 | インテグレーションテスト | adapter/grpc (grpc_test) | testcontainers + Engine + PostgreSQL Storeの実スタック検証 | 7 |
-| E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + testcontainers + BackgroundWorker による全主要シナリオ検証 | 16 |
+| E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + testcontainers + BackgroundWorker による全主要シナリオ検証 | 21 |
 
 ### テストパターン
 

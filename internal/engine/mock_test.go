@@ -121,14 +121,16 @@ func (m *mockWorkflowTaskRepo) DeleteByWorkflowID(ctx context.Context, workflowI
 }
 
 type mockActivityTaskRepo struct {
-	EnqueueFn            func(ctx context.Context, task domain.ActivityTask) error
-	PollFn               func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
-	CompleteFn           func(ctx context.Context, taskID int64) error
-	GetByIDFn            func(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
-	GetTimedOutFn        func(ctx context.Context) ([]domain.ActivityTask, error)
-	RequeueFn            func(ctx context.Context, taskID int64, scheduledAt time.Time) error
-	RecoverStaleTasksFn  func(ctx context.Context) (int, error)
-	DeleteByWorkflowIDFn func(ctx context.Context, workflowID uuid.UUID) error
+	EnqueueFn               func(ctx context.Context, task domain.ActivityTask) error
+	PollFn                  func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+	CompleteFn              func(ctx context.Context, taskID int64) error
+	GetByIDFn               func(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
+	GetTimedOutFn           func(ctx context.Context) ([]domain.ActivityTask, error)
+	RequeueFn               func(ctx context.Context, taskID int64, scheduledAt time.Time) error
+	RecoverStaleTasksFn     func(ctx context.Context) (int, error)
+	DeleteByWorkflowIDFn    func(ctx context.Context, workflowID uuid.UUID) error
+	UpdateHeartbeatFn       func(ctx context.Context, taskID int64) error
+	GetHeartbeatTimedOutFn  func(ctx context.Context) ([]domain.ActivityTask, error)
 }
 
 func (m *mockActivityTaskRepo) Enqueue(ctx context.Context, task domain.ActivityTask) error {
@@ -185,6 +187,20 @@ func (m *mockActivityTaskRepo) DeleteByWorkflowID(ctx context.Context, workflowI
 		return m.DeleteByWorkflowIDFn(ctx, workflowID)
 	}
 	return nil
+}
+
+func (m *mockActivityTaskRepo) UpdateHeartbeat(ctx context.Context, taskID int64) error {
+	if m.UpdateHeartbeatFn != nil {
+		return m.UpdateHeartbeatFn(ctx, taskID)
+	}
+	return nil
+}
+
+func (m *mockActivityTaskRepo) GetHeartbeatTimedOut(ctx context.Context) ([]domain.ActivityTask, error) {
+	if m.GetHeartbeatTimedOutFn != nil {
+		return m.GetHeartbeatTimedOutFn(ctx)
+	}
+	return nil, nil
 }
 
 type mockTimerRepo struct {

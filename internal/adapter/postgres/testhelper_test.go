@@ -47,13 +47,15 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed to open db: %v", err)
 	}
 
-	// Run migrations
-	migrationSQL, err := os.ReadFile("migration/000001_initial.up.sql")
-	if err != nil {
-		log.Fatalf("failed to read migration: %v", err)
-	}
-	if _, err := testDB.ExecContext(ctx, string(migrationSQL)); err != nil {
-		log.Fatalf("failed to run migration: %v", err)
+	// Run all migrations via embedded files
+	for _, f := range postgres.MigrationFiles() {
+		sqlBytes, err := postgres.ReadMigrationFile(f)
+		if err != nil {
+			log.Fatalf("failed to read migration %s: %v", f, err)
+		}
+		if _, err := testDB.ExecContext(ctx, string(sqlBytes)); err != nil {
+			log.Fatalf("failed to run migration %s: %v", f, err)
+		}
 	}
 
 	code := m.Run()

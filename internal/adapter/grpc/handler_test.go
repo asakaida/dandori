@@ -266,6 +266,61 @@ func TestSignalWorkflow_NotRunning(t *testing.T) {
 	}
 }
 
+func TestCancelWorkflow_InvalidUUID(t *testing.T) {
+	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
+	_, err := h.CancelWorkflow(context.Background(), &apiv1.CancelWorkflowRequest{
+		WorkflowId: "not-a-uuid",
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.InvalidArgument {
+		t.Errorf("got code %v, want InvalidArgument", st.Code())
+	}
+}
+
+func TestCancelWorkflow_NotRunning(t *testing.T) {
+	h := adaptgrpc.NewHandler(
+		&mockClientService{CancelWorkflowFn: func(_ context.Context, _ uuid.UUID) error {
+			return domain.ErrWorkflowNotRunning
+		}},
+		&mockWorkflowTaskService{},
+		&mockActivityTaskService{},
+	)
+	_, err := h.CancelWorkflow(context.Background(), &apiv1.CancelWorkflowRequest{
+		WorkflowId: uuid.New().String(),
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.FailedPrecondition {
+		t.Errorf("got code %v, want FailedPrecondition", st.Code())
+	}
+}
+
+func TestRecordActivityHeartbeat_TaskNotFound(t *testing.T) {
+	h := adaptgrpc.NewHandler(
+		&mockClientService{},
+		&mockWorkflowTaskService{},
+		&mockActivityTaskService{RecordActivityHeartbeatFn: func(_ context.Context, _ int64, _ json.RawMessage) error {
+			return domain.ErrTaskNotFound
+		}},
+	)
+	_, err := h.RecordActivityHeartbeat(context.Background(), &apiv1.RecordActivityHeartbeatRequest{
+		TaskId:  999,
+		Details: []byte(`{}`),
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.NotFound {
+		t.Errorf("got code %v, want NotFound", st.Code())
+	}
+}
+
 func TestCompleteWorkflowTask_InvalidCommand(t *testing.T) {
 	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
 	_, err := h.CompleteWorkflowTask(context.Background(), &apiv1.CompleteWorkflowTaskRequest{

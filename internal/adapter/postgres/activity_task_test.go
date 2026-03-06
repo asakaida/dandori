@@ -271,3 +271,116 @@ func TestActivityTaskStore_RecoverStaleTasks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, task.ID, recovered.ID)
 }
+
+func TestActivityTaskStore_Enqueue_WithHeartbeat(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		QueueName:        "default",
+		WorkflowID:       wfID,
+		ActivityType:     "heartbeat-task",
+		ActivityInput:    json.RawMessage(`{}`),
+		ActivitySeqID:    0,
+		HeartbeatTimeout: 5 * time.Second,
+		Attempt:          1,
+		MaxAttempts:      1,
+	}))
+
+	// Poll to get the actual task ID, then check via GetByID
+	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Second, task.HeartbeatTimeout)
+	// After poll, heartbeat_at is initialized since heartbeat_timeout is set
+	require.NotNil(t, task.HeartbeatAt)
+}
+
+func TestActivityTaskStore_Poll_InitializesHeartbeat(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		QueueName:        "default",
+		WorkflowID:       wfID,
+		ActivityType:     "heartbeat-task",
+		ActivityInput:    json.RawMessage(`{}`),
+		ActivitySeqID:    0,
+		HeartbeatTimeout: 10 * time.Second,
+		Attempt:          1,
+		MaxAttempts:      1,
+	}))
+
+	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	require.NoError(t, err)
+	assert.Equal(t, 10*time.Second, task.HeartbeatTimeout)
+	require.NotNil(t, task.HeartbeatAt, "heartbeat_at should be initialized on poll")
+	assert.WithinDuration(t, time.Now(), *task.HeartbeatAt, 5*time.Second)
+}
+
+func TestActivityTaskStore_UpdateHeartbeat(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		QueueName:        "default",
+		WorkflowID:       wfID,
+		ActivityType:     "heartbeat-task",
+		ActivityInput:    json.RawMessage(`{}`),
+		ActivitySeqID:    0,
+		HeartbeatTimeout: 10 * time.Second,
+		Attempt:          1,
+		MaxAttempts:      1,
+	}))
+
+	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	require.NoError(t, err)
+
+	err = store.ActivityTasks().UpdateHeartbeat(ctx, task.ID)
+	require.NoError(t, err)
+
+	updated, err := store.ActivityTasks().GetByID(ctx, task.ID)
+	require.NoError(t, err)
+	require.NotNil(t, updated.HeartbeatAt)
+	assert.WithinDuration(t, time.Now(), *updated.HeartbeatAt, 5*time.Second)
+}
+
+func TestActivityTaskStore_UpdateHeartbeat_NotFound(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	err := store.ActivityTasks().UpdateHeartbeat(ctx, 99999)
+	assert.ErrorIs(t, err, domain.ErrTaskNotFound)
+}
+
+func TestActivityTaskStore_GetHeartbeatTimedOut(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+	wfID := setupWorkflow(t, ctx, store.Workflows())
+
+	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		QueueName:        "default",
+		WorkflowID:       wfID,
+		ActivityType:     "hb-timeout-task",
+		ActivityInput:    json.RawMessage(`{}`),
+		ActivitySeqID:    0,
+		HeartbeatTimeout: 1 * time.Second,
+		Attempt:          1,
+		MaxAttempts:      1,
+	}))
+
+	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	require.NoError(t, err)
+
+	// Set heartbeat_at to past to simulate timeout
+	_, err = testDB.ExecContext(ctx,
+		`UPDATE activity_tasks SET heartbeat_at = NOW() - INTERVAL '10 seconds' WHERE id = $1`, task.ID)
+	require.NoError(t, err)
+
+	timedOut, err := store.ActivityTasks().GetHeartbeatTimedOut(ctx)
+	require.NoError(t, err)
+	require.Len(t, timedOut, 1)
+	assert.Equal(t, task.ID, timedOut[0].ID)
+}

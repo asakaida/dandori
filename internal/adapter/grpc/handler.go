@@ -103,6 +103,18 @@ func (h *Handler) SignalWorkflow(ctx context.Context, req *apiv1.SignalWorkflowR
 	return &apiv1.SignalWorkflowResponse{}, nil
 }
 
+func (h *Handler) CancelWorkflow(ctx context.Context, req *apiv1.CancelWorkflowRequest) (*apiv1.CancelWorkflowResponse, error) {
+	id, err := uuid.Parse(req.GetWorkflowId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
+	}
+
+	if err := h.client.CancelWorkflow(ctx, id); err != nil {
+		return nil, domainErrorToGRPC(err)
+	}
+	return &apiv1.CancelWorkflowResponse{}, nil
+}
+
 // --- Workflow Task API ---
 
 func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowTaskRequest) (*apiv1.PollWorkflowTaskResponse, error) {
@@ -179,6 +191,13 @@ func (h *Handler) FailActivityTask(ctx context.Context, req *apiv1.FailActivityT
 		return nil, domainErrorToGRPC(err)
 	}
 	return &apiv1.FailActivityTaskResponse{}, nil
+}
+
+func (h *Handler) RecordActivityHeartbeat(ctx context.Context, req *apiv1.RecordActivityHeartbeatRequest) (*apiv1.RecordActivityHeartbeatResponse, error) {
+	if err := h.actTask.RecordActivityHeartbeat(ctx, req.GetTaskId(), json.RawMessage(req.GetDetails())); err != nil {
+		return nil, domainErrorToGRPC(err)
+	}
+	return &apiv1.RecordActivityHeartbeatResponse{}, nil
 }
 
 // --- Error conversion ---

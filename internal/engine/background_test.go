@@ -114,6 +114,53 @@ func TestBackgroundWorker_CheckActivityTimeouts_NoTimedOut(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBackgroundWorker_CheckHeartbeatTimeouts(t *testing.T) {
+	wfID := uuid.New()
+	var completedTaskID int64
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTask domain.WorkflowTask
+
+	w := NewBackgroundWorker(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = events
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTask = task
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{
+			GetHeartbeatTimedOutFn: func(_ context.Context) ([]domain.ActivityTask, error) {
+				return []domain.ActivityTask{
+					{ID: 30, WorkflowID: wfID, ActivitySeqID: 2},
+				}, nil
+			},
+			CompleteFn: func(_ context.Context, taskID int64) error {
+				completedTaskID = taskID
+				return nil
+			},
+		},
+		&mockTimerRepo{},
+		&mockTxManager{},
+	)
+
+	err := w.checkHeartbeatTimeouts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(30), completedTaskID)
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventActivityTaskTimedOut, appendedEvents[0].Type)
+	assert.Equal(t, wfID, enqueuedTask.WorkflowID)
+}
+
 func TestBackgroundWorker_PollFiredTimers(t *testing.T) {
 	wfID := uuid.New()
 	var appendedEvents []domain.HistoryEvent

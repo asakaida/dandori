@@ -32,13 +32,19 @@ func (s *ActivityTaskStore) Enqueue(ctx context.Context, task domain.ActivityTas
 		timeoutInterval = &s
 	}
 
+	var heartbeatInterval *string
+	if task.HeartbeatTimeout > 0 {
+		s := durationToInterval(task.HeartbeatTimeout)
+		heartbeatInterval = &s
+	}
+
 	_, err := s.store.conn(ctx).ExecContext(ctx,
 		`INSERT INTO activity_tasks
 			(queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
-			 start_to_close_timeout, retry_policy, attempt, max_attempts, status, scheduled_at)
-		 VALUES ($1, $2, $3, $4, $5, $6::interval, $7, $8, $9, 'PENDING', COALESCE($10, NOW()))`,
+			 start_to_close_timeout, heartbeat_timeout, retry_policy, attempt, max_attempts, status, scheduled_at)
+		 VALUES ($1, $2, $3, $4, $5, $6::interval, $7::interval, $8, $9, $10, 'PENDING', COALESCE($11, NOW()))`,
 		task.QueueName, task.WorkflowID, task.ActivityType, task.ActivityInput, task.ActivitySeqID,
-		timeoutInterval, retryPolicyJSON, task.Attempt, task.MaxAttempts,
+		timeoutInterval, heartbeatInterval, retryPolicyJSON, task.Attempt, task.MaxAttempts,
 		nullTimeIfZero(task.ScheduledAt),
 	)
 	return err
@@ -49,6 +55,8 @@ func (s *ActivityTaskStore) Poll(ctx context.Context, queueName string, workerID
 	var retryPolicyJSON []byte
 	var timeoutMicroseconds sql.NullFloat64
 	var timeoutAt sql.NullTime
+	var heartbeatAt sql.NullTime
+	var heartbeatTimeoutMicroseconds sql.NullFloat64
 
 	err := s.store.conn(ctx).QueryRowContext(ctx,
 		`UPDATE activity_tasks SET
@@ -58,6 +66,10 @@ func (s *ActivityTaskStore) Poll(ctx context.Context, queueName string, workerID
 			locked_until = NOW() + INTERVAL '30 seconds',
 			timeout_at = CASE
 				WHEN start_to_close_timeout IS NOT NULL THEN NOW() + start_to_close_timeout
+				ELSE NULL
+			END,
+			heartbeat_at = CASE
+				WHEN heartbeat_timeout IS NOT NULL THEN NOW()
 				ELSE NULL
 			END
 		 WHERE id = (
@@ -69,12 +81,14 @@ func (s *ActivityTaskStore) Poll(ctx context.Context, queueName string, workerID
 		 )
 		 RETURNING id, queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
 			EXTRACT(EPOCH FROM start_to_close_timeout) * 1000000, attempt, max_attempts,
-			retry_policy, status, scheduled_at, timeout_at`,
+			retry_policy, status, scheduled_at, timeout_at,
+			heartbeat_at, EXTRACT(EPOCH FROM heartbeat_timeout) * 1000000`,
 		queueName, workerID,
 	).Scan(
 		&task.ID, &task.QueueName, &task.WorkflowID, &task.ActivityType, &task.ActivityInput,
 		&task.ActivitySeqID, &timeoutMicroseconds, &task.Attempt, &task.MaxAttempts,
 		&retryPolicyJSON, &task.Status, &task.ScheduledAt, &timeoutAt,
+		&heartbeatAt, &heartbeatTimeoutMicroseconds,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNoTaskAvailable
@@ -88,6 +102,12 @@ func (s *ActivityTaskStore) Poll(ctx context.Context, queueName string, workerID
 	}
 	if timeoutAt.Valid {
 		task.TimeoutAt = &timeoutAt.Time
+	}
+	if heartbeatAt.Valid {
+		task.HeartbeatAt = &heartbeatAt.Time
+	}
+	if heartbeatTimeoutMicroseconds.Valid {
+		task.HeartbeatTimeout = time.Duration(int64(heartbeatTimeoutMicroseconds.Float64)) * time.Microsecond
 	}
 	if retryPolicyJSON != nil {
 		task.RetryPolicy = &domain.RetryPolicy{}
@@ -122,16 +142,20 @@ func (s *ActivityTaskStore) GetByID(ctx context.Context, taskID int64) (*domain.
 	var retryPolicyJSON []byte
 	var timeoutMicroseconds sql.NullFloat64
 	var timeoutAt sql.NullTime
+	var heartbeatAt sql.NullTime
+	var heartbeatTimeoutMicroseconds sql.NullFloat64
 
 	err := s.store.conn(ctx).QueryRowContext(ctx,
 		`SELECT id, queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
 			EXTRACT(EPOCH FROM start_to_close_timeout) * 1000000, attempt, max_attempts,
-			retry_policy, status, scheduled_at, timeout_at
+			retry_policy, status, scheduled_at, timeout_at,
+			heartbeat_at, EXTRACT(EPOCH FROM heartbeat_timeout) * 1000000
 		 FROM activity_tasks WHERE id = $1`, taskID,
 	).Scan(
 		&task.ID, &task.QueueName, &task.WorkflowID, &task.ActivityType, &task.ActivityInput,
 		&task.ActivitySeqID, &timeoutMicroseconds, &task.Attempt, &task.MaxAttempts,
 		&retryPolicyJSON, &task.Status, &task.ScheduledAt, &timeoutAt,
+		&heartbeatAt, &heartbeatTimeoutMicroseconds,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrTaskNotFound
@@ -146,6 +170,12 @@ func (s *ActivityTaskStore) GetByID(ctx context.Context, taskID int64) (*domain.
 	if timeoutAt.Valid {
 		task.TimeoutAt = &timeoutAt.Time
 	}
+	if heartbeatAt.Valid {
+		task.HeartbeatAt = &heartbeatAt.Time
+	}
+	if heartbeatTimeoutMicroseconds.Valid {
+		task.HeartbeatTimeout = time.Duration(int64(heartbeatTimeoutMicroseconds.Float64)) * time.Microsecond
+	}
 	if retryPolicyJSON != nil {
 		task.RetryPolicy = &domain.RetryPolicy{}
 		if err := json.Unmarshal(retryPolicyJSON, task.RetryPolicy); err != nil {
@@ -157,13 +187,27 @@ func (s *ActivityTaskStore) GetByID(ctx context.Context, taskID int64) (*domain.
 }
 
 func (s *ActivityTaskStore) GetTimedOut(ctx context.Context) ([]domain.ActivityTask, error) {
-	rows, err := s.store.conn(ctx).QueryContext(ctx,
+	return s.queryActivityTasks(ctx,
 		`SELECT id, queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
 			EXTRACT(EPOCH FROM start_to_close_timeout) * 1000000, attempt, max_attempts,
-			retry_policy, status, scheduled_at, timeout_at
+			retry_policy, status, scheduled_at, timeout_at,
+			heartbeat_at, EXTRACT(EPOCH FROM heartbeat_timeout) * 1000000
 		 FROM activity_tasks
-		 WHERE status = 'RUNNING' AND timeout_at < NOW()`,
-	)
+		 WHERE status = 'RUNNING' AND timeout_at < NOW()`)
+}
+
+func (s *ActivityTaskStore) GetHeartbeatTimedOut(ctx context.Context) ([]domain.ActivityTask, error) {
+	return s.queryActivityTasks(ctx,
+		`SELECT id, queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
+			EXTRACT(EPOCH FROM start_to_close_timeout) * 1000000, attempt, max_attempts,
+			retry_policy, status, scheduled_at, timeout_at,
+			heartbeat_at, EXTRACT(EPOCH FROM heartbeat_timeout) * 1000000
+		 FROM activity_tasks
+		 WHERE status = 'RUNNING' AND heartbeat_timeout IS NOT NULL AND heartbeat_at + heartbeat_timeout < NOW()`)
+}
+
+func (s *ActivityTaskStore) queryActivityTasks(ctx context.Context, query string) ([]domain.ActivityTask, error) {
+	rows, err := s.store.conn(ctx).QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -175,11 +219,14 @@ func (s *ActivityTaskStore) GetTimedOut(ctx context.Context) ([]domain.ActivityT
 		var retryPolicyJSON []byte
 		var timeoutMicroseconds sql.NullFloat64
 		var timeoutAt sql.NullTime
+		var heartbeatAt sql.NullTime
+		var heartbeatTimeoutMicroseconds sql.NullFloat64
 
 		if err := rows.Scan(
 			&task.ID, &task.QueueName, &task.WorkflowID, &task.ActivityType, &task.ActivityInput,
 			&task.ActivitySeqID, &timeoutMicroseconds, &task.Attempt, &task.MaxAttempts,
 			&retryPolicyJSON, &task.Status, &task.ScheduledAt, &timeoutAt,
+			&heartbeatAt, &heartbeatTimeoutMicroseconds,
 		); err != nil {
 			return nil, err
 		}
@@ -189,6 +236,12 @@ func (s *ActivityTaskStore) GetTimedOut(ctx context.Context) ([]domain.ActivityT
 		}
 		if timeoutAt.Valid {
 			task.TimeoutAt = &timeoutAt.Time
+		}
+		if heartbeatAt.Valid {
+			task.HeartbeatAt = &heartbeatAt.Time
+		}
+		if heartbeatTimeoutMicroseconds.Valid {
+			task.HeartbeatTimeout = time.Duration(int64(heartbeatTimeoutMicroseconds.Float64)) * time.Microsecond
 		}
 		if retryPolicyJSON != nil {
 			task.RetryPolicy = &domain.RetryPolicy{}
@@ -200,6 +253,24 @@ func (s *ActivityTaskStore) GetTimedOut(ctx context.Context) ([]domain.ActivityT
 		tasks = append(tasks, task)
 	}
 	return tasks, rows.Err()
+}
+
+func (s *ActivityTaskStore) UpdateHeartbeat(ctx context.Context, taskID int64) error {
+	res, err := s.store.conn(ctx).ExecContext(ctx,
+		`UPDATE activity_tasks SET heartbeat_at = NOW() WHERE id = $1 AND status = 'RUNNING'`,
+		taskID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrTaskNotFound
+	}
+	return nil
 }
 
 func (s *ActivityTaskStore) Requeue(ctx context.Context, taskID int64, scheduledAt time.Time) error {

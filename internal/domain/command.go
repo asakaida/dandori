@@ -27,6 +27,7 @@ type ScheduleActivityTaskAttributes struct {
 	TaskQueue           string          `json:"task_queue,omitempty"`
 	StartToCloseTimeout time.Duration   `json:"start_to_close_timeout"`
 	RetryPolicy         *RetryPolicy    `json:"retry_policy,omitempty"`
+	HeartbeatTimeout    time.Duration   `json:"heartbeat_timeout,omitempty"`
 }
 
 type CompleteWorkflowAttributes struct {
