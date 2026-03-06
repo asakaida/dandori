@@ -33,6 +33,10 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
 			if err := e.processCancelTimer(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
+		case domain.CommandStartChildWorkflow:
+			if err := e.processStartChildWorkflow(ctx, workflowID, taskQueue, cmd.Attributes, cmd.Metadata); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown command type: %s", cmd.Type)
 		}
@@ -107,8 +111,20 @@ func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UU
 	if err != nil {
 		return err
 	}
-	return e.events.Append(ctx, []domain.HistoryEvent{
+	if err := e.events.Append(ctx, []domain.HistoryEvent{
 		{WorkflowID: workflowID, Type: domain.EventWorkflowExecutionCompleted, Data: eventData},
+	}); err != nil {
+		return err
+	}
+
+	wf, err := e.workflows.Get(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+	return e.propagateToParent(ctx, wf, domain.EventChildWorkflowExecutionCompleted, map[string]any{
+		"child_workflow_id": workflowID.String(),
+		"seq_id":            wf.ParentSeqID,
+		"result":            a.Result,
 	})
 }
 
@@ -126,8 +142,20 @@ func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, 
 	if err != nil {
 		return err
 	}
-	return e.events.Append(ctx, []domain.HistoryEvent{
+	if err := e.events.Append(ctx, []domain.HistoryEvent{
 		{WorkflowID: workflowID, Type: domain.EventWorkflowExecutionFailed, Data: eventData},
+	}); err != nil {
+		return err
+	}
+
+	wf, err := e.workflows.Get(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+	return e.propagateToParent(ctx, wf, domain.EventChildWorkflowExecutionFailed, map[string]any{
+		"child_workflow_id": workflowID.String(),
+		"seq_id":            wf.ParentSeqID,
+		"error_message":     a.ErrorMessage,
 	})
 }
 
@@ -176,6 +204,71 @@ func (e *Engine) processCancelTimer(ctx context.Context, workflowID uuid.UUID, a
 	}
 	return e.events.Append(ctx, []domain.HistoryEvent{
 		{WorkflowID: workflowID, Type: domain.EventTimerCanceled, Data: eventData},
+	})
+}
+
+func (e *Engine) processStartChildWorkflow(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage, metadata map[string]string) error {
+	var a domain.StartChildWorkflowAttributes
+	if err := json.Unmarshal(attrs, &a); err != nil {
+		return fmt.Errorf("unmarshal StartChildWorkflowAttributes: %w", err)
+	}
+
+	childID := uuid.New()
+	if a.WorkflowID != "" {
+		parsed, err := uuid.Parse(a.WorkflowID)
+		if err != nil {
+			return fmt.Errorf("parse child workflow_id: %w", err)
+		}
+		childID = parsed
+	}
+
+	childQueue := a.TaskQueue
+	if childQueue == "" {
+		childQueue = taskQueue
+	}
+
+	eventData, err := marshalEventData(map[string]any{
+		"seq_id":             a.SeqID,
+		"child_workflow_id":  childID.String(),
+		"workflow_type":      a.WorkflowType,
+		"task_queue":         childQueue,
+	}, metadata)
+	if err != nil {
+		return err
+	}
+	if err := e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: workflowID, Type: domain.EventChildWorkflowExecutionStarted, Data: eventData},
+	}); err != nil {
+		return err
+	}
+
+	childWF := domain.WorkflowExecution{
+		ID:               childID,
+		WorkflowType:     a.WorkflowType,
+		TaskQueue:        childQueue,
+		Status:           domain.WorkflowStatusRunning,
+		Input:            a.Input,
+		ParentWorkflowID: &workflowID,
+		ParentSeqID:      a.SeqID,
+	}
+	if err := e.workflows.Create(ctx, childWF); err != nil {
+		return err
+	}
+
+	childEventData, err := json.Marshal(map[string]json.RawMessage{"input": a.Input})
+	if err != nil {
+		return err
+	}
+	if err := e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: childID, Type: domain.EventWorkflowExecutionStarted, Data: childEventData},
+	}); err != nil {
+		return err
+	}
+
+	return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+		QueueName:   childQueue,
+		WorkflowID:  childID,
+		ScheduledAt: time.Now(),
 	})
 }
 

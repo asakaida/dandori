@@ -30,6 +30,7 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 5. 外部APIの提供（StartWorkflow, DescribeWorkflow, SignalWorkflow, CancelWorkflow等）
 6. Activityタイムアウトの監視（StartToCloseTimeout / ScheduleToCloseTimeout / ScheduleToStartTimeout超過の検知）
 7. Activityハートビートの管理（heartbeat_at更新、heartbeat_timeout超過の検知）
+8. 子ワークフローの管理（親子関係の記録、子の完了/失敗時に親へのイベント伝搬）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
 
@@ -107,7 +108,9 @@ dandori/
 │   │       │   ├── 000002_heartbeat.up.sql
 │   │       │   ├── 000002_heartbeat.down.sql
 │   │       │   ├── 000003_activity_timeouts.up.sql
-│   │       │   └── 000003_activity_timeouts.down.sql
+│   │       │   ├── 000003_activity_timeouts.down.sql
+│   │       │   ├── 000004_child_workflow.up.sql
+│   │       │   └── 000004_child_workflow.down.sql
 │   │       ├── migrate.go                    # embed.FSマイグレーションランナー（schema_migrationsバージョン管理）
 │   │       ├── store.go                      # コネクションプール、TxManager
 │   │       ├── event.go                      # EventRepository実装
@@ -146,7 +149,9 @@ dandori/
 │       ├── parallel_activity_test.go         # 並行Activity実行
 │       ├── heartbeat_test.go                 # Heartbeatタイムアウト・keepalive
 │       ├── schedule_timeout_test.go         # ScheduleToClose/ScheduleToStartタイムアウト
-│       └── list_test.go                     # ListWorkflows API（一覧・フィルタ・ページネーション）
+│       ├── list_test.go                     # ListWorkflows API（一覧・フィルタ・ページネーション）
+│       ├── saga_test.go                     # Saga補償トランザクション
+│       └── child_workflow_test.go           # Child Workflow（親→子起動・完了/失敗伝搬）
 ├── docker-compose.yml
 └── go.mod
 ```
@@ -210,8 +215,11 @@ const (
     EventTimerFired                 EventType = "TimerFired"
     EventTimerCanceled              EventType = "TimerCanceled"
 
-    EventWorkflowSignaled           EventType = "WorkflowSignaled"
-    EventWorkflowCancelRequested    EventType = "WorkflowCancelRequested"
+    EventWorkflowSignaled                   EventType = "WorkflowSignaled"
+    EventWorkflowCancelRequested            EventType = "WorkflowCancelRequested"
+    EventChildWorkflowExecutionStarted      EventType = "ChildWorkflowExecutionStarted"
+    EventChildWorkflowExecutionCompleted    EventType = "ChildWorkflowExecutionCompleted"
+    EventChildWorkflowExecutionFailed       EventType = "ChildWorkflowExecutionFailed"
 )
 
 type HistoryEvent struct {
@@ -234,6 +242,7 @@ const (
     CommandFailWorkflow         CommandType = "FailWorkflow"
     CommandStartTimer           CommandType = "StartTimer"
     CommandCancelTimer          CommandType = "CancelTimer"
+    CommandStartChildWorkflow   CommandType = "StartChildWorkflow"
 )
 
 type Command struct {
@@ -299,15 +308,17 @@ func (s WorkflowStatus) IsTerminal() bool {
 }
 
 type WorkflowExecution struct {
-    ID           uuid.UUID
-    WorkflowType string
-    TaskQueue    string
-    Status       WorkflowStatus
-    Input        json.RawMessage
-    Result       json.RawMessage
-    Error        string
-    CreatedAt    time.Time
-    ClosedAt     *time.Time
+    ID               uuid.UUID
+    WorkflowType     string
+    TaskQueue        string
+    Status           WorkflowStatus
+    Input            json.RawMessage
+    Result           json.RawMessage
+    Error            string
+    CreatedAt        time.Time
+    ClosedAt         *time.Time
+    ParentWorkflowID *uuid.UUID
+    ParentSeqID      int64
 }
 ```
 
@@ -1224,18 +1235,20 @@ replay時にこのseqIDをキーとしてイベント履歴を検索する。
 | FailWorkflow | ワークフロー異常終了 |
 | StartTimer | タイマー開始（SeqID, Duration指定） |
 | CancelTimer | タイマーキャンセル（PENDING状態のタイマーのみキャンセル可能） |
+| StartChildWorkflow | 子ワークフロー起動（SeqID, WorkflowType, TaskQueue, Input指定） |
 
-Phase 3 で追加予定: StartChildWorkflow。なおSaga関連のコマンドはない（Pure SDKパターンのため、サーバーは通常のActivityコマンドとして処理する）。observability用にCompleteWorkflowTaskのmetadataフィールドを追加済み（Sprint 12）。SDK側がsaga実行中かどうかのヒントを付与可能
+Saga関連のコマンドはない（Pure SDKパターンのため、サーバーは通常のActivityコマンドとして処理する）。observability用にCompleteWorkflowTaskのmetadataフィールドを追加済み（Sprint 12）。SDK側がsaga実行中かどうかのヒントを付与可能
 
 ### コマンド → イベント変換
 
 | コマンド | 生成されるイベント | 副作用 |
 |---------|-------------------|--------|
 | ScheduleActivityTask | ActivityTaskScheduled | Activity Taskをキューに投入 |
-| CompleteWorkflow | WorkflowExecutionCompleted | ステータスをCOMPLETEDに更新 |
-| FailWorkflow | WorkflowExecutionFailed | ステータスをFAILEDに更新 |
+| CompleteWorkflow | WorkflowExecutionCompleted | ステータスをCOMPLETEDに更新。親WFがある場合はChildWorkflowExecutionCompletedイベント伝搬 |
+| FailWorkflow | WorkflowExecutionFailed | ステータスをFAILEDに更新。親WFがある場合はChildWorkflowExecutionFailedイベント伝搬 |
 | StartTimer | TimerStarted | timersテーブルにPENDINGレコード作成 |
 | CancelTimer | TimerCanceled（PENDINGの場合のみ） | timersテーブルのstatusをCANCELEDに更新。既にFIREDの場合はno-op |
+| StartChildWorkflow | ChildWorkflowExecutionStarted（親）+ WorkflowExecutionStarted（子） | 子ワークフロー作成 + 子のWorkflow Task投入 |
 
 ### 外部トリガー → イベント
 
@@ -1251,10 +1264,14 @@ Phase 3 で追加予定: StartChildWorkflow。なおSaga関連のコマンドは
 | SignalWorkflow API | WorkflowSignaled | Workflow Task生成 |
 | CancelWorkflow API | WorkflowCancelRequested | Workflow Task生成（ワークフロー状態は変更しない） |
 | Heartbeatタイムアウト検知 | ActivityTaskTimedOut | Workflow Task生成 |
+| 子ワークフロー完了 | ChildWorkflowExecutionCompleted（親） | 親のWorkflow Task生成 |
+| 子ワークフロー失敗 | ChildWorkflowExecutionFailed（親） | 親のWorkflow Task生成 |
 
 ### イベントタイプ一覧
 
 MVP + Phase 2実装済み: WorkflowExecutionStarted, WorkflowExecutionCompleted, WorkflowExecutionFailed, WorkflowExecutionTerminated, ActivityTaskScheduled, ActivityTaskCompleted, ActivityTaskFailed, ActivityTaskTimedOut, TimerStarted, TimerFired, TimerCanceled, WorkflowSignaled, WorkflowCancelRequested
+
+Phase 3実装済み: ChildWorkflowExecutionStarted, ChildWorkflowExecutionCompleted, ChildWorkflowExecutionFailed
 
 ## 5. Saga / 補償トランザクションの設計
 
@@ -1360,6 +1377,45 @@ func (s *Saga) Compensate(ctx workflow.Context, originalErr error) error { ... }
 | ワーカーがクラッシュ | deterministic replayで状態復元。補償の途中からでも再開可能 |
 | 補償が冪等でない | ユーザー責任。ドキュメントで冪等性の重要性を明記する |
 
+## 5b. Child Workflowの設計
+
+### 概要
+
+親ワークフローから子ワークフローを起動し、子の完了/失敗が親に自動伝搬される仕組み。
+
+### データモデル
+
+`workflow_executions`テーブルに`parent_workflow_id`と`parent_seq_id`カラムを追加。子ワークフローは親のWorkflow IDとStartChildWorkflowコマンドのSeqIDを保持する。
+
+### StartChildWorkflowコマンドの処理フロー
+
+1. ワーカーがStartChildWorkflowコマンドを送信（SeqID, WorkflowType, TaskQueue, Input指定）
+2. Engine（processStartChildWorkflow）が子ワークフローを作成（ParentWorkflowID, ParentSeqID付き）
+3. 親ワークフローにChildWorkflowExecutionStartedイベントを記録
+4. 子ワークフローにWorkflowExecutionStartedイベントを記録
+5. 子ワークフローのWorkflow Taskをキューに投入
+6. TaskQueue未指定の場合は親のTaskQueueを継承
+
+### 子ワークフロー完了/失敗時の親への伝搬
+
+propagateToParentヘルパーで共通処理:
+
+1. 子ワークフローのParentWorkflowIDがnilなら何もしない（通常のワークフロー）
+2. 親ワークフローをGet
+3. 親ワークフローがRUNNINGでなければ何もしない（既に終了済み）
+4. 親ワークフローにChildWorkflowExecutionCompleted/Failedイベントを記録
+5. 親ワークフローのWorkflow Taskをキューに投入
+
+この伝搬はprocessCompleteWorkflow、processFailWorkflow、FailWorkflowTaskの各処理末尾で実行される。
+
+### Child Workflowのエッジケース
+
+| ケース | 対応 |
+|--------|------|
+| 親が既に終了済み | 伝搬をスキップ（親のステータスがRUNNINGでない場合） |
+| 子ワークフローが通常のワークフロー | ParentWorkflowIDがnilなので伝搬処理は発生しない |
+| FailWorkflowTaskで子が失敗 | 親にChildWorkflowExecutionFailedイベントを伝搬 |
+
 ## 6. workflow.Contextの設計（Go SDKリポジトリで実装）
 
 ### 内部構造
@@ -1452,10 +1508,14 @@ CREATE TABLE workflow_executions (
     error_message   TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    closed_at       TIMESTAMPTZ
+    closed_at       TIMESTAMPTZ,
+    parent_workflow_id UUID REFERENCES workflow_executions(id),
+    parent_seq_id  INTEGER
 );
 
 CREATE INDEX idx_workflow_executions_status ON workflow_executions(status);
+CREATE INDEX idx_workflow_executions_parent ON workflow_executions(parent_workflow_id)
+    WHERE parent_workflow_id IS NOT NULL;
 ```
 
 ### workflow_events テーブル
@@ -1723,11 +1783,11 @@ MVPではDescribeWorkflowのポーリングで実現する。
 
 | テスト層 | パッケージ | テスト内容 | テスト数 |
 |---------|-----------|-----------|---------|
-| ユニットテスト | engine | モック構造体によるビジネスロジック検証 | 52 |
+| ユニットテスト | engine | モック構造体によるビジネスロジック検証 | 65 |
 | ユニットテスト | adapter/grpc (grpc_test) | モックサービスによるハンドラ・エラーマッピング検証 | 12 |
-| インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 66 |
+| インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 68 |
 | インテグレーションテスト | adapter/grpc (grpc_test) | testcontainers + Engine + PostgreSQL Storeの実スタック検証 | 8 |
-| E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + testcontainers + BackgroundWorker による全主要シナリオ検証 | 26 |
+| E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + testcontainers + BackgroundWorker による全主要シナリオ検証 | 31 |
 
 ### テストパターン
 

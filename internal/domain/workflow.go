@@ -21,13 +21,15 @@ func (s WorkflowStatus) IsTerminal() bool {
 }
 
 type WorkflowExecution struct {
-	ID           uuid.UUID
-	WorkflowType string
-	TaskQueue    string
-	Status       WorkflowStatus
-	Input        json.RawMessage
-	Result       json.RawMessage
-	Error        string
-	CreatedAt    time.Time
-	ClosedAt     *time.Time
+	ID               uuid.UUID
+	WorkflowType     string
+	TaskQueue        string
+	Status           WorkflowStatus
+	Input            json.RawMessage
+	Result           json.RawMessage
+	Error            string
+	CreatedAt        time.Time
+	ClosedAt         *time.Time
+	ParentWorkflowID *uuid.UUID
+	ParentSeqID      int64
 }

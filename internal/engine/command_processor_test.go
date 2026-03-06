@@ -113,9 +113,13 @@ func TestProcessCommands_ScheduleActivity_RetryPolicyPropagation(t *testing.T) {
 func TestProcessCommands_CompleteWorkflow(t *testing.T) {
 	var updatedStatus domain.WorkflowStatus
 	var appendedEvents []domain.HistoryEvent
+	wfID := uuid.New()
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusCompleted}, nil
+			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, _ string) error {
 				updatedStatus = status
 				return nil
@@ -132,7 +136,6 @@ func TestProcessCommands_CompleteWorkflow(t *testing.T) {
 		&mockTimerRepo{},
 	)
 
-	wfID := uuid.New()
 	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{
 		Result: json.RawMessage(`{"done":true}`),
 	})
@@ -150,9 +153,13 @@ func TestProcessCommands_CompleteWorkflow(t *testing.T) {
 func TestProcessCommands_FailWorkflow(t *testing.T) {
 	var updatedStatus domain.WorkflowStatus
 	var updatedErrMsg string
+	wfID := uuid.New()
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusFailed}, nil
+			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, errMsg string) error {
 				updatedStatus = status
 				updatedErrMsg = errMsg
@@ -165,7 +172,6 @@ func TestProcessCommands_FailWorkflow(t *testing.T) {
 		&mockTimerRepo{},
 	)
 
-	wfID := uuid.New()
 	attrs, _ := json.Marshal(domain.FailWorkflowAttributes{
 		ErrorMessage: "workflow failed",
 	})

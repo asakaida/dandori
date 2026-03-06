@@ -323,6 +323,23 @@ func scheduleActivityCmdWithScheduleTimeouts(seqID int64, actType string, input 
 	}
 }
 
+// startChildWorkflowCmd creates a StartChildWorkflow command.
+func startChildWorkflowCmd(seqID int64, workflowType string, taskQueue string, input json.RawMessage) *apiv1.Command {
+	attrs := map[string]any{
+		"seq_id":        seqID,
+		"workflow_type": workflowType,
+		"input":         input,
+	}
+	if taskQueue != "" {
+		attrs["task_queue"] = taskQueue
+	}
+	data, _ := json.Marshal(attrs)
+	return &apiv1.Command{
+		Type:       apiv1.CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW,
+		Attributes: data,
+	}
+}
+
 // cancelTimerCmd creates a CancelTimer command.
 func cancelTimerCmd(seqID int64) *apiv1.Command {
 	attrs, _ := json.Marshal(map[string]any{

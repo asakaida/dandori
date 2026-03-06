@@ -561,7 +561,7 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 13 - Child Workflow
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: ワークフローから子ワークフローを起動し、子の完了/失敗が親に伝搬される仕組みを実装する
 
@@ -569,34 +569,35 @@ Sprint 12の位置づけの根拠:
 
 - 新コマンド `StartChildWorkflow` → Engine内で子ワークフロー作成 + `ChildWorkflowExecutionStarted` イベント記録
 - 子ワークフロー完了/失敗時にEngine層で親ワークフローへ `ChildWorkflowExecutionCompleted` / `ChildWorkflowExecutionFailed` イベント伝搬 + WorkflowTask投入
-- migration 000005: `workflow_executions` に `parent_workflow_id`, `parent_seq_id` カラム追加
-- 子ワークフローの `parent_seq_id` は親の `ScheduleChildWorkflow` コマンドに対応するイベントのsequence_num
+- migration 000004: `workflow_executions` に `parent_workflow_id`, `parent_seq_id` カラム追加
+- 子ワークフローの `parent_seq_id` は親の `StartChildWorkflow` コマンドのSeqIDに対応
+- `propagateToParent` ヘルパーで完了/失敗時の親への伝搬を共通化（processCompleteWorkflow, processFailWorkflow, FailWorkflowTaskの3箇所から呼び出し）
+- TaskQueue未指定時は親のTaskQueueを継承
 
 タスク:
 
-- [ ] internal/adapter/postgres/migration/000005_child_workflow.up.sql — `workflow_executions` に `parent_workflow_id UUID REFERENCES workflow_executions(id)`, `parent_seq_id INTEGER` カラム追加（カラム存在チェック）
-- [ ] internal/adapter/postgres/migration/000005_child_workflow.down.sql
-- [ ] internal/domain/event.go — 新EventType追加: `ChildWorkflowExecutionStarted`, `ChildWorkflowExecutionCompleted`, `ChildWorkflowExecutionFailed`
-- [ ] internal/domain/command.go — 新CommandType追加: `StartChildWorkflow`。`StartChildWorkflowAttributes`（workflow_id, workflow_type, task_queue, input）定義
-- [ ] internal/domain/workflow.go — `WorkflowExecution` に `ParentWorkflowID`, `ParentSeqID` フィールド追加
-- [ ] internal/port/repository.go — `WorkflowRepository` に `GetByParentWorkflowID(ctx, parentID) ([]WorkflowExecution, error)` 追加。`WorkflowRepository.Create` に `parentWorkflowID`, `parentSeqID` パラメータ追加
-- [ ] internal/adapter/postgres/workflow.go — `Create` で `parent_workflow_id`, `parent_seq_id` 保存。`GetByParentWorkflowID` 実装
-- [ ] internal/engine/command_processor.go — `processStartChildWorkflow`: 子ワークフロー作成（parent情報付き） + ChildWorkflowExecutionStartedイベント + 子のWorkflowTask投入
-- [ ] internal/engine/engine.go — `CompleteWorkflowTask`（processCompleteWorkflow / processFailWorkflow）内で parent_workflow_id が非NULLの場合、親へイベント伝搬 + WorkflowTask投入
-- [ ] api/v1/types.proto — `CommandType` に `START_CHILD_WORKFLOW = 7` 追加。`StartChildWorkflowAttributes` メッセージ追加。`EventType` に `CHILD_WORKFLOW_EXECUTION_STARTED/COMPLETED/FAILED` 追加
-- [ ] internal/adapter/grpc/handler.go — ChildWorkflow関連のマッピング追加
-- [ ] internal/adapter/postgres/workflow_test.go — 親子関係のCRUDテスト
-- [ ] internal/engine/engine_test.go — ChildWorkflow開始・完了・失敗伝搬のユニットテスト
-- [ ] test/e2e/ — 親→子→完了→親通知の E2Eテスト。子失敗→親通知のE2Eテスト
+- [x] internal/adapter/postgres/migration/000004_child_workflow.up.sql — `workflow_executions` に `parent_workflow_id UUID REFERENCES workflow_executions(id)`, `parent_seq_id INTEGER` カラム追加（カラム存在チェック）
+- [x] internal/adapter/postgres/migration/000004_child_workflow.down.sql
+- [x] internal/domain/event.go — 新EventType追加: `ChildWorkflowExecutionStarted`, `ChildWorkflowExecutionCompleted`, `ChildWorkflowExecutionFailed`
+- [x] internal/domain/command.go — 新CommandType追加: `StartChildWorkflow`。`StartChildWorkflowAttributes`（seq_id, workflow_id, workflow_type, task_queue, input）定義
+- [x] internal/domain/workflow.go — `WorkflowExecution` に `ParentWorkflowID`, `ParentSeqID` フィールド追加
+- [x] internal/adapter/postgres/workflow.go — `Create`/`Get`/`List` で `parent_workflow_id`, `parent_seq_id` 対応
+- [x] internal/engine/command_processor.go — `processStartChildWorkflow`: 子ワークフロー作成（parent情報付き） + ChildWorkflowExecutionStartedイベント + 子のWorkflowTask投入。processCompleteWorkflow/processFailWorkflow末尾にpropagateToParent追加
+- [x] internal/engine/engine.go — `propagateToParent` ヘルパー追加。`FailWorkflowTask` 末尾にpropagateToParent追加
+- [x] api/v1/types.proto — `CommandType` に `START_CHILD_WORKFLOW = 7` 追加。`StartChildWorkflowAttributes` メッセージ追加。`WorkflowExecution` に `parent_workflow_id`, `parent_seq_id` 追加
+- [x] internal/adapter/grpc/handler.go — commandTypeFromProto、domainWorkflowToProtoにChildWorkflow関連マッピング追加
+- [x] internal/adapter/postgres/workflow_test.go — 親子関係のCreate/Get/Listテスト
+- [x] internal/engine/engine_test.go — ChildWorkflow開始・完了・失敗伝搬のユニットテスト（7テスト追加）
+- [x] test/e2e/child_workflow_test.go — 親→子→完了→親通知のE2Eテスト、子失敗→親通知のE2Eテスト
 
 完了条件:
 
-- [ ] StartChildWorkflowコマンド → 子ワークフロー作成 + ChildWorkflowExecutionStartedイベント
-- [ ] 子ワークフロー完了 → 親に ChildWorkflowExecutionCompleted イベント + WorkflowTask投入
-- [ ] 子ワークフロー失敗 → 親に ChildWorkflowExecutionFailed イベント + WorkflowTask投入
-- [ ] migration 000005 が冪等に適用される
-- [ ] `go test -v -race ./...` — 全テスト通過
-- [ ] `go vet ./...` — クリーン
+- [x] StartChildWorkflowコマンド → 子ワークフロー作成 + ChildWorkflowExecutionStartedイベント
+- [x] 子ワークフロー完了 → 親に ChildWorkflowExecutionCompleted イベント + WorkflowTask投入
+- [x] 子ワークフロー失敗 → 親に ChildWorkflowExecutionFailed イベント + WorkflowTask投入
+- [x] migration 000004 が冪等に適用される
+- [x] `go test -v -race ./...` — 全テスト通過
+- [x] `go vet ./...` — クリーン
 
 ### Sprint 14 - SideEffect + Query
 

@@ -27,6 +27,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		{version: 1, name: "initial", file: "migration/000001_initial.up.sql"},
 		{version: 2, name: "heartbeat", file: "migration/000002_heartbeat.up.sql"},
 		{version: 3, name: "activity_timeouts", file: "migration/000003_activity_timeouts.up.sql"},
+		{version: 4, name: "child_workflow", file: "migration/000004_child_workflow.up.sql"},
 	}
 	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
 

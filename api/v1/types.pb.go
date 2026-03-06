@@ -87,6 +87,7 @@ const (
 	CommandType_COMMAND_TYPE_FAIL_WORKFLOW          CommandType = 3
 	CommandType_COMMAND_TYPE_START_TIMER            CommandType = 4
 	CommandType_COMMAND_TYPE_CANCEL_TIMER           CommandType = 5
+	CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW   CommandType = 7
 )
 
 // Enum value maps for CommandType.
@@ -98,6 +99,7 @@ var (
 		3: "COMMAND_TYPE_FAIL_WORKFLOW",
 		4: "COMMAND_TYPE_START_TIMER",
 		5: "COMMAND_TYPE_CANCEL_TIMER",
+		7: "COMMAND_TYPE_START_CHILD_WORKFLOW",
 	}
 	CommandType_value = map[string]int32{
 		"COMMAND_TYPE_UNSPECIFIED":            0,
@@ -106,6 +108,7 @@ var (
 		"COMMAND_TYPE_FAIL_WORKFLOW":          3,
 		"COMMAND_TYPE_START_TIMER":            4,
 		"COMMAND_TYPE_CANCEL_TIMER":           5,
+		"COMMAND_TYPE_START_CHILD_WORKFLOW":   7,
 	}
 )
 
@@ -137,19 +140,21 @@ func (CommandType) EnumDescriptor() ([]byte, []int) {
 }
 
 type WorkflowExecution struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Id            string                  `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	WorkflowType  string                  `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	TaskQueue     string                  `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	Status        WorkflowExecutionStatus `protobuf:"varint,4,opt,name=status,proto3,enum=dandori.api.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	Input         []byte                  `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
-	Result        []byte                  `protobuf:"bytes,6,opt,name=result,proto3" json:"result,omitempty"`
-	ErrorMessage  string                  `protobuf:"bytes,7,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	CreatedAt     *timestamppb.Timestamp  `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp  `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	ClosedAt      *timestamppb.Timestamp  `protobuf:"bytes,10,opt,name=closed_at,json=closedAt,proto3" json:"closed_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState  `protogen:"open.v1"`
+	Id               string                  `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WorkflowType     string                  `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	TaskQueue        string                  `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	Status           WorkflowExecutionStatus `protobuf:"varint,4,opt,name=status,proto3,enum=dandori.api.v1.WorkflowExecutionStatus" json:"status,omitempty"`
+	Input            []byte                  `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
+	Result           []byte                  `protobuf:"bytes,6,opt,name=result,proto3" json:"result,omitempty"`
+	ErrorMessage     string                  `protobuf:"bytes,7,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	CreatedAt        *timestamppb.Timestamp  `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt        *timestamppb.Timestamp  `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ClosedAt         *timestamppb.Timestamp  `protobuf:"bytes,10,opt,name=closed_at,json=closedAt,proto3" json:"closed_at,omitempty"`
+	ParentWorkflowId string                  `protobuf:"bytes,11,opt,name=parent_workflow_id,json=parentWorkflowId,proto3" json:"parent_workflow_id,omitempty"`
+	ParentSeqId      int64                   `protobuf:"varint,12,opt,name=parent_seq_id,json=parentSeqId,proto3" json:"parent_seq_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *WorkflowExecution) Reset() {
@@ -250,6 +255,20 @@ func (x *WorkflowExecution) GetClosedAt() *timestamppb.Timestamp {
 		return x.ClosedAt
 	}
 	return nil
+}
+
+func (x *WorkflowExecution) GetParentWorkflowId() string {
+	if x != nil {
+		return x.ParentWorkflowId
+	}
+	return ""
+}
+
+func (x *WorkflowExecution) GetParentSeqId() int64 {
+	if x != nil {
+		return x.ParentSeqId
+	}
+	return 0
 }
 
 type HistoryEvent struct {
@@ -808,6 +827,82 @@ func (x *ActivityFailure) GetNonRetryable() bool {
 	return false
 }
 
+type StartChildWorkflowAttributes struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeqId         int64                  `protobuf:"varint,1,opt,name=seq_id,json=seqId,proto3" json:"seq_id,omitempty"`
+	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	WorkflowType  string                 `protobuf:"bytes,3,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	TaskQueue     string                 `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	Input         []byte                 `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartChildWorkflowAttributes) Reset() {
+	*x = StartChildWorkflowAttributes{}
+	mi := &file_api_v1_types_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartChildWorkflowAttributes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartChildWorkflowAttributes) ProtoMessage() {}
+
+func (x *StartChildWorkflowAttributes) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_types_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartChildWorkflowAttributes.ProtoReflect.Descriptor instead.
+func (*StartChildWorkflowAttributes) Descriptor() ([]byte, []int) {
+	return file_api_v1_types_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *StartChildWorkflowAttributes) GetSeqId() int64 {
+	if x != nil {
+		return x.SeqId
+	}
+	return 0
+}
+
+func (x *StartChildWorkflowAttributes) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *StartChildWorkflowAttributes) GetWorkflowType() string {
+	if x != nil {
+		return x.WorkflowType
+	}
+	return ""
+}
+
+func (x *StartChildWorkflowAttributes) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
+}
+
+func (x *StartChildWorkflowAttributes) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
 type WorkflowSignaledAttributes struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SignalName    string                 `protobuf:"bytes,1,opt,name=signal_name,json=signalName,proto3" json:"signal_name,omitempty"`
@@ -818,7 +913,7 @@ type WorkflowSignaledAttributes struct {
 
 func (x *WorkflowSignaledAttributes) Reset() {
 	*x = WorkflowSignaledAttributes{}
-	mi := &file_api_v1_types_proto_msgTypes[10]
+	mi := &file_api_v1_types_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -830,7 +925,7 @@ func (x *WorkflowSignaledAttributes) String() string {
 func (*WorkflowSignaledAttributes) ProtoMessage() {}
 
 func (x *WorkflowSignaledAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_types_proto_msgTypes[10]
+	mi := &file_api_v1_types_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -843,7 +938,7 @@ func (x *WorkflowSignaledAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowSignaledAttributes.ProtoReflect.Descriptor instead.
 func (*WorkflowSignaledAttributes) Descriptor() ([]byte, []int) {
-	return file_api_v1_types_proto_rawDescGZIP(), []int{10}
+	return file_api_v1_types_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *WorkflowSignaledAttributes) GetSignalName() string {
@@ -864,7 +959,7 @@ var File_api_v1_types_proto protoreflect.FileDescriptor
 
 const file_api_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xaa\x03\n" +
+	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xfc\x03\n" +
 	"\x11WorkflowExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\x12\x1d\n" +
@@ -879,7 +974,9 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x127\n" +
 	"\tclosed_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\"\xda\x01\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\x12,\n" +
+	"\x12parent_workflow_id\x18\v \x01(\tR\x10parentWorkflowId\x12\"\n" +
+	"\rparent_seq_id\x18\f \x01(\x03R\vparentSeqId\"\xda\x01\n" +
 	"\fHistoryEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -923,7 +1020,15 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x0fActivityFailure\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12#\n" +
-	"\rnon_retryable\x18\x03 \x01(\bR\fnonRetryable\"S\n" +
+	"\rnon_retryable\x18\x03 \x01(\bR\fnonRetryable\"\xb0\x01\n" +
+	"\x1cStartChildWorkflowAttributes\x12\x15\n" +
+	"\x06seq_id\x18\x01 \x01(\x03R\x05seqId\x12\x1f\n" +
+	"\vworkflow_id\x18\x02 \x01(\tR\n" +
+	"workflowId\x12#\n" +
+	"\rworkflow_type\x18\x03 \x01(\tR\fworkflowType\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x04 \x01(\tR\ttaskQueue\x12\x14\n" +
+	"\x05input\x18\x05 \x01(\fR\x05input\"S\n" +
 	"\x1aWorkflowSignaledAttributes\x12\x1f\n" +
 	"\vsignal_name\x18\x01 \x01(\tR\n" +
 	"signalName\x12\x14\n" +
@@ -933,14 +1038,15 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"!WORKFLOW_EXECUTION_STATUS_RUNNING\x10\x01\x12'\n" +
 	"#WORKFLOW_EXECUTION_STATUS_COMPLETED\x10\x02\x12$\n" +
 	" WORKFLOW_EXECUTION_STATUS_FAILED\x10\x03\x12(\n" +
-	"$WORKFLOW_EXECUTION_STATUS_TERMINATED\x10\x04*\xd5\x01\n" +
+	"$WORKFLOW_EXECUTION_STATUS_TERMINATED\x10\x04*\xfc\x01\n" +
 	"\vCommandType\x12\x1c\n" +
 	"\x18COMMAND_TYPE_UNSPECIFIED\x10\x00\x12'\n" +
 	"#COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK\x10\x01\x12\"\n" +
 	"\x1eCOMMAND_TYPE_COMPLETE_WORKFLOW\x10\x02\x12\x1e\n" +
 	"\x1aCOMMAND_TYPE_FAIL_WORKFLOW\x10\x03\x12\x1c\n" +
 	"\x18COMMAND_TYPE_START_TIMER\x10\x04\x12\x1d\n" +
-	"\x19COMMAND_TYPE_CANCEL_TIMER\x10\x05B*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
+	"\x19COMMAND_TYPE_CANCEL_TIMER\x10\x05\x12%\n" +
+	"!COMMAND_TYPE_START_CHILD_WORKFLOW\x10\aB*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_types_proto_rawDescOnce sync.Once
@@ -955,7 +1061,7 @@ func file_api_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_api_v1_types_proto_goTypes = []any{
 	(WorkflowExecutionStatus)(0),           // 0: dandori.api.v1.WorkflowExecutionStatus
 	(CommandType)(0),                       // 1: dandori.api.v1.CommandType
@@ -969,23 +1075,24 @@ var file_api_v1_types_proto_goTypes = []any{
 	(*StartTimerAttributes)(nil),           // 9: dandori.api.v1.StartTimerAttributes
 	(*CancelTimerAttributes)(nil),          // 10: dandori.api.v1.CancelTimerAttributes
 	(*ActivityFailure)(nil),                // 11: dandori.api.v1.ActivityFailure
-	(*WorkflowSignaledAttributes)(nil),     // 12: dandori.api.v1.WorkflowSignaledAttributes
-	(*timestamppb.Timestamp)(nil),          // 13: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),            // 14: google.protobuf.Duration
+	(*StartChildWorkflowAttributes)(nil),   // 12: dandori.api.v1.StartChildWorkflowAttributes
+	(*WorkflowSignaledAttributes)(nil),     // 13: dandori.api.v1.WorkflowSignaledAttributes
+	(*timestamppb.Timestamp)(nil),          // 14: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),            // 15: google.protobuf.Duration
 }
 var file_api_v1_types_proto_depIdxs = []int32{
 	0,  // 0: dandori.api.v1.WorkflowExecution.status:type_name -> dandori.api.v1.WorkflowExecutionStatus
-	13, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
-	13, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
-	13, // 4: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
+	14, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
+	14, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
+	14, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
+	14, // 4: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
 	1,  // 5: dandori.api.v1.Command.type:type_name -> dandori.api.v1.CommandType
-	14, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
+	15, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
 	8,  // 7: dandori.api.v1.ScheduleActivityTaskAttributes.retry_policy:type_name -> dandori.api.v1.RetryPolicy
-	14, // 8: dandori.api.v1.ScheduleActivityTaskAttributes.heartbeat_timeout:type_name -> google.protobuf.Duration
-	14, // 9: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
-	14, // 10: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
-	14, // 11: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
+	15, // 8: dandori.api.v1.ScheduleActivityTaskAttributes.heartbeat_timeout:type_name -> google.protobuf.Duration
+	15, // 9: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
+	15, // 10: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
+	15, // 11: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
 	12, // [12:12] is the sub-list for method output_type
 	12, // [12:12] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name
@@ -1004,7 +1111,7 @@ func file_api_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_types_proto_rawDesc), len(file_api_v1_types_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

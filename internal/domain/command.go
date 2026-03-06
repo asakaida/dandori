@@ -13,6 +13,7 @@ const (
 	CommandFailWorkflow         CommandType = "FailWorkflow"
 	CommandStartTimer           CommandType = "StartTimer"
 	CommandCancelTimer          CommandType = "CancelTimer"
+	CommandStartChildWorkflow   CommandType = "StartChildWorkflow"
 )
 
 type Command struct {
@@ -48,4 +49,12 @@ type StartTimerAttributes struct {
 
 type CancelTimerAttributes struct {
 	SeqID int64 `json:"seq_id"`
+}
+
+type StartChildWorkflowAttributes struct {
+	SeqID        int64           `json:"seq_id"`
+	WorkflowID   string          `json:"workflow_id,omitempty"`
+	WorkflowType string          `json:"workflow_type"`
+	TaskQueue    string          `json:"task_queue,omitempty"`
+	Input        json.RawMessage `json:"input"`
 }

@@ -453,6 +453,9 @@ func TestFailWorkflowTask(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusFailed}, nil
+			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, _ string) error {
 				updatedStatus = status
 				return nil
@@ -1012,4 +1015,370 @@ func TestProcessCommands_CancelTimer_AlreadyFired(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.False(t, eventAppended)
+}
+
+// --- StartChildWorkflow ---
+
+func TestProcessCommands_StartChildWorkflow(t *testing.T) {
+	parentID := uuid.New()
+	var createdWF domain.WorkflowExecution
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedWFTask domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == parentID {
+					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusRunning}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error { createdWF = wf; return nil },
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = append(appendedEvents, events...)
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: parentID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+			EnqueueFn:  func(_ context.Context, task domain.WorkflowTask) error { enqueuedWFTask = task; return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.StartChildWorkflowAttributes{
+		SeqID:        1,
+		WorkflowType: "ChildWF",
+		Input:        json.RawMessage(`{"key":"val"}`),
+	})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandStartChildWorkflow, Attributes: attrs},
+	})
+	require.NoError(t, err)
+
+	// Child WF created with parent info
+	assert.Equal(t, "ChildWF", createdWF.WorkflowType)
+	assert.Equal(t, "parent-queue", createdWF.TaskQueue)
+	assert.Equal(t, domain.WorkflowStatusRunning, createdWF.Status)
+	require.NotNil(t, createdWF.ParentWorkflowID)
+	assert.Equal(t, parentID, *createdWF.ParentWorkflowID)
+	assert.Equal(t, int64(1), createdWF.ParentSeqID)
+
+	// Events: ChildWorkflowExecutionStarted (parent) + WorkflowExecutionStarted (child)
+	require.Len(t, appendedEvents, 2)
+	assert.Equal(t, domain.EventChildWorkflowExecutionStarted, appendedEvents[0].Type)
+	assert.Equal(t, parentID, appendedEvents[0].WorkflowID)
+	assert.Equal(t, domain.EventWorkflowExecutionStarted, appendedEvents[1].Type)
+	assert.Equal(t, createdWF.ID, appendedEvents[1].WorkflowID)
+
+	// Child WT enqueued
+	assert.Equal(t, createdWF.ID, enqueuedWFTask.WorkflowID)
+	assert.Equal(t, "parent-queue", enqueuedWFTask.QueueName)
+}
+
+func TestProcessCommands_StartChildWorkflow_TaskQueueFallback(t *testing.T) {
+	parentID := uuid.New()
+	var createdWF domain.WorkflowExecution
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == parentID {
+					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusRunning}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error { createdWF = wf; return nil },
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: parentID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	// With explicit task_queue
+	attrs, _ := json.Marshal(domain.StartChildWorkflowAttributes{
+		SeqID:        1,
+		WorkflowType: "ChildWF",
+		TaskQueue:    "child-queue",
+		Input:        json.RawMessage(`{}`),
+	})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandStartChildWorkflow, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "child-queue", createdWF.TaskQueue)
+}
+
+func TestProcessCommands_CompleteWorkflow_PropagateToParent(t *testing.T) {
+	parentID := uuid.New()
+	childID := uuid.New()
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTasks []domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == childID {
+					return &domain.WorkflowExecution{
+						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusCompleted,
+						ParentWorkflowID: &parentID, ParentSeqID: 1,
+					}, nil
+				}
+				if id == parentID {
+					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusRunning}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error {
+				return nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = append(appendedEvents, events...)
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: childID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTasks = append(enqueuedTasks, task)
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{Result: json.RawMessage(`{"done":true}`)})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandCompleteWorkflow, Attributes: attrs},
+	})
+	require.NoError(t, err)
+
+	// WorkflowExecutionCompleted (child) + ChildWorkflowExecutionCompleted (parent)
+	require.Len(t, appendedEvents, 2)
+	assert.Equal(t, domain.EventWorkflowExecutionCompleted, appendedEvents[0].Type)
+	assert.Equal(t, childID, appendedEvents[0].WorkflowID)
+	assert.Equal(t, domain.EventChildWorkflowExecutionCompleted, appendedEvents[1].Type)
+	assert.Equal(t, parentID, appendedEvents[1].WorkflowID)
+
+	// Parent WT enqueued
+	require.Len(t, enqueuedTasks, 1)
+	assert.Equal(t, parentID, enqueuedTasks[0].WorkflowID)
+	assert.Equal(t, "parent-queue", enqueuedTasks[0].QueueName)
+}
+
+func TestProcessCommands_CompleteWorkflow_NoParent(t *testing.T) {
+	childID := uuid.New()
+	var enqueuedTasks []domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusCompleted}, nil
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error {
+				return nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: childID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTasks = append(enqueuedTasks, task)
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{Result: json.RawMessage(`{}`)})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandCompleteWorkflow, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, enqueuedTasks)
+}
+
+func TestProcessCommands_CompleteWorkflow_ParentNotRunning(t *testing.T) {
+	parentID := uuid.New()
+	childID := uuid.New()
+	var enqueuedTasks []domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == childID {
+					return &domain.WorkflowExecution{
+						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusCompleted,
+						ParentWorkflowID: &parentID, ParentSeqID: 1,
+					}, nil
+				}
+				if id == parentID {
+					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusCompleted}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error {
+				return nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: childID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTasks = append(enqueuedTasks, task)
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{Result: json.RawMessage(`{}`)})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandCompleteWorkflow, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, enqueuedTasks)
+}
+
+func TestProcessCommands_FailWorkflow_PropagateToParent(t *testing.T) {
+	parentID := uuid.New()
+	childID := uuid.New()
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTasks []domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == childID {
+					return &domain.WorkflowExecution{
+						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusFailed,
+						ParentWorkflowID: &parentID, ParentSeqID: 2,
+					}, nil
+				}
+				if id == parentID {
+					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusRunning}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error {
+				return nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = append(appendedEvents, events...)
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, taskID int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: taskID, WorkflowID: childID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTasks = append(enqueuedTasks, task)
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.FailWorkflowAttributes{ErrorMessage: "child failed"})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandFailWorkflow, Attributes: attrs},
+	})
+	require.NoError(t, err)
+
+	// WorkflowExecutionFailed (child) + ChildWorkflowExecutionFailed (parent)
+	require.Len(t, appendedEvents, 2)
+	assert.Equal(t, domain.EventWorkflowExecutionFailed, appendedEvents[0].Type)
+	assert.Equal(t, domain.EventChildWorkflowExecutionFailed, appendedEvents[1].Type)
+	assert.Equal(t, parentID, appendedEvents[1].WorkflowID)
+
+	require.Len(t, enqueuedTasks, 1)
+	assert.Equal(t, parentID, enqueuedTasks[0].WorkflowID)
+}
+
+func TestFailWorkflowTask_PropagateToParent(t *testing.T) {
+	parentID := uuid.New()
+	childID := uuid.New()
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTasks []domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == childID {
+					return &domain.WorkflowExecution{
+						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusFailed,
+						ParentWorkflowID: &parentID, ParentSeqID: 1,
+					}, nil
+				}
+				if id == parentID {
+					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusRunning}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error {
+				return nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = append(appendedEvents, events...)
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, _ int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: 1, WorkflowID: childID}, nil
+			},
+			CompleteFn: func(_ context.Context, _ int64) error { return nil },
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTasks = append(enqueuedTasks, task)
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	err := e.FailWorkflowTask(context.Background(), 1, "panic", "something broke")
+	require.NoError(t, err)
+
+	// WorkflowExecutionFailed (child) + ChildWorkflowExecutionFailed (parent)
+	require.Len(t, appendedEvents, 2)
+	assert.Equal(t, domain.EventWorkflowExecutionFailed, appendedEvents[0].Type)
+	assert.Equal(t, domain.EventChildWorkflowExecutionFailed, appendedEvents[1].Type)
+	assert.Equal(t, parentID, appendedEvents[1].WorkflowID)
+
+	require.Len(t, enqueuedTasks, 1)
+	assert.Equal(t, parentID, enqueuedTasks[0].WorkflowID)
 }

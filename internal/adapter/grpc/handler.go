@@ -289,6 +289,10 @@ func domainWorkflowToProto(wf *domain.WorkflowExecution) *apiv1.WorkflowExecutio
 	if wf.ClosedAt != nil {
 		pb.ClosedAt = timestamppb.New(*wf.ClosedAt)
 	}
+	if wf.ParentWorkflowID != nil {
+		pb.ParentWorkflowId = wf.ParentWorkflowID.String()
+		pb.ParentSeqId = wf.ParentSeqID
+	}
 	return pb
 }
 
@@ -351,6 +355,8 @@ func commandTypeFromProto(ct apiv1.CommandType) (domain.CommandType, error) {
 		return domain.CommandStartTimer, nil
 	case apiv1.CommandType_COMMAND_TYPE_CANCEL_TIMER:
 		return domain.CommandCancelTimer, nil
+	case apiv1.CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW:
+		return domain.CommandStartChildWorkflow, nil
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "unknown command type: %v", ct)
 	}

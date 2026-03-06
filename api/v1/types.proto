@@ -22,6 +22,7 @@ enum CommandType {
   COMMAND_TYPE_FAIL_WORKFLOW = 3;
   COMMAND_TYPE_START_TIMER = 4;
   COMMAND_TYPE_CANCEL_TIMER = 5;
+  COMMAND_TYPE_START_CHILD_WORKFLOW = 7;
 }
 
 message WorkflowExecution {
@@ -35,6 +36,8 @@ message WorkflowExecution {
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
   google.protobuf.Timestamp closed_at = 10;
+  string parent_workflow_id = 11;
+  int64 parent_seq_id = 12;
 }
 
 message HistoryEvent {
@@ -91,6 +94,14 @@ message ActivityFailure {
   string message = 1;
   string type = 2;
   bool non_retryable = 3;
+}
+
+message StartChildWorkflowAttributes {
+  int64 seq_id = 1;
+  string workflow_id = 2;
+  string workflow_type = 3;
+  string task_queue = 4;
+  bytes input = 5;
 }
 
 message WorkflowSignaledAttributes {

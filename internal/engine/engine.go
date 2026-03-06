@@ -298,8 +298,20 @@ func (e *Engine) FailWorkflowTask(ctx context.Context, taskID int64, cause strin
 		if err != nil {
 			return err
 		}
-		return e.events.Append(ctx, []domain.HistoryEvent{
+		if err := e.events.Append(ctx, []domain.HistoryEvent{
 			{WorkflowID: task.WorkflowID, Type: domain.EventWorkflowExecutionFailed, Data: eventData},
+		}); err != nil {
+			return err
+		}
+
+		wf, err := e.workflows.Get(ctx, task.WorkflowID)
+		if err != nil {
+			return err
+		}
+		return e.propagateToParent(ctx, wf, domain.EventChildWorkflowExecutionFailed, map[string]any{
+			"child_workflow_id": task.WorkflowID.String(),
+			"seq_id":            wf.ParentSeqID,
+			"error_message":     message,
 		})
 	})
 }
@@ -404,5 +416,35 @@ func (e *Engine) FailActivityTask(ctx context.Context, taskID int64, failure dom
 		}
 
 		return e.activityTasks.Requeue(ctx, taskID, computeNextRetryTime(task))
+	})
+}
+
+func (e *Engine) propagateToParent(ctx context.Context, childWF *domain.WorkflowExecution, eventType domain.EventType, data map[string]any) error {
+	if childWF.ParentWorkflowID == nil {
+		return nil
+	}
+
+	parentWF, err := e.workflows.Get(ctx, *childWF.ParentWorkflowID)
+	if err != nil {
+		return err
+	}
+	if parentWF.Status != domain.WorkflowStatusRunning {
+		return nil
+	}
+
+	eventData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	if err := e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: parentWF.ID, Type: eventType, Data: eventData},
+	}); err != nil {
+		return err
+	}
+
+	return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+		QueueName:   parentWF.TaskQueue,
+		WorkflowID:  parentWF.ID,
+		ScheduledAt: time.Now(),
 	})
 }

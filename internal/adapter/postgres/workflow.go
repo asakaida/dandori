@@ -19,8 +19,8 @@ type WorkflowStore struct {
 
 func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution) error {
 	res, err := s.store.conn(ctx).ExecContext(ctx,
-		`INSERT INTO workflow_executions (id, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, NOW())
+		`INSERT INTO workflow_executions (id, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at, parent_workflow_id, parent_seq_id)
+		 VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, NOW(), $6, $7)
 		 ON CONFLICT (id) DO UPDATE SET
 			workflow_type = EXCLUDED.workflow_type,
 			task_queue = EXCLUDED.task_queue,
@@ -29,9 +29,11 @@ func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution)
 			result = NULL,
 			error_message = NULL,
 			closed_at = NULL,
-			updated_at = NOW()
+			updated_at = NOW(),
+			parent_workflow_id = EXCLUDED.parent_workflow_id,
+			parent_seq_id = EXCLUDED.parent_seq_id
 		 WHERE workflow_executions.status IN ('COMPLETED', 'FAILED', 'TERMINATED')`,
-		wf.ID, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input,
+		wf.ID, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input, wf.ParentWorkflowID, wf.ParentSeqID,
 	)
 	if err != nil {
 		return err
@@ -51,12 +53,15 @@ func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.Workflow
 	var input, result []byte
 	var errMsg sql.NullString
 	var closedAt sql.NullTime
+	var parentWFID sql.NullString
+	var parentSeqID sql.NullInt64
 	err := s.store.conn(ctx).QueryRowContext(ctx,
-		`SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at
+		`SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id
 		 FROM workflow_executions WHERE id = $1`, id,
 	).Scan(
 		&wf.ID, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 		&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
+		&parentWFID, &parentSeqID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrWorkflowNotFound
@@ -72,11 +77,21 @@ func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.Workflow
 	if closedAt.Valid {
 		wf.ClosedAt = &closedAt.Time
 	}
+	if parentWFID.Valid {
+		parsed, err := uuid.Parse(parentWFID.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse parent_workflow_id: %w", err)
+		}
+		wf.ParentWorkflowID = &parsed
+	}
+	if parentSeqID.Valid {
+		wf.ParentSeqID = parentSeqID.Int64
+	}
 	return &wf, nil
 }
 
 func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
-	query := `SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at
+	query := `SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id
 		 FROM workflow_executions WHERE 1=1`
 	args := []any{}
 	argIdx := 1
@@ -118,9 +133,12 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 		var input, result []byte
 		var errMsg sql.NullString
 		var closedAt sql.NullTime
+		var parentWFID sql.NullString
+		var parentSeqID sql.NullInt64
 		if err := rows.Scan(
 			&wf.ID, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 			&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
+			&parentWFID, &parentSeqID,
 		); err != nil {
 			return nil, err
 		}
@@ -131,6 +149,16 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 		}
 		if closedAt.Valid {
 			wf.ClosedAt = &closedAt.Time
+		}
+		if parentWFID.Valid {
+			parsed, err := uuid.Parse(parentWFID.String)
+			if err != nil {
+				return nil, fmt.Errorf("parse parent_workflow_id: %w", err)
+			}
+			wf.ParentWorkflowID = &parsed
+		}
+		if parentSeqID.Valid {
+			wf.ParentSeqID = parentSeqID.Int64
 		}
 		workflows = append(workflows, wf)
 	}

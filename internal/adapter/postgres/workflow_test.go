@@ -294,6 +294,79 @@ func TestWorkflowStore_List_OrderDesc(t *testing.T) {
 	assert.True(t, workflows[1].CreatedAt.After(workflows[2].CreatedAt) || workflows[1].CreatedAt.Equal(workflows[2].CreatedAt))
 }
 
+func TestWorkflowStore_Create_Get_WithParent(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	parentID := uuid.New()
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           parentID,
+		WorkflowType: "parent-wf",
+		TaskQueue:    "default",
+		Status:       domain.WorkflowStatusRunning,
+	}))
+
+	childID := uuid.New()
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:               childID,
+		WorkflowType:     "child-wf",
+		TaskQueue:        "default",
+		Status:           domain.WorkflowStatusRunning,
+		Input:            json.RawMessage(`{"child":true}`),
+		ParentWorkflowID: &parentID,
+		ParentSeqID:      3,
+	}))
+
+	wf, err := store.Workflows().Get(ctx, childID)
+	require.NoError(t, err)
+	assert.Equal(t, childID, wf.ID)
+	assert.Equal(t, "child-wf", wf.WorkflowType)
+	require.NotNil(t, wf.ParentWorkflowID)
+	assert.Equal(t, parentID, *wf.ParentWorkflowID)
+	assert.Equal(t, int64(3), wf.ParentSeqID)
+}
+
+func TestWorkflowStore_List_WithParent(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	parentID := uuid.New()
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           parentID,
+		WorkflowType: "parent-wf",
+		TaskQueue:    "default",
+		Status:       domain.WorkflowStatusRunning,
+	}))
+
+	childID := uuid.New()
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:               childID,
+		WorkflowType:     "child-wf",
+		TaskQueue:        "default",
+		Status:           domain.WorkflowStatusRunning,
+		ParentWorkflowID: &parentID,
+		ParentSeqID:      1,
+	}))
+	time.Sleep(10 * time.Millisecond)
+
+	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{PageSize: 10})
+	require.NoError(t, err)
+	require.Len(t, workflows, 2)
+
+	// Find child in results
+	var child *domain.WorkflowExecution
+	for i := range workflows {
+		if workflows[i].ID == childID {
+			child = &workflows[i]
+			break
+		}
+	}
+	require.NotNil(t, child)
+	require.NotNil(t, child.ParentWorkflowID)
+	assert.Equal(t, parentID, *child.ParentWorkflowID)
+	assert.Equal(t, int64(1), child.ParentSeqID)
+}
+
 func TestWorkflowStore_UpdateStatus_Failed(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()
