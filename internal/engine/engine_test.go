@@ -22,7 +22,7 @@ func TestStartWorkflow_NewWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn:    func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) { return nil, domain.ErrWorkflowNotFound },
+			GetFn:    func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) { return nil, domain.ErrWorkflowNotFound },
 			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error { createdWF = wf; return nil },
 		},
 		&mockEventRepo{
@@ -56,7 +56,7 @@ func TestStartWorkflow_NewWorkflow(t *testing.T) {
 func TestStartWorkflow_AutoGenerateID(t *testing.T) {
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn:    func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) { return nil, domain.ErrWorkflowNotFound },
+			GetFn:    func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) { return nil, domain.ErrWorkflowNotFound },
 			CreateFn: func(_ context.Context, _ domain.WorkflowExecution) error { return nil },
 		},
 		&mockEventRepo{},
@@ -78,7 +78,7 @@ func TestStartWorkflow_AlreadyRunning(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -103,7 +103,7 @@ func TestStartWorkflow_RecreateTerminal(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 			CreateFn: func(_ context.Context, _ domain.WorkflowExecution) error { return nil },
@@ -143,7 +143,7 @@ func TestDescribeWorkflow(t *testing.T) {
 	expected := &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusRunning}
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) { return expected, nil },
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) { return expected, nil },
 		},
 		&mockEventRepo{},
 		&mockWorkflowTaskRepo{},
@@ -152,7 +152,7 @@ func TestDescribeWorkflow(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	wf, err := e.DescribeWorkflow(context.Background(), wfID)
+	wf, err := e.DescribeWorkflow(context.Background(), "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, expected, wf)
 }
@@ -167,7 +167,7 @@ func TestDescribeWorkflow_NotFound(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	_, err := e.DescribeWorkflow(context.Background(), uuid.New())
+	_, err := e.DescribeWorkflow(context.Background(), "default", uuid.New())
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotFound)
 }
 
@@ -177,7 +177,11 @@ func TestGetWorkflowHistory(t *testing.T) {
 	wfID := uuid.New()
 	expected := []domain.HistoryEvent{{ID: 1, WorkflowID: wfID, Type: domain.EventWorkflowExecutionStarted}}
 	e := newTestEngine(
-		&mockWorkflowRepo{},
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
 		&mockEventRepo{
 			GetByWorkflowIDFn: func(_ context.Context, _ uuid.UUID) ([]domain.HistoryEvent, error) { return expected, nil },
 		},
@@ -187,7 +191,7 @@ func TestGetWorkflowHistory(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	events, err := e.GetWorkflowHistory(context.Background(), wfID)
+	events, err := e.GetWorkflowHistory(context.Background(), "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, expected, events)
 }
@@ -201,7 +205,7 @@ func TestTerminateWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusRunning}, nil
 			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, _ string) error {
@@ -218,7 +222,7 @@ func TestTerminateWorkflow(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	err := e.TerminateWorkflow(context.Background(), wfID, "test reason")
+	err := e.TerminateWorkflow(context.Background(), "default", wfID, "test reason")
 	require.NoError(t, err)
 	assert.Equal(t, domain.WorkflowStatusTerminated, updatedStatus)
 	require.Len(t, appendedEvents, 1)
@@ -229,7 +233,7 @@ func TestTerminateWorkflow_NotRunning(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},
@@ -240,7 +244,7 @@ func TestTerminateWorkflow_NotRunning(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	err := e.TerminateWorkflow(context.Background(), wfID, "reason")
+	err := e.TerminateWorkflow(context.Background(), "default", wfID, "reason")
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
 }
 
@@ -253,7 +257,7 @@ func TestSignalWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -268,7 +272,7 @@ func TestSignalWorkflow(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	err := e.SignalWorkflow(context.Background(), wfID, "approval", json.RawMessage(`{"approved":true}`))
+	err := e.SignalWorkflow(context.Background(), "default", wfID, "approval", json.RawMessage(`{"approved":true}`))
 	require.NoError(t, err)
 	require.Len(t, appendedEvents, 1)
 	assert.Equal(t, domain.EventWorkflowSignaled, appendedEvents[0].Type)
@@ -281,7 +285,7 @@ func TestSignalWorkflow_NotRunning(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},
@@ -292,7 +296,7 @@ func TestSignalWorkflow_NotRunning(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	err := e.SignalWorkflow(context.Background(), wfID, "approval", json.RawMessage(`{}`))
+	err := e.SignalWorkflow(context.Background(), "default", wfID, "approval", json.RawMessage(`{}`))
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
 }
 
@@ -305,7 +309,7 @@ func TestCancelWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -320,7 +324,7 @@ func TestCancelWorkflow(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	err := e.CancelWorkflow(context.Background(), wfID)
+	err := e.CancelWorkflow(context.Background(), "default", wfID)
 	require.NoError(t, err)
 	require.Len(t, appendedEvents, 1)
 	assert.Equal(t, domain.EventWorkflowCancelRequested, appendedEvents[0].Type)
@@ -333,7 +337,7 @@ func TestCancelWorkflow_NotRunning(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},
@@ -344,7 +348,7 @@ func TestCancelWorkflow_NotRunning(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	err := e.CancelWorkflow(context.Background(), wfID)
+	err := e.CancelWorkflow(context.Background(), "default", wfID)
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
 }
 
@@ -355,7 +359,7 @@ func TestSignalWorkflow_MultipleSignals(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -371,7 +375,7 @@ func TestSignalWorkflow_MultipleSignals(t *testing.T) {
 	)
 
 	for i := 0; i < 3; i++ {
-		err := e.SignalWorkflow(context.Background(), wfID, "signal", json.RawMessage(`{}`))
+		err := e.SignalWorkflow(context.Background(), "default", wfID, "signal", json.RawMessage(`{}`))
 		require.NoError(t, err)
 	}
 	assert.Equal(t, 3, appendCount)
@@ -390,7 +394,7 @@ func TestPollWorkflowTask_NoTask(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	result, err := e.PollWorkflowTask(context.Background(), "default", "worker-1")
+	result, err := e.PollWorkflowTask(context.Background(), "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Nil(t, result)
 }
@@ -399,7 +403,7 @@ func TestPollWorkflowTask_WithTask(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, WorkflowType: "OrderWorkflow", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -409,7 +413,7 @@ func TestPollWorkflowTask_WithTask(t *testing.T) {
 			},
 		},
 		&mockWorkflowTaskRepo{
-			PollFn: func(_ context.Context, _ string, _ string) (*domain.WorkflowTask, error) {
+			PollFn: func(_ context.Context, _ string, _ string, _ string) (*domain.WorkflowTask, error) {
 				return &domain.WorkflowTask{ID: 1, WorkflowID: wfID}, nil
 			},
 		},
@@ -418,7 +422,7 @@ func TestPollWorkflowTask_WithTask(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	result, err := e.PollWorkflowTask(context.Background(), "default", "worker-1")
+	result, err := e.PollWorkflowTask(context.Background(), "default", "default", "worker-1")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, int64(1), result.Task.ID)
@@ -434,7 +438,7 @@ func TestCompleteWorkflowTask(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error { return nil },
@@ -470,7 +474,7 @@ func TestFailWorkflowTask(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusFailed}, nil
 			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, _ string) error {
@@ -507,7 +511,7 @@ func TestPollActivityTask_NoTask(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	task, err := e.PollActivityTask(context.Background(), "default", "worker-1")
+	task, err := e.PollActivityTask(context.Background(), "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Nil(t, task)
 }
@@ -519,7 +523,7 @@ func TestPollActivityTask_WithTask(t *testing.T) {
 		&mockEventRepo{},
 		&mockWorkflowTaskRepo{},
 		&mockActivityTaskRepo{
-			PollFn: func(_ context.Context, _ string, _ string) (*domain.ActivityTask, error) {
+			PollFn: func(_ context.Context, _ string, _ string, _ string) (*domain.ActivityTask, error) {
 				return &domain.ActivityTask{ID: 1, WorkflowID: wfID, ActivityType: "send-email"}, nil
 			},
 		},
@@ -527,7 +531,7 @@ func TestPollActivityTask_WithTask(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	task, err := e.PollActivityTask(context.Background(), "default", "worker-1")
+	task, err := e.PollActivityTask(context.Background(), "default", "default", "worker-1")
 	require.NoError(t, err)
 	require.NotNil(t, task)
 	assert.Equal(t, "send-email", task.ActivityType)
@@ -542,7 +546,7 @@ func TestCompleteActivityTask(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -576,7 +580,7 @@ func TestCompleteActivityTask_TerminalWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},
@@ -608,7 +612,7 @@ func TestFailActivityTask_NonRetryable(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -644,7 +648,7 @@ func TestFailActivityTask_MaxAttemptsReached(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -671,7 +675,7 @@ func TestFailActivityTask_Retry(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -698,7 +702,7 @@ func TestFailActivityTask_TerminalWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusTerminated}, nil
 			},
 		},
@@ -868,7 +872,7 @@ func TestProcessCommands_ScheduleActivity_WithScheduleToCloseTimeout(t *testing.
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -909,7 +913,7 @@ func TestProcessCommands_ScheduleActivity_WithScheduleToStartTimeout(t *testing.
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -953,7 +957,7 @@ func TestProcessCommands_StartTimer(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -991,7 +995,7 @@ func TestProcessCommands_CancelTimer_Pending(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -1026,7 +1030,7 @@ func TestProcessCommands_CancelTimer_AlreadyFired(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -1064,7 +1068,7 @@ func TestProcessCommands_StartChildWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == parentID {
 					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusRunning}, nil
 				}
@@ -1126,7 +1130,7 @@ func TestProcessCommands_StartChildWorkflow_TaskQueueFallback(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == parentID {
 					return &domain.WorkflowExecution{ID: parentID, TaskQueue: "parent-queue", Status: domain.WorkflowStatusRunning}, nil
 				}
@@ -1168,7 +1172,7 @@ func TestProcessCommands_CompleteWorkflow_PropagateToParent(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == childID {
 					return &domain.WorkflowExecution{
 						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusCompleted,
@@ -1230,7 +1234,7 @@ func TestProcessCommands_CompleteWorkflow_NoParent(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusCompleted}, nil
 			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error {
@@ -1268,7 +1272,7 @@ func TestProcessCommands_CompleteWorkflow_ParentNotRunning(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == childID {
 					return &domain.WorkflowExecution{
 						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusCompleted,
@@ -1316,7 +1320,7 @@ func TestProcessCommands_FailWorkflow_PropagateToParent(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == childID {
 					return &domain.WorkflowExecution{
 						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusFailed,
@@ -1377,7 +1381,7 @@ func TestFailWorkflowTask_PropagateToParent(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == childID {
 					return &domain.WorkflowExecution{
 						ID: childID, TaskQueue: "queue", Status: domain.WorkflowStatusFailed,
@@ -1436,7 +1440,7 @@ func TestRecordSideEffect(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "q", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -1484,7 +1488,7 @@ func TestQueryWorkflow_Success(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "q", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -1509,7 +1513,7 @@ func TestQueryWorkflow_Success(t *testing.T) {
 		},
 	)
 
-	q, err := e.QueryWorkflow(context.Background(), wfID, "getState", json.RawMessage(`{}`))
+	q, err := e.QueryWorkflow(context.Background(), "default", wfID, "getState", json.RawMessage(`{}`))
 	require.NoError(t, err)
 	assert.Equal(t, json.RawMessage(`"answer"`), q.Result)
 	assert.Equal(t, "getState", createdQuery.QueryType)
@@ -1520,7 +1524,7 @@ func TestQueryWorkflow_NotRunning(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},
@@ -1531,7 +1535,7 @@ func TestQueryWorkflow_NotRunning(t *testing.T) {
 		&mockQueryRepo{},
 	)
 
-	_, err := e.QueryWorkflow(context.Background(), wfID, "getState", nil)
+	_, err := e.QueryWorkflow(context.Background(), "default", wfID, "getState", nil)
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
 }
 
@@ -1580,13 +1584,13 @@ func TestPollWorkflowTask_IncludesPendingQueries(t *testing.T) {
 	wfID := uuid.New()
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, WorkflowType: "test-wf", TaskQueue: "q", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
 		&mockEventRepo{},
 		&mockWorkflowTaskRepo{
-			PollFn: func(_ context.Context, _ string, _ string) (*domain.WorkflowTask, error) {
+			PollFn: func(_ context.Context, _ string, _ string, _ string) (*domain.WorkflowTask, error) {
 				return &domain.WorkflowTask{ID: 1, WorkflowID: wfID}, nil
 			},
 		},
@@ -1601,7 +1605,7 @@ func TestPollWorkflowTask_IncludesPendingQueries(t *testing.T) {
 		},
 	)
 
-	result, err := e.PollWorkflowTask(context.Background(), "q", "w1")
+	result, err := e.PollWorkflowTask(context.Background(), "default", "q", "w1")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.PendingQueries, 1)
@@ -1616,7 +1620,7 @@ func TestStartWorkflow_WithCronSchedule(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn:    func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) { return nil, domain.ErrWorkflowNotFound },
+			GetFn:    func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) { return nil, domain.ErrWorkflowNotFound },
 			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error { createdWF = wf; return nil },
 		},
 		&mockEventRepo{},
@@ -1671,7 +1675,7 @@ func TestProcessCommands_ContinueAsNew(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == wfID {
 					return &domain.WorkflowExecution{
 						ID:           wfID,
@@ -1738,7 +1742,7 @@ func TestProcessCommands_ContinueAsNew_InheritsValues(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == wfID {
 					return &domain.WorkflowExecution{
 						ID:           wfID,
@@ -1789,7 +1793,7 @@ func TestProcessCommands_CompleteWorkflow_CronAutoRestart(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 				if id == wfID {
 					return &domain.WorkflowExecution{
 						ID:           wfID,

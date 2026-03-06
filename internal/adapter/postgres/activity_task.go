@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const activityTaskColumns = `id, queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
+const activityTaskColumns = `id, namespace, queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
 	EXTRACT(EPOCH FROM start_to_close_timeout) * 1000000, attempt, max_attempts,
 	retry_policy, status, scheduled_at, timeout_at,
 	heartbeat_at, EXTRACT(EPOCH FROM heartbeat_timeout) * 1000000,
@@ -33,7 +33,7 @@ type activityTaskScanVars struct {
 
 func (v *activityTaskScanVars) scanArgs(task *domain.ActivityTask) []any {
 	return []any{
-		&task.ID, &task.QueueName, &task.WorkflowID, &task.ActivityType, &task.ActivityInput,
+		&task.ID, &task.Namespace, &task.QueueName, &task.WorkflowID, &task.ActivityType, &task.ActivityInput,
 		&task.ActivitySeqID, &v.timeoutMicroseconds, &task.Attempt, &task.MaxAttempts,
 		&v.retryPolicyJSON, &task.Status, &task.ScheduledAt, &v.timeoutAt,
 		&v.heartbeatAt, &v.heartbeatTimeoutMicroseconds,
@@ -116,13 +116,13 @@ func (s *ActivityTaskStore) Enqueue(ctx context.Context, task domain.ActivityTas
 
 	_, err := s.store.conn(ctx).ExecContext(ctx,
 		`INSERT INTO activity_tasks
-			(queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
+			(namespace, queue_name, workflow_id, activity_type, activity_input, activity_seq_id,
 			 start_to_close_timeout, heartbeat_timeout, retry_policy, attempt, max_attempts, status, scheduled_at,
 			 schedule_to_close_timeout, schedule_to_close_timeout_at,
 			 schedule_to_start_timeout, schedule_to_start_timeout_at)
-		 VALUES ($1, $2, $3, $4, $5, $6::interval, $7::interval, $8, $9, $10, 'PENDING', COALESCE($11, NOW()),
-			 $12::interval, $13, $14::interval, $15)`,
-		task.QueueName, task.WorkflowID, task.ActivityType, task.ActivityInput, task.ActivitySeqID,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7::interval, $8::interval, $9, $10, $11, 'PENDING', COALESCE($12, NOW()),
+			 $13::interval, $14, $15::interval, $16)`,
+		task.Namespace, task.QueueName, task.WorkflowID, task.ActivityType, task.ActivityInput, task.ActivitySeqID,
 		timeoutInterval, heartbeatInterval, retryPolicyJSON, task.Attempt, task.MaxAttempts,
 		nullTimeIfZero(task.ScheduledAt),
 		schedCloseInterval, task.ScheduleToCloseTimeoutAt,
@@ -131,7 +131,7 @@ func (s *ActivityTaskStore) Enqueue(ctx context.Context, task domain.ActivityTas
 	return err
 }
 
-func (s *ActivityTaskStore) Poll(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error) {
+func (s *ActivityTaskStore) Poll(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error) {
 	var task domain.ActivityTask
 	var v activityTaskScanVars
 
@@ -139,7 +139,7 @@ func (s *ActivityTaskStore) Poll(ctx context.Context, queueName string, workerID
 		`UPDATE activity_tasks SET
 			status = 'RUNNING',
 			started_at = NOW(),
-			locked_by = $2,
+			locked_by = $3,
 			locked_until = NOW() + INTERVAL '30 seconds',
 			timeout_at = CASE
 				WHEN start_to_close_timeout IS NOT NULL THEN NOW() + start_to_close_timeout
@@ -152,13 +152,13 @@ func (s *ActivityTaskStore) Poll(ctx context.Context, queueName string, workerID
 			schedule_to_start_timeout_at = NULL
 		 WHERE id = (
 			SELECT id FROM activity_tasks
-			WHERE queue_name = $1 AND status = 'PENDING' AND scheduled_at <= NOW()
+			WHERE namespace = $1 AND queue_name = $2 AND status = 'PENDING' AND scheduled_at <= NOW()
 			ORDER BY scheduled_at ASC
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		 )
 		 RETURNING `+activityTaskColumns,
-		queueName, workerID,
+		namespace, queueName, workerID,
 	).Scan(v.scanArgs(&task)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNoTaskAvailable

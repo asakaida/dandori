@@ -17,12 +17,13 @@ func TestWorkflowTaskStore_Enqueue_Poll_Complete(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	err := store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
+		Namespace:  "default",
 		QueueName:  "default",
 		WorkflowID: wfID,
 	})
 	require.NoError(t, err)
 
-	task, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, wfID, task.WorkflowID)
 	assert.Equal(t, domain.TaskStatusRunning, task.Status)
@@ -35,7 +36,7 @@ func TestWorkflowTaskStore_Poll_NoTask(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()
 
-	_, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	_, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
 }
 
@@ -45,9 +46,9 @@ func TestWorkflowTaskStore_Complete_AlreadyCompleted(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
-	task, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	require.NoError(t, store.WorkflowTasks().Complete(ctx, task.ID))
 
@@ -61,9 +62,9 @@ func TestWorkflowTaskStore_GetByID(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
-	polled, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	polled, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	// GetByID with advisory lock requires a transaction
@@ -94,16 +95,16 @@ func TestWorkflowTaskStore_Poll_SkipLocked(t *testing.T) {
 
 	// Enqueue a single task
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
 
 	// Poll from worker-1
-	task, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	require.NotNil(t, task)
 
 	// Poll from worker-2 should get no task (SKIP LOCKED)
-	_, err = store.WorkflowTasks().Poll(ctx, "default", "worker-2")
+	_, err = store.WorkflowTasks().Poll(ctx, "default", "default", "worker-2")
 	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
 }
 
@@ -113,11 +114,11 @@ func TestWorkflowTaskStore_RecoverStaleTasks(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
 
 	// Poll to make it RUNNING
-	task, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	// Manually set locked_until to past
@@ -130,7 +131,7 @@ func TestWorkflowTaskStore_RecoverStaleTasks(t *testing.T) {
 	assert.Equal(t, 1, n)
 
 	// Should be pollable again
-	recovered, err := store.WorkflowTasks().Poll(ctx, "default", "worker-2")
+	recovered, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-2")
 	require.NoError(t, err)
 	assert.Equal(t, task.ID, recovered.ID)
 }
@@ -141,16 +142,16 @@ func TestWorkflowTaskStore_DeleteByWorkflowID(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
 
 	err := store.WorkflowTasks().DeleteByWorkflowID(ctx, wfID)
 	require.NoError(t, err)
 
-	_, err = store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	_, err = store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
 }
 
@@ -161,12 +162,13 @@ func TestWorkflowTaskStore_Poll_RespectsScheduledAt(t *testing.T) {
 
 	// Enqueue a task scheduled in the future
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
+		Namespace:   "default",
 		QueueName:   "default",
 		WorkflowID:  wfID,
 		ScheduledAt: time.Now().Add(1 * time.Hour),
 	}))
 
 	// Should not be pollable yet
-	_, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	_, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
 }

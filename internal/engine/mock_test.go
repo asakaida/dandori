@@ -18,7 +18,7 @@ func (m *mockTxManager) RunInTx(_ context.Context, fn func(ctx context.Context) 
 
 type mockWorkflowRepo struct {
 	CreateFn              func(ctx context.Context, wf domain.WorkflowExecution) error
-	GetFn                 func(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
+	GetFn                 func(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error)
 	UpdateStatusFn        func(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error
 	ListFn                func(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error)
 	SetContinuedAsNewIDFn func(ctx context.Context, id uuid.UUID, newID uuid.UUID) error
@@ -31,9 +31,9 @@ func (m *mockWorkflowRepo) Create(ctx context.Context, wf domain.WorkflowExecuti
 	return nil
 }
 
-func (m *mockWorkflowRepo) Get(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+func (m *mockWorkflowRepo) Get(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 	if m.GetFn != nil {
-		return m.GetFn(ctx, id)
+		return m.GetFn(ctx, namespace, id)
 	}
 	return nil, domain.ErrWorkflowNotFound
 }
@@ -88,7 +88,7 @@ func (m *mockEventRepo) DeleteByWorkflowID(ctx context.Context, workflowID uuid.
 
 type mockWorkflowTaskRepo struct {
 	EnqueueFn            func(ctx context.Context, task domain.WorkflowTask) error
-	PollFn               func(ctx context.Context, queueName string, workerID string) (*domain.WorkflowTask, error)
+	PollFn               func(ctx context.Context, namespace string, queueName string, workerID string) (*domain.WorkflowTask, error)
 	CompleteFn           func(ctx context.Context, taskID int64) error
 	GetByIDFn            func(ctx context.Context, taskID int64) (*domain.WorkflowTask, error)
 	RecoverStaleTasksFn  func(ctx context.Context) (int, error)
@@ -102,9 +102,9 @@ func (m *mockWorkflowTaskRepo) Enqueue(ctx context.Context, task domain.Workflow
 	return nil
 }
 
-func (m *mockWorkflowTaskRepo) Poll(ctx context.Context, queueName string, workerID string) (*domain.WorkflowTask, error) {
+func (m *mockWorkflowTaskRepo) Poll(ctx context.Context, namespace string, queueName string, workerID string) (*domain.WorkflowTask, error) {
 	if m.PollFn != nil {
-		return m.PollFn(ctx, queueName, workerID)
+		return m.PollFn(ctx, namespace, queueName, workerID)
 	}
 	return nil, domain.ErrNoTaskAvailable
 }
@@ -139,7 +139,7 @@ func (m *mockWorkflowTaskRepo) DeleteByWorkflowID(ctx context.Context, workflowI
 
 type mockActivityTaskRepo struct {
 	EnqueueFn                  func(ctx context.Context, task domain.ActivityTask) error
-	PollFn                     func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+	PollFn                     func(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error)
 	CompleteFn                 func(ctx context.Context, taskID int64) error
 	CompletePendingFn          func(ctx context.Context, taskID int64) error
 	GetByIDFn                  func(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
@@ -160,9 +160,9 @@ func (m *mockActivityTaskRepo) Enqueue(ctx context.Context, task domain.Activity
 	return nil
 }
 
-func (m *mockActivityTaskRepo) Poll(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error) {
+func (m *mockActivityTaskRepo) Poll(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error) {
 	if m.PollFn != nil {
-		return m.PollFn(ctx, queueName, workerID)
+		return m.PollFn(ctx, namespace, queueName, workerID)
 	}
 	return nil, domain.ErrNoTaskAvailable
 }
@@ -330,6 +330,33 @@ func (m *mockQueryRepo) DeleteByWorkflowID(ctx context.Context, workflowID uuid.
 	return nil
 }
 
+type mockNamespaceRepo struct {
+	GetByNameFn func(ctx context.Context, name string) (*domain.Namespace, error)
+	CreateFn    func(ctx context.Context, ns domain.Namespace) error
+	ListFn      func(ctx context.Context) ([]domain.Namespace, error)
+}
+
+func (m *mockNamespaceRepo) GetByName(ctx context.Context, name string) (*domain.Namespace, error) {
+	if m.GetByNameFn != nil {
+		return m.GetByNameFn(ctx, name)
+	}
+	return &domain.Namespace{Name: name}, nil
+}
+
+func (m *mockNamespaceRepo) Create(ctx context.Context, ns domain.Namespace) error {
+	if m.CreateFn != nil {
+		return m.CreateFn(ctx, ns)
+	}
+	return nil
+}
+
+func (m *mockNamespaceRepo) List(ctx context.Context) ([]domain.Namespace, error) {
+	if m.ListFn != nil {
+		return m.ListFn(ctx)
+	}
+	return nil, nil
+}
+
 func newTestEngine(
 	wf *mockWorkflowRepo,
 	ev *mockEventRepo,
@@ -338,5 +365,5 @@ func newTestEngine(
 	tm *mockTimerRepo,
 	qr *mockQueryRepo,
 ) *Engine {
-	return New(wf, ev, wt, at, tm, qr, &mockTxManager{})
+	return New(wf, ev, wt, at, tm, qr, &mockNamespaceRepo{}, &mockTxManager{})
 }

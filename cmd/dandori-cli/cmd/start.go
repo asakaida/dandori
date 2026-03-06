@@ -42,6 +42,7 @@ func runStart(cmd *cobra.Command, _ []string) error {
 		TaskQueue:    queue,
 		Input:        []byte(input),
 		CronSchedule: cronSchedule,
+		Namespace:    namespace,
 	})
 	if err != nil {
 		return err

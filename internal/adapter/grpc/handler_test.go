@@ -105,7 +105,7 @@ func TestErrorMapping(t *testing.T) {
 			switch tt.name {
 			case "ErrWorkflowNotFound→NotFound":
 				h = adaptgrpc.NewHandler(
-					&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+					&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 						return nil, domain.ErrWorkflowNotFound
 					}},
 					&mockWorkflowTaskService{},
@@ -121,7 +121,7 @@ func TestErrorMapping(t *testing.T) {
 				)
 			case "ErrWorkflowNotRunning→FailedPrecondition":
 				h = adaptgrpc.NewHandler(
-					&mockClientService{TerminateWorkflowFn: func(_ context.Context, _ uuid.UUID, _ string) error {
+					&mockClientService{TerminateWorkflowFn: func(_ context.Context, _ string, _ uuid.UUID, _ string) error {
 						return domain.ErrWorkflowNotRunning
 					}},
 					&mockWorkflowTaskService{},
@@ -145,7 +145,7 @@ func TestErrorMapping(t *testing.T) {
 				)
 			case "unknown_error→Internal":
 				h = adaptgrpc.NewHandler(
-					&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+					&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 						return nil, errors.New("something unexpected")
 					}},
 					&mockWorkflowTaskService{},
@@ -153,7 +153,7 @@ func TestErrorMapping(t *testing.T) {
 				)
 			case "wrapped_error→unwrapped":
 				h = adaptgrpc.NewHandler(
-					&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+					&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 						return nil, fmt.Errorf("store layer: %w", domain.ErrWorkflowNotFound)
 					}},
 					&mockWorkflowTaskService{},
@@ -194,7 +194,7 @@ func TestStartWorkflow_InvalidUUID(t *testing.T) {
 
 func TestPollWorkflowTask_NoTask(t *testing.T) {
 	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{
-		PollWorkflowTaskFn: func(_ context.Context, _ string, _ string) (*port.WorkflowTaskResult, error) {
+		PollWorkflowTaskFn: func(_ context.Context, _ string, _ string, _ string) (*port.WorkflowTaskResult, error) {
 			return nil, nil
 		},
 	}, &mockActivityTaskService{})
@@ -213,7 +213,7 @@ func TestPollWorkflowTask_NoTask(t *testing.T) {
 
 func TestPollActivityTask_NoTask(t *testing.T) {
 	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{
-		PollActivityTaskFn: func(_ context.Context, _ string, _ string) (*domain.ActivityTask, error) {
+		PollActivityTaskFn: func(_ context.Context, _ string, _ string, _ string) (*domain.ActivityTask, error) {
 			return nil, nil
 		},
 	})
@@ -247,7 +247,7 @@ func TestSignalWorkflow_InvalidUUID(t *testing.T) {
 
 func TestSignalWorkflow_NotRunning(t *testing.T) {
 	h := adaptgrpc.NewHandler(
-		&mockClientService{SignalWorkflowFn: func(_ context.Context, _ uuid.UUID, _ string, _ json.RawMessage) error {
+		&mockClientService{SignalWorkflowFn: func(_ context.Context, _ string, _ uuid.UUID, _ string, _ json.RawMessage) error {
 			return domain.ErrWorkflowNotRunning
 		}},
 		&mockWorkflowTaskService{},
@@ -282,7 +282,7 @@ func TestCancelWorkflow_InvalidUUID(t *testing.T) {
 
 func TestCancelWorkflow_NotRunning(t *testing.T) {
 	h := adaptgrpc.NewHandler(
-		&mockClientService{CancelWorkflowFn: func(_ context.Context, _ uuid.UUID) error {
+		&mockClientService{CancelWorkflowFn: func(_ context.Context, _ string, _ uuid.UUID) error {
 			return domain.ErrWorkflowNotRunning
 		}},
 		&mockWorkflowTaskService{},
@@ -429,7 +429,7 @@ func TestCommandTypeFromProto_ContinueAsNew(t *testing.T) {
 func TestWorkflowStatusToProto_ContinuedAsNew(t *testing.T) {
 	wfID := uuid.New()
 	h := adaptgrpc.NewHandler(
-		&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+		&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 			return &domain.WorkflowExecution{
 				ID:           wfID,
 				WorkflowType: "wf",

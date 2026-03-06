@@ -22,6 +22,7 @@ func TestWorkflowStore_Create_Get(t *testing.T) {
 	input := json.RawMessage(`{"order_id":123}`)
 	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "order-workflow",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -29,7 +30,7 @@ func TestWorkflowStore_Create_Get(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, wfID, wf.ID)
 	assert.Equal(t, "order-workflow", wf.WorkflowType)
@@ -43,7 +44,7 @@ func TestWorkflowStore_Get_NotFound(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()
 
-	_, err := store.Workflows().Get(ctx, uuid.New())
+	_, err := store.Workflows().Get(ctx, "default", uuid.New())
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotFound)
 }
 
@@ -54,6 +55,7 @@ func TestWorkflowStore_UpdateStatus(t *testing.T) {
 	wfID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "test-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -63,7 +65,7 @@ func TestWorkflowStore_UpdateStatus(t *testing.T) {
 	err := store.Workflows().UpdateStatus(ctx, wfID, domain.WorkflowStatusCompleted, result, "")
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, domain.WorkflowStatusCompleted, wf.Status)
 	assert.JSONEq(t, `{"output":"done"}`, string(wf.Result))
@@ -77,6 +79,7 @@ func TestWorkflowStore_Create_UpsertTerminal(t *testing.T) {
 	wfID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "old-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -86,6 +89,7 @@ func TestWorkflowStore_Create_UpsertTerminal(t *testing.T) {
 	// Re-create with same ID should succeed since it's terminal
 	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "new-wf",
 		TaskQueue:    "new-queue",
 		Status:       domain.WorkflowStatusRunning,
@@ -93,7 +97,7 @@ func TestWorkflowStore_Create_UpsertTerminal(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, "new-wf", wf.WorkflowType)
 	assert.Equal(t, "new-queue", wf.TaskQueue)
@@ -109,6 +113,7 @@ func TestWorkflowStore_Create_DuplicateRunning(t *testing.T) {
 	wfID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "test-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -117,6 +122,7 @@ func TestWorkflowStore_Create_DuplicateRunning(t *testing.T) {
 	// Creating with same ID while RUNNING should fail
 	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "test-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -131,6 +137,7 @@ func TestWorkflowStore_List_Basic(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 			ID:           uuid.New(),
+			Namespace:    "default",
 			WorkflowType: "test-wf",
 			TaskQueue:    "default",
 			Status:       domain.WorkflowStatusRunning,
@@ -138,7 +145,7 @@ func TestWorkflowStore_List_Basic(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // ensure distinct created_at
 	}
 
-	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{PageSize: 10})
+	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{Namespace: "default", PageSize: 10})
 	require.NoError(t, err)
 	assert.Len(t, workflows, 3)
 }
@@ -152,6 +159,7 @@ func TestWorkflowStore_List_Pagination(t *testing.T) {
 		ids[i] = uuid.New()
 		require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 			ID:           ids[i],
+			Namespace:    "default",
 			WorkflowType: "test-wf",
 			TaskQueue:    "default",
 			Status:       domain.WorkflowStatusRunning,
@@ -160,7 +168,7 @@ func TestWorkflowStore_List_Pagination(t *testing.T) {
 	}
 
 	// First page: 3 items
-	page1, err := store.Workflows().List(ctx, port.ListWorkflowsParams{PageSize: 3})
+	page1, err := store.Workflows().List(ctx, port.ListWorkflowsParams{Namespace: "default", PageSize: 3})
 	require.NoError(t, err)
 	assert.Len(t, page1, 3)
 
@@ -170,8 +178,9 @@ func TestWorkflowStore_List_Pagination(t *testing.T) {
 		ID:        page1[2].ID,
 	}
 	page2, err := store.Workflows().List(ctx, port.ListWorkflowsParams{
-		PageSize: 3,
-		Cursor:   cursor,
+		Namespace: "default",
+		PageSize:  3,
+		Cursor:    cursor,
 	})
 	require.NoError(t, err)
 	assert.Len(t, page2, 2)
@@ -190,15 +199,16 @@ func TestWorkflowStore_List_StatusFilter(t *testing.T) {
 
 	wfRunning := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: wfRunning, WorkflowType: "wf", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
+		ID: wfRunning, Namespace: "default", WorkflowType: "wf", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
 	}))
 	wfCompleted := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: wfCompleted, WorkflowType: "wf", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
+		ID: wfCompleted, Namespace: "default", WorkflowType: "wf", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
 	}))
 	require.NoError(t, store.Workflows().UpdateStatus(ctx, wfCompleted, domain.WorkflowStatusCompleted, nil, ""))
 
 	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{
+		Namespace:    "default",
 		PageSize:     10,
 		StatusFilter: "RUNNING",
 	})
@@ -212,13 +222,14 @@ func TestWorkflowStore_List_TypeFilter(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: uuid.New(), WorkflowType: "type-A", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
+		ID: uuid.New(), Namespace: "default", WorkflowType: "type-A", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
 	}))
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: uuid.New(), WorkflowType: "type-B", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
+		ID: uuid.New(), Namespace: "default", WorkflowType: "type-B", TaskQueue: "q", Status: domain.WorkflowStatusRunning,
 	}))
 
 	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{
+		Namespace:  "default",
 		PageSize:   10,
 		TypeFilter: "type-A",
 	})
@@ -232,13 +243,14 @@ func TestWorkflowStore_List_QueueFilter(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: uuid.New(), WorkflowType: "wf", TaskQueue: "queue-A", Status: domain.WorkflowStatusRunning,
+		ID: uuid.New(), Namespace: "default", WorkflowType: "wf", TaskQueue: "queue-A", Status: domain.WorkflowStatusRunning,
 	}))
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: uuid.New(), WorkflowType: "wf", TaskQueue: "queue-B", Status: domain.WorkflowStatusRunning,
+		ID: uuid.New(), Namespace: "default", WorkflowType: "wf", TaskQueue: "queue-B", Status: domain.WorkflowStatusRunning,
 	}))
 
 	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{
+		Namespace:   "default",
 		PageSize:    10,
 		QueueFilter: "queue-B",
 	})
@@ -252,16 +264,17 @@ func TestWorkflowStore_List_MultipleFilters(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: uuid.New(), WorkflowType: "type-A", TaskQueue: "q1", Status: domain.WorkflowStatusRunning,
+		ID: uuid.New(), Namespace: "default", WorkflowType: "type-A", TaskQueue: "q1", Status: domain.WorkflowStatusRunning,
 	}))
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: uuid.New(), WorkflowType: "type-A", TaskQueue: "q2", Status: domain.WorkflowStatusRunning,
+		ID: uuid.New(), Namespace: "default", WorkflowType: "type-A", TaskQueue: "q2", Status: domain.WorkflowStatusRunning,
 	}))
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
-		ID: uuid.New(), WorkflowType: "type-B", TaskQueue: "q1", Status: domain.WorkflowStatusRunning,
+		ID: uuid.New(), Namespace: "default", WorkflowType: "type-B", TaskQueue: "q1", Status: domain.WorkflowStatusRunning,
 	}))
 
 	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{
+		Namespace:   "default",
 		PageSize:    10,
 		TypeFilter:  "type-A",
 		QueueFilter: "q1",
@@ -279,6 +292,7 @@ func TestWorkflowStore_List_OrderDesc(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 			ID:           uuid.New(),
+			Namespace:    "default",
 			WorkflowType: "wf",
 			TaskQueue:    "q",
 			Status:       domain.WorkflowStatusRunning,
@@ -286,7 +300,7 @@ func TestWorkflowStore_List_OrderDesc(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{PageSize: 10})
+	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{Namespace: "default", PageSize: 10})
 	require.NoError(t, err)
 	require.Len(t, workflows, 3)
 	// Should be DESC by created_at
@@ -301,6 +315,7 @@ func TestWorkflowStore_Create_Get_WithParent(t *testing.T) {
 	parentID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           parentID,
+		Namespace:    "default",
 		WorkflowType: "parent-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -309,6 +324,7 @@ func TestWorkflowStore_Create_Get_WithParent(t *testing.T) {
 	childID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:               childID,
+		Namespace:        "default",
 		WorkflowType:     "child-wf",
 		TaskQueue:        "default",
 		Status:           domain.WorkflowStatusRunning,
@@ -317,7 +333,7 @@ func TestWorkflowStore_Create_Get_WithParent(t *testing.T) {
 		ParentSeqID:      3,
 	}))
 
-	wf, err := store.Workflows().Get(ctx, childID)
+	wf, err := store.Workflows().Get(ctx, "default", childID)
 	require.NoError(t, err)
 	assert.Equal(t, childID, wf.ID)
 	assert.Equal(t, "child-wf", wf.WorkflowType)
@@ -333,6 +349,7 @@ func TestWorkflowStore_List_WithParent(t *testing.T) {
 	parentID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           parentID,
+		Namespace:    "default",
 		WorkflowType: "parent-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -341,6 +358,7 @@ func TestWorkflowStore_List_WithParent(t *testing.T) {
 	childID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:               childID,
+		Namespace:        "default",
 		WorkflowType:     "child-wf",
 		TaskQueue:        "default",
 		Status:           domain.WorkflowStatusRunning,
@@ -349,7 +367,7 @@ func TestWorkflowStore_List_WithParent(t *testing.T) {
 	}))
 	time.Sleep(10 * time.Millisecond)
 
-	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{PageSize: 10})
+	workflows, err := store.Workflows().List(ctx, port.ListWorkflowsParams{Namespace: "default", PageSize: 10})
 	require.NoError(t, err)
 	require.Len(t, workflows, 2)
 
@@ -374,6 +392,7 @@ func TestWorkflowStore_Create_Get_WithCronSchedule(t *testing.T) {
 	wfID := uuid.New()
 	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "cron-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -382,7 +401,7 @@ func TestWorkflowStore_Create_Get_WithCronSchedule(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, "*/5 * * * *", wf.CronSchedule)
 	assert.Nil(t, wf.ContinuedAsNewID)
@@ -397,12 +416,14 @@ func TestWorkflowStore_SetContinuedAsNewID(t *testing.T) {
 
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           oldID,
+		Namespace:    "default",
 		WorkflowType: "wf",
 		TaskQueue:    "q",
 		Status:       domain.WorkflowStatusRunning,
 	}))
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           newID,
+		Namespace:    "default",
 		WorkflowType: "wf",
 		TaskQueue:    "q",
 		Status:       domain.WorkflowStatusRunning,
@@ -411,7 +432,7 @@ func TestWorkflowStore_SetContinuedAsNewID(t *testing.T) {
 	err := store.Workflows().SetContinuedAsNewID(ctx, oldID, newID)
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, oldID)
+	wf, err := store.Workflows().Get(ctx, "default", oldID)
 	require.NoError(t, err)
 	require.NotNil(t, wf.ContinuedAsNewID)
 	assert.Equal(t, newID, *wf.ContinuedAsNewID)
@@ -424,6 +445,7 @@ func TestWorkflowStore_Create_UpsertContinuedAsNew(t *testing.T) {
 	wfID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "old-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -433,6 +455,7 @@ func TestWorkflowStore_Create_UpsertContinuedAsNew(t *testing.T) {
 	// Re-create with same ID should succeed since it's CONTINUED_AS_NEW
 	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "new-wf",
 		TaskQueue:    "new-queue",
 		Status:       domain.WorkflowStatusRunning,
@@ -440,7 +463,7 @@ func TestWorkflowStore_Create_UpsertContinuedAsNew(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, "new-wf", wf.WorkflowType)
 	assert.Equal(t, domain.WorkflowStatusRunning, wf.Status)
@@ -453,6 +476,7 @@ func TestWorkflowStore_UpdateStatus_Failed(t *testing.T) {
 	wfID := uuid.New()
 	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "test-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,
@@ -461,7 +485,7 @@ func TestWorkflowStore_UpdateStatus_Failed(t *testing.T) {
 	err := store.Workflows().UpdateStatus(ctx, wfID, domain.WorkflowStatusFailed, nil, "something went wrong")
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, domain.WorkflowStatusFailed, wf.Status)
 	assert.Equal(t, "something went wrong", wf.Error)

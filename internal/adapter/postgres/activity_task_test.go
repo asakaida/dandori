@@ -18,6 +18,7 @@ func TestActivityTaskStore_Enqueue_Poll_Complete(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	err := store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:           "default",
 		WorkflowID:          wfID,
 		ActivityType:        "send-email",
@@ -35,7 +36,7 @@ func TestActivityTaskStore_Enqueue_Poll_Complete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, wfID, task.WorkflowID)
 	assert.Equal(t, "send-email", task.ActivityType)
@@ -54,7 +55,7 @@ func TestActivityTaskStore_Poll_NoTask(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()
 
-	_, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	_, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
 }
 
@@ -65,6 +66,7 @@ func TestActivityTaskStore_Poll_SetsTimeoutAt(t *testing.T) {
 
 	timeout := 60 * time.Second
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:           "default",
 		WorkflowID:          wfID,
 		ActivityType:        "process",
@@ -76,7 +78,7 @@ func TestActivityTaskStore_Poll_SetsTimeoutAt(t *testing.T) {
 	}))
 
 	before := time.Now()
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	require.NotNil(t, task.TimeoutAt)
@@ -90,6 +92,7 @@ func TestActivityTaskStore_Poll_NoTimeoutWhenNotSet(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:     "default",
 		WorkflowID:    wfID,
 		ActivityType:  "process",
@@ -99,7 +102,7 @@ func TestActivityTaskStore_Poll_NoTimeoutWhenNotSet(t *testing.T) {
 		MaxAttempts:   1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Nil(t, task.TimeoutAt)
 }
@@ -110,6 +113,7 @@ func TestActivityTaskStore_Poll_SkipLocked(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:     "default",
 		WorkflowID:    wfID,
 		ActivityType:  "process",
@@ -119,11 +123,11 @@ func TestActivityTaskStore_Poll_SkipLocked(t *testing.T) {
 		MaxAttempts:   1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	require.NotNil(t, task)
 
-	_, err = store.ActivityTasks().Poll(ctx, "default", "worker-2")
+	_, err = store.ActivityTasks().Poll(ctx, "default", "default", "worker-2")
 	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
 }
 
@@ -133,6 +137,7 @@ func TestActivityTaskStore_GetTimedOut(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:           "default",
 		WorkflowID:          wfID,
 		ActivityType:        "slow-task",
@@ -143,7 +148,7 @@ func TestActivityTaskStore_GetTimedOut(t *testing.T) {
 		MaxAttempts:         1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	// Set timeout_at to past
@@ -163,6 +168,7 @@ func TestActivityTaskStore_Requeue(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:           "default",
 		WorkflowID:          wfID,
 		ActivityType:        "retry-task",
@@ -173,7 +179,7 @@ func TestActivityTaskStore_Requeue(t *testing.T) {
 		MaxAttempts:         3,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, 1, task.Attempt)
 
@@ -194,6 +200,7 @@ func TestActivityTaskStore_Complete_AlreadyCompleted(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:     "default",
 		WorkflowID:    wfID,
 		ActivityType:  "task",
@@ -203,7 +210,7 @@ func TestActivityTaskStore_Complete_AlreadyCompleted(t *testing.T) {
 		MaxAttempts:   1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	require.NoError(t, store.ActivityTasks().Complete(ctx, task.ID))
 
@@ -225,6 +232,7 @@ func TestActivityTaskStore_DeleteByWorkflowID(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:     "default",
 		WorkflowID:    wfID,
 		ActivityType:  "task-1",
@@ -237,7 +245,7 @@ func TestActivityTaskStore_DeleteByWorkflowID(t *testing.T) {
 	err := store.ActivityTasks().DeleteByWorkflowID(ctx, wfID)
 	require.NoError(t, err)
 
-	_, err = store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	_, err = store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	assert.ErrorIs(t, err, domain.ErrNoTaskAvailable)
 }
 
@@ -247,6 +255,7 @@ func TestActivityTaskStore_RecoverStaleTasks(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:     "default",
 		WorkflowID:    wfID,
 		ActivityType:  "stale-task",
@@ -256,7 +265,7 @@ func TestActivityTaskStore_RecoverStaleTasks(t *testing.T) {
 		MaxAttempts:   1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	_, err = testDB.ExecContext(ctx,
@@ -267,7 +276,7 @@ func TestActivityTaskStore_RecoverStaleTasks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
-	recovered, err := store.ActivityTasks().Poll(ctx, "default", "worker-2")
+	recovered, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-2")
 	require.NoError(t, err)
 	assert.Equal(t, task.ID, recovered.ID)
 }
@@ -280,6 +289,7 @@ func TestActivityTaskStore_Enqueue_WithScheduleToCloseTimeout(t *testing.T) {
 	schedClose := 60 * time.Second
 	schedCloseAt := time.Now().Add(schedClose)
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "sched-close-task",
@@ -292,7 +302,7 @@ func TestActivityTaskStore_Enqueue_WithScheduleToCloseTimeout(t *testing.T) {
 		MaxAttempts:              1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, schedClose, task.ScheduleToCloseTimeout)
 	require.NotNil(t, task.ScheduleToCloseTimeoutAt)
@@ -307,6 +317,7 @@ func TestActivityTaskStore_Enqueue_WithScheduleToStartTimeout(t *testing.T) {
 	schedStart := 10 * time.Second
 	schedStartAt := time.Now().Add(schedStart)
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "sched-start-task",
@@ -323,7 +334,7 @@ func TestActivityTaskStore_Enqueue_WithScheduleToStartTimeout(t *testing.T) {
 	_ = got
 	_ = err
 
-	polled, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	polled, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, schedStart, polled.ScheduleToStartTimeout)
 	// After poll, schedule_to_start_timeout_at should be cleared
@@ -337,6 +348,7 @@ func TestActivityTaskStore_Poll_ClearsScheduleToStartTimeoutAt(t *testing.T) {
 
 	schedStartAt := time.Now().Add(30 * time.Second)
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "sched-start-clear",
@@ -348,7 +360,7 @@ func TestActivityTaskStore_Poll_ClearsScheduleToStartTimeoutAt(t *testing.T) {
 		MaxAttempts:              1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Nil(t, task.ScheduleToStartTimeoutAt, "schedule_to_start_timeout_at should be NULL after poll")
 	assert.Equal(t, 30*time.Second, task.ScheduleToStartTimeout, "schedule_to_start_timeout duration should be preserved")
@@ -361,6 +373,7 @@ func TestActivityTaskStore_Requeue_MaintainsScheduleToCloseTimeoutAt(t *testing.
 
 	schedCloseAt := time.Now().Add(60 * time.Second)
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "requeue-close",
@@ -373,7 +386,7 @@ func TestActivityTaskStore_Requeue_MaintainsScheduleToCloseTimeoutAt(t *testing.
 		MaxAttempts:              3,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	nextSchedule := time.Now().Add(5 * time.Second)
@@ -394,6 +407,7 @@ func TestActivityTaskStore_Requeue_RecalculatesScheduleToStartTimeoutAt(t *testi
 	schedStart := 10 * time.Second
 	schedStartAt := time.Now().Add(schedStart)
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "requeue-start",
@@ -406,7 +420,7 @@ func TestActivityTaskStore_Requeue_RecalculatesScheduleToStartTimeoutAt(t *testi
 		MaxAttempts:              3,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	nextSchedule := time.Now().Add(5 * time.Second)
@@ -428,6 +442,7 @@ func TestActivityTaskStore_GetScheduleToCloseTimedOut(t *testing.T) {
 	// Create a PENDING task with past schedule_to_close_timeout_at
 	pastTime := time.Now().Add(-1 * time.Second)
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "sched-close-pending",
@@ -454,6 +469,7 @@ func TestActivityTaskStore_GetScheduleToStartTimedOut(t *testing.T) {
 	pastTime := time.Now().Add(-1 * time.Second)
 	futureSchedule := time.Now().Add(1 * time.Hour)
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "sched-start-pending",
@@ -468,6 +484,7 @@ func TestActivityTaskStore_GetScheduleToStartTimedOut(t *testing.T) {
 
 	// Create a RUNNING task with past schedule_to_start_timeout_at - should NOT appear
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:                "default",
 		WorkflowID:               wfID,
 		ActivityType:             "sched-start-running",
@@ -479,7 +496,7 @@ func TestActivityTaskStore_GetScheduleToStartTimedOut(t *testing.T) {
 		MaxAttempts:              1,
 	}))
 	// Poll the second task to make it RUNNING (first task is scheduled in the future)
-	polled, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	polled, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, "sched-start-running", polled.ActivityType)
 
@@ -496,6 +513,7 @@ func TestActivityTaskStore_CompletePending(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:     "default",
 		WorkflowID:    wfID,
 		ActivityType:  "pending-complete",
@@ -524,6 +542,7 @@ func TestActivityTaskStore_CompletePending_NotPending(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:     "default",
 		WorkflowID:    wfID,
 		ActivityType:  "pending-not",
@@ -534,7 +553,7 @@ func TestActivityTaskStore_CompletePending_NotPending(t *testing.T) {
 	}))
 
 	// Poll to make it RUNNING
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	// CompletePending should fail since task is RUNNING
@@ -548,6 +567,7 @@ func TestActivityTaskStore_Enqueue_WithHeartbeat(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:        "default",
 		WorkflowID:       wfID,
 		ActivityType:     "heartbeat-task",
@@ -559,7 +579,7 @@ func TestActivityTaskStore_Enqueue_WithHeartbeat(t *testing.T) {
 	}))
 
 	// Poll to get the actual task ID, then check via GetByID
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, 5*time.Second, task.HeartbeatTimeout)
 	// After poll, heartbeat_at is initialized since heartbeat_timeout is set
@@ -572,6 +592,7 @@ func TestActivityTaskStore_Poll_InitializesHeartbeat(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:        "default",
 		WorkflowID:       wfID,
 		ActivityType:     "heartbeat-task",
@@ -582,7 +603,7 @@ func TestActivityTaskStore_Poll_InitializesHeartbeat(t *testing.T) {
 		MaxAttempts:      1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 	assert.Equal(t, 10*time.Second, task.HeartbeatTimeout)
 	require.NotNil(t, task.HeartbeatAt, "heartbeat_at should be initialized on poll")
@@ -595,6 +616,7 @@ func TestActivityTaskStore_UpdateHeartbeat(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:        "default",
 		WorkflowID:       wfID,
 		ActivityType:     "heartbeat-task",
@@ -605,7 +627,7 @@ func TestActivityTaskStore_UpdateHeartbeat(t *testing.T) {
 		MaxAttempts:      1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	err = store.ActivityTasks().UpdateHeartbeat(ctx, task.ID)
@@ -631,6 +653,7 @@ func TestActivityTaskStore_GetHeartbeatTimedOut(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.ActivityTasks().Enqueue(ctx, domain.ActivityTask{
+		Namespace:  "default",
 		QueueName:        "default",
 		WorkflowID:       wfID,
 		ActivityType:     "hb-timeout-task",
@@ -641,7 +664,7 @@ func TestActivityTaskStore_GetHeartbeatTimedOut(t *testing.T) {
 		MaxAttempts:      1,
 	}))
 
-	task, err := store.ActivityTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.ActivityTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	// Set heartbeat_at to past to simulate timeout

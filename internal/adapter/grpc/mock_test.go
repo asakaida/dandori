@@ -13,13 +13,13 @@ import (
 
 type mockClientService struct {
 	StartWorkflowFn     func(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error)
-	DescribeWorkflowFn  func(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
-	GetWorkflowHistoryFn func(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
-	TerminateWorkflowFn func(ctx context.Context, id uuid.UUID, reason string) error
-	SignalWorkflowFn    func(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
-	CancelWorkflowFn   func(ctx context.Context, id uuid.UUID) error
+	DescribeWorkflowFn  func(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error)
+	GetWorkflowHistoryFn func(ctx context.Context, namespace string, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
+	TerminateWorkflowFn func(ctx context.Context, namespace string, id uuid.UUID, reason string) error
+	SignalWorkflowFn    func(ctx context.Context, namespace string, id uuid.UUID, signalName string, input json.RawMessage) error
+	CancelWorkflowFn   func(ctx context.Context, namespace string, id uuid.UUID) error
 	ListWorkflowsFn    func(ctx context.Context, params port.ListWorkflowsParams) (*port.ListWorkflowsResult, error)
-	QueryWorkflowFn    func(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error)
+	QueryWorkflowFn    func(ctx context.Context, namespace string, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error)
 }
 
 func (m *mockClientService) StartWorkflow(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error) {
@@ -29,37 +29,37 @@ func (m *mockClientService) StartWorkflow(ctx context.Context, params port.Start
 	return nil, nil
 }
 
-func (m *mockClientService) DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+func (m *mockClientService) DescribeWorkflow(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 	if m.DescribeWorkflowFn != nil {
-		return m.DescribeWorkflowFn(ctx, id)
+		return m.DescribeWorkflowFn(ctx, namespace, id)
 	}
 	return nil, domain.ErrWorkflowNotFound
 }
 
-func (m *mockClientService) GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
+func (m *mockClientService) GetWorkflowHistory(ctx context.Context, namespace string, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
 	if m.GetWorkflowHistoryFn != nil {
-		return m.GetWorkflowHistoryFn(ctx, workflowID)
+		return m.GetWorkflowHistoryFn(ctx, namespace, workflowID)
 	}
 	return nil, nil
 }
 
-func (m *mockClientService) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error {
+func (m *mockClientService) TerminateWorkflow(ctx context.Context, namespace string, id uuid.UUID, reason string) error {
 	if m.TerminateWorkflowFn != nil {
-		return m.TerminateWorkflowFn(ctx, id, reason)
+		return m.TerminateWorkflowFn(ctx, namespace, id, reason)
 	}
 	return nil
 }
 
-func (m *mockClientService) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error {
+func (m *mockClientService) SignalWorkflow(ctx context.Context, namespace string, id uuid.UUID, signalName string, input json.RawMessage) error {
 	if m.SignalWorkflowFn != nil {
-		return m.SignalWorkflowFn(ctx, id, signalName, input)
+		return m.SignalWorkflowFn(ctx, namespace, id, signalName, input)
 	}
 	return nil
 }
 
-func (m *mockClientService) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
+func (m *mockClientService) CancelWorkflow(ctx context.Context, namespace string, id uuid.UUID) error {
 	if m.CancelWorkflowFn != nil {
-		return m.CancelWorkflowFn(ctx, id)
+		return m.CancelWorkflowFn(ctx, namespace, id)
 	}
 	return nil
 }
@@ -71,9 +71,9 @@ func (m *mockClientService) ListWorkflows(ctx context.Context, params port.ListW
 	return &port.ListWorkflowsResult{}, nil
 }
 
-func (m *mockClientService) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
+func (m *mockClientService) QueryWorkflow(ctx context.Context, namespace string, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
 	if m.QueryWorkflowFn != nil {
-		return m.QueryWorkflowFn(ctx, id, queryType, input)
+		return m.QueryWorkflowFn(ctx, namespace, id, queryType, input)
 	}
 	return nil, nil
 }
@@ -81,15 +81,15 @@ func (m *mockClientService) QueryWorkflow(ctx context.Context, id uuid.UUID, que
 // --- mockWorkflowTaskService ---
 
 type mockWorkflowTaskService struct {
-	PollWorkflowTaskFn     func(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error)
+	PollWorkflowTaskFn     func(ctx context.Context, namespace string, queueName string, workerID string) (*port.WorkflowTaskResult, error)
 	CompleteWorkflowTaskFn func(ctx context.Context, taskID int64, commands []domain.Command) error
 	FailWorkflowTaskFn     func(ctx context.Context, taskID int64, cause string, message string) error
 	RespondQueryTaskFn     func(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error
 }
 
-func (m *mockWorkflowTaskService) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
+func (m *mockWorkflowTaskService) PollWorkflowTask(ctx context.Context, namespace string, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
 	if m.PollWorkflowTaskFn != nil {
-		return m.PollWorkflowTaskFn(ctx, queueName, workerID)
+		return m.PollWorkflowTaskFn(ctx, namespace, queueName, workerID)
 	}
 	return nil, nil
 }
@@ -118,15 +118,15 @@ func (m *mockWorkflowTaskService) RespondQueryTask(ctx context.Context, queryID 
 // --- mockActivityTaskService ---
 
 type mockActivityTaskService struct {
-	PollActivityTaskFn         func(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+	PollActivityTaskFn         func(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error)
 	CompleteActivityTaskFn     func(ctx context.Context, taskID int64, result json.RawMessage) error
 	FailActivityTaskFn         func(ctx context.Context, taskID int64, failure domain.ActivityFailure) error
 	RecordActivityHeartbeatFn  func(ctx context.Context, taskID int64, details json.RawMessage) error
 }
 
-func (m *mockActivityTaskService) PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error) {
+func (m *mockActivityTaskService) PollActivityTask(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error) {
 	if m.PollActivityTaskFn != nil {
-		return m.PollActivityTaskFn(ctx, queueName, workerID)
+		return m.PollActivityTaskFn(ctx, namespace, queueName, workerID)
 	}
 	return nil, nil
 }

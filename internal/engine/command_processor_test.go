@@ -39,7 +39,7 @@ func TestProcessCommands_ScheduleActivity_FallbackTaskQueue(t *testing.T) {
 		{Type: domain.CommandScheduleActivityTask, Attributes: attrs},
 	}
 
-	err := e.processCommands(context.Background(), wfID, "workflow-queue", commands)
+	err := e.processCommands(context.Background(), &domain.WorkflowExecution{ID: wfID, TaskQueue: "workflow-queue"}, commands)
 	require.NoError(t, err)
 	assert.Equal(t, "workflow-queue", enqueuedTask.QueueName)
 	assert.Equal(t, "send-email", enqueuedTask.ActivityType)
@@ -73,7 +73,7 @@ func TestProcessCommands_ScheduleActivity_ExplicitTaskQueue(t *testing.T) {
 		{Type: domain.CommandScheduleActivityTask, Attributes: attrs},
 	}
 
-	err := e.processCommands(context.Background(), wfID, "workflow-queue", commands)
+	err := e.processCommands(context.Background(), &domain.WorkflowExecution{ID: wfID, TaskQueue: "workflow-queue"}, commands)
 	require.NoError(t, err)
 	assert.Equal(t, "payment-queue", enqueuedTask.QueueName)
 }
@@ -107,7 +107,7 @@ func TestProcessCommands_ScheduleActivity_RetryPolicyPropagation(t *testing.T) {
 		{Type: domain.CommandScheduleActivityTask, Attributes: attrs},
 	}
 
-	err := e.processCommands(context.Background(), wfID, "default", commands)
+	err := e.processCommands(context.Background(), &domain.WorkflowExecution{ID: wfID, TaskQueue: "default"}, commands)
 	require.NoError(t, err)
 	assert.Equal(t, 5, enqueuedTask.MaxAttempts)
 	assert.NotNil(t, enqueuedTask.RetryPolicy)
@@ -120,7 +120,7 @@ func TestProcessCommands_CompleteWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusCompleted}, nil
 			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, _ string) error {
@@ -147,7 +147,7 @@ func TestProcessCommands_CompleteWorkflow(t *testing.T) {
 		{Type: domain.CommandCompleteWorkflow, Attributes: attrs},
 	}
 
-	err := e.processCommands(context.Background(), wfID, "default", commands)
+	err := e.processCommands(context.Background(), &domain.WorkflowExecution{ID: wfID, TaskQueue: "default"}, commands)
 	require.NoError(t, err)
 	assert.Equal(t, domain.WorkflowStatusCompleted, updatedStatus)
 	require.Len(t, appendedEvents, 1)
@@ -161,7 +161,7 @@ func TestProcessCommands_FailWorkflow(t *testing.T) {
 
 	e := newTestEngine(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusFailed}, nil
 			},
 			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, errMsg string) error {
@@ -184,7 +184,7 @@ func TestProcessCommands_FailWorkflow(t *testing.T) {
 		{Type: domain.CommandFailWorkflow, Attributes: attrs},
 	}
 
-	err := e.processCommands(context.Background(), wfID, "default", commands)
+	err := e.processCommands(context.Background(), &domain.WorkflowExecution{ID: wfID, TaskQueue: "default"}, commands)
 	require.NoError(t, err)
 	assert.Equal(t, domain.WorkflowStatusFailed, updatedStatus)
 	assert.Equal(t, "workflow failed", updatedErrMsg)
@@ -204,7 +204,7 @@ func TestProcessCommands_UnknownCommand(t *testing.T) {
 		{Type: "UnknownCommand", Attributes: json.RawMessage(`{}`)},
 	}
 
-	err := e.processCommands(context.Background(), uuid.New(), "default", commands)
+	err := e.processCommands(context.Background(), &domain.WorkflowExecution{ID: uuid.New(), TaskQueue: "default"}, commands)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown command type")
 }

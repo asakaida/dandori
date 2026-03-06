@@ -56,9 +56,10 @@ func (s *Store) RunInTx(ctx context.Context, fn func(ctx context.Context) error)
 	return tx.Commit()
 }
 
-func (s *Store) Workflows() port.WorkflowRepository     { return &WorkflowStore{store: s} }
-func (s *Store) Events() port.EventRepository           { return &EventStore{store: s} }
+func (s *Store) Namespaces() port.NamespaceRepository       { return &NamespaceStore{store: s} }
+func (s *Store) Workflows() port.WorkflowRepository        { return &WorkflowStore{store: s} }
+func (s *Store) Events() port.EventRepository              { return &EventStore{store: s} }
 func (s *Store) WorkflowTasks() port.WorkflowTaskRepository { return &WorkflowTaskStore{store: s} }
 func (s *Store) ActivityTasks() port.ActivityTaskRepository  { return &ActivityTaskStore{store: s} }
-func (s *Store) Timers() port.TimerRepository            { return &TimerStore{store: s} }
-func (s *Store) Queries() port.QueryRepository           { return &QueryStore{store: s} }
+func (s *Store) Timers() port.TimerRepository              { return &TimerStore{store: s} }
+func (s *Store) Queries() port.QueryRepository             { return &QueryStore{store: s} }

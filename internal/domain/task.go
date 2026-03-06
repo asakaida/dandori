@@ -17,6 +17,7 @@ const (
 
 type WorkflowTask struct {
 	ID          int64
+	Namespace   string
 	QueueName   string
 	WorkflowID  uuid.UUID
 	Status      TaskStatus
@@ -25,6 +26,7 @@ type WorkflowTask struct {
 
 type ActivityTask struct {
 	ID                  int64
+	Namespace           string
 	QueueName           string
 	WorkflowID          uuid.UUID
 	ActivityType        string

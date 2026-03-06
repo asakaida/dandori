@@ -11,24 +11,24 @@ import (
 
 type ClientService interface {
 	StartWorkflow(ctx context.Context, params StartWorkflowParams) (*domain.WorkflowExecution, error)
-	DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
-	GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
-	TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error
-	SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
-	CancelWorkflow(ctx context.Context, id uuid.UUID) error
+	DescribeWorkflow(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error)
+	GetWorkflowHistory(ctx context.Context, namespace string, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
+	TerminateWorkflow(ctx context.Context, namespace string, id uuid.UUID, reason string) error
+	SignalWorkflow(ctx context.Context, namespace string, id uuid.UUID, signalName string, input json.RawMessage) error
+	CancelWorkflow(ctx context.Context, namespace string, id uuid.UUID) error
 	ListWorkflows(ctx context.Context, params ListWorkflowsParams) (*ListWorkflowsResult, error)
-	QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error)
+	QueryWorkflow(ctx context.Context, namespace string, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error)
 }
 
 type WorkflowTaskService interface {
-	PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*WorkflowTaskResult, error)
+	PollWorkflowTask(ctx context.Context, namespace string, queueName string, workerID string) (*WorkflowTaskResult, error)
 	CompleteWorkflowTask(ctx context.Context, taskID int64, commands []domain.Command) error
 	FailWorkflowTask(ctx context.Context, taskID int64, cause string, message string) error
 	RespondQueryTask(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error
 }
 
 type ActivityTaskService interface {
-	PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+	PollActivityTask(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error)
 	CompleteActivityTask(ctx context.Context, taskID int64, result json.RawMessage) error
 	FailActivityTask(ctx context.Context, taskID int64, failure domain.ActivityFailure) error
 	RecordActivityHeartbeat(ctx context.Context, taskID int64, details json.RawMessage) error
@@ -36,6 +36,7 @@ type ActivityTaskService interface {
 
 type StartWorkflowParams struct {
 	ID           uuid.UUID
+	Namespace    string
 	WorkflowType string
 	TaskQueue    string
 	Input        json.RawMessage
@@ -50,6 +51,7 @@ type WorkflowTaskResult struct {
 }
 
 type ListWorkflowsParams struct {
+	Namespace    string
 	PageSize     int
 	Cursor       *ListWorkflowsCursor
 	StatusFilter string

@@ -62,6 +62,8 @@ func local_request_DandoriService_StartWorkflow_0(ctx context.Context, marshaler
 	return msg, metadata, err
 }
 
+var filter_DandoriService_DescribeWorkflow_0 = &utilities.DoubleArray{Encoding: map[string]int{"workflow_id": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+
 func request_DandoriService_DescribeWorkflow_0(ctx context.Context, marshaler runtime.Marshaler, client DandoriServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
 		protoReq DescribeWorkflowRequest
@@ -78,6 +80,12 @@ func request_DandoriService_DescribeWorkflow_0(ctx context.Context, marshaler ru
 	protoReq.WorkflowId, err = runtime.String(val)
 	if err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "workflow_id", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_DandoriService_DescribeWorkflow_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 	msg, err := client.DescribeWorkflow(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
@@ -97,9 +105,17 @@ func local_request_DandoriService_DescribeWorkflow_0(ctx context.Context, marsha
 	if err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "workflow_id", err)
 	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_DandoriService_DescribeWorkflow_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
 	msg, err := server.DescribeWorkflow(ctx, &protoReq)
 	return msg, metadata, err
 }
+
+var filter_DandoriService_GetWorkflowHistory_0 = &utilities.DoubleArray{Encoding: map[string]int{"workflow_id": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
 
 func request_DandoriService_GetWorkflowHistory_0(ctx context.Context, marshaler runtime.Marshaler, client DandoriServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
@@ -118,6 +134,12 @@ func request_DandoriService_GetWorkflowHistory_0(ctx context.Context, marshaler 
 	if err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "workflow_id", err)
 	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_DandoriService_GetWorkflowHistory_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
 	msg, err := client.GetWorkflowHistory(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 }
@@ -135,6 +157,12 @@ func local_request_DandoriService_GetWorkflowHistory_0(ctx context.Context, mars
 	protoReq.WorkflowId, err = runtime.String(val)
 	if err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "workflow_id", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_DandoriService_GetWorkflowHistory_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 	msg, err := server.GetWorkflowHistory(ctx, &protoReq)
 	return msg, metadata, err

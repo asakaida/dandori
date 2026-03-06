@@ -42,6 +42,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 		StatusFilter:  statusFilter,
 		TypeFilter:    typeFilter,
 		QueueFilter:   queueFilter,
+		Namespace:     namespace,
 	})
 	if err != nil {
 		return err

@@ -7,7 +7,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var serverAddr string
+var (
+	serverAddr string
+	namespace  string
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "dandori-cli",
@@ -16,6 +19,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&serverAddr, "server", "localhost:7233", "gRPC server address")
+	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "default", "Namespace")
 }
 
 func Execute() error {

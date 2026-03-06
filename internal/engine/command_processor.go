@@ -10,39 +10,39 @@ import (
 	"github.com/google/uuid"
 )
 
-func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, taskQueue string, commands []domain.Command) error {
+func (e *Engine) processCommands(ctx context.Context, wf *domain.WorkflowExecution, commands []domain.Command) error {
 	for _, cmd := range commands {
 		switch cmd.Type {
 		case domain.CommandScheduleActivityTask:
-			if err := e.processScheduleActivity(ctx, workflowID, taskQueue, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processScheduleActivity(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandCompleteWorkflow:
-			if err := e.processCompleteWorkflow(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processCompleteWorkflow(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandFailWorkflow:
-			if err := e.processFailWorkflow(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processFailWorkflow(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandStartTimer:
-			if err := e.processStartTimer(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processStartTimer(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandCancelTimer:
-			if err := e.processCancelTimer(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processCancelTimer(ctx, wf.ID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandStartChildWorkflow:
-			if err := e.processStartChildWorkflow(ctx, workflowID, taskQueue, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processStartChildWorkflow(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandRecordSideEffect:
-			if err := e.processRecordSideEffect(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processRecordSideEffect(ctx, wf.ID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandContinueAsNew:
-			if err := e.processContinueAsNew(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+			if err := e.processContinueAsNew(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		default:
@@ -52,7 +52,7 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
 	return nil
 }
 
-func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage, metadata map[string]string) error {
+func (e *Engine) processScheduleActivity(ctx context.Context, wf *domain.WorkflowExecution, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.ScheduleActivityTaskAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal ScheduleActivityTaskAttributes: %w", err)
@@ -60,7 +60,7 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
 
 	queue := a.TaskQueue
 	if queue == "" {
-		queue = taskQueue
+		queue = wf.TaskQueue
 	}
 
 	maxAttempts := 1
@@ -70,8 +70,9 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
 
 	now := time.Now()
 	task := domain.ActivityTask{
+		Namespace:              wf.Namespace,
 		QueueName:              queue,
-		WorkflowID:             workflowID,
+		WorkflowID:             wf.ID,
 		ActivityType:           a.ActivityType,
 		ActivityInput:          a.Input,
 		ActivitySeqID:          a.SeqID,
@@ -101,19 +102,14 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
 		return err
 	}
 	return e.events.Append(ctx, []domain.HistoryEvent{
-		{WorkflowID: workflowID, Type: domain.EventActivityTaskScheduled, Data: eventData},
+		{WorkflowID: wf.ID, Type: domain.EventActivityTaskScheduled, Data: eventData},
 	})
 }
 
-func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
+func (e *Engine) processCompleteWorkflow(ctx context.Context, wf *domain.WorkflowExecution, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.CompleteWorkflowAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal CompleteWorkflowAttributes: %w", err)
-	}
-
-	wf, err := e.workflows.Get(ctx, workflowID)
-	if err != nil {
-		return err
 	}
 
 	if wf.CronSchedule != "" {
@@ -122,14 +118,14 @@ func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UU
 			return err
 		}
 		if err := e.events.Append(ctx, []domain.HistoryEvent{
-			{WorkflowID: workflowID, Type: domain.EventWorkflowExecutionCompleted, Data: eventData},
+			{WorkflowID: wf.ID, Type: domain.EventWorkflowExecutionCompleted, Data: eventData},
 		}); err != nil {
 			return err
 		}
 		return e.continueAsNew(ctx, wf, wf.WorkflowType, wf.TaskQueue, a.Result, metadata)
 	}
 
-	if err := e.workflows.UpdateStatus(ctx, workflowID, domain.WorkflowStatusCompleted, a.Result, ""); err != nil {
+	if err := e.workflows.UpdateStatus(ctx, wf.ID, domain.WorkflowStatusCompleted, a.Result, ""); err != nil {
 		return err
 	}
 
@@ -138,25 +134,25 @@ func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UU
 		return err
 	}
 	if err := e.events.Append(ctx, []domain.HistoryEvent{
-		{WorkflowID: workflowID, Type: domain.EventWorkflowExecutionCompleted, Data: eventData},
+		{WorkflowID: wf.ID, Type: domain.EventWorkflowExecutionCompleted, Data: eventData},
 	}); err != nil {
 		return err
 	}
 
 	return e.propagateToParent(ctx, wf, domain.EventChildWorkflowExecutionCompleted, map[string]any{
-		"child_workflow_id": workflowID.String(),
+		"child_workflow_id": wf.ID.String(),
 		"seq_id":            wf.ParentSeqID,
 		"result":            a.Result,
 	})
 }
 
-func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
+func (e *Engine) processFailWorkflow(ctx context.Context, wf *domain.WorkflowExecution, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.FailWorkflowAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal FailWorkflowAttributes: %w", err)
 	}
 
-	if err := e.workflows.UpdateStatus(ctx, workflowID, domain.WorkflowStatusFailed, nil, a.ErrorMessage); err != nil {
+	if err := e.workflows.UpdateStatus(ctx, wf.ID, domain.WorkflowStatusFailed, nil, a.ErrorMessage); err != nil {
 		return err
 	}
 
@@ -165,30 +161,32 @@ func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, 
 		return err
 	}
 	if err := e.events.Append(ctx, []domain.HistoryEvent{
-		{WorkflowID: workflowID, Type: domain.EventWorkflowExecutionFailed, Data: eventData},
+		{WorkflowID: wf.ID, Type: domain.EventWorkflowExecutionFailed, Data: eventData},
 	}); err != nil {
 		return err
 	}
 
-	wf, err := e.workflows.Get(ctx, workflowID)
+	// Re-fetch to get updated status for propagateToParent
+	updatedWF, err := e.workflows.Get(ctx, wf.Namespace, wf.ID)
 	if err != nil {
 		return err
 	}
-	return e.propagateToParent(ctx, wf, domain.EventChildWorkflowExecutionFailed, map[string]any{
-		"child_workflow_id": workflowID.String(),
+	return e.propagateToParent(ctx, updatedWF, domain.EventChildWorkflowExecutionFailed, map[string]any{
+		"child_workflow_id": wf.ID.String(),
 		"seq_id":            wf.ParentSeqID,
 		"error_message":     a.ErrorMessage,
 	})
 }
 
-func (e *Engine) processStartTimer(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
+func (e *Engine) processStartTimer(ctx context.Context, wf *domain.WorkflowExecution, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.StartTimerAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal StartTimerAttributes: %w", err)
 	}
 
 	timer := domain.Timer{
-		WorkflowID: workflowID,
+		Namespace:  wf.Namespace,
+		WorkflowID: wf.ID,
 		SeqID:      a.SeqID,
 		FireAt:     time.Now().Add(a.Duration),
 	}
@@ -201,7 +199,7 @@ func (e *Engine) processStartTimer(ctx context.Context, workflowID uuid.UUID, at
 		return err
 	}
 	return e.events.Append(ctx, []domain.HistoryEvent{
-		{WorkflowID: workflowID, Type: domain.EventTimerStarted, Data: eventData},
+		{WorkflowID: wf.ID, Type: domain.EventTimerStarted, Data: eventData},
 	})
 }
 
@@ -229,7 +227,7 @@ func (e *Engine) processCancelTimer(ctx context.Context, workflowID uuid.UUID, a
 	})
 }
 
-func (e *Engine) processStartChildWorkflow(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage, metadata map[string]string) error {
+func (e *Engine) processStartChildWorkflow(ctx context.Context, parentWF *domain.WorkflowExecution, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.StartChildWorkflowAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal StartChildWorkflowAttributes: %w", err)
@@ -246,7 +244,7 @@ func (e *Engine) processStartChildWorkflow(ctx context.Context, workflowID uuid.
 
 	childQueue := a.TaskQueue
 	if childQueue == "" {
-		childQueue = taskQueue
+		childQueue = parentWF.TaskQueue
 	}
 
 	eventData, err := marshalEventData(map[string]any{
@@ -259,18 +257,19 @@ func (e *Engine) processStartChildWorkflow(ctx context.Context, workflowID uuid.
 		return err
 	}
 	if err := e.events.Append(ctx, []domain.HistoryEvent{
-		{WorkflowID: workflowID, Type: domain.EventChildWorkflowExecutionStarted, Data: eventData},
+		{WorkflowID: parentWF.ID, Type: domain.EventChildWorkflowExecutionStarted, Data: eventData},
 	}); err != nil {
 		return err
 	}
 
 	childWF := domain.WorkflowExecution{
 		ID:               childID,
+		Namespace:        parentWF.Namespace,
 		WorkflowType:     a.WorkflowType,
 		TaskQueue:        childQueue,
 		Status:           domain.WorkflowStatusRunning,
 		Input:            a.Input,
-		ParentWorkflowID: &workflowID,
+		ParentWorkflowID: &parentWF.ID,
 		ParentSeqID:      a.SeqID,
 	}
 	if err := e.workflows.Create(ctx, childWF); err != nil {
@@ -288,6 +287,7 @@ func (e *Engine) processStartChildWorkflow(ctx context.Context, workflowID uuid.
 	}
 
 	return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+		Namespace:   parentWF.Namespace,
 		QueueName:   childQueue,
 		WorkflowID:  childID,
 		ScheduledAt: time.Now(),
@@ -309,15 +309,10 @@ func (e *Engine) processRecordSideEffect(ctx context.Context, workflowID uuid.UU
 	})
 }
 
-func (e *Engine) processContinueAsNew(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
+func (e *Engine) processContinueAsNew(ctx context.Context, wf *domain.WorkflowExecution, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.ContinueAsNewAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal ContinueAsNewAttributes: %w", err)
-	}
-
-	wf, err := e.workflows.Get(ctx, workflowID)
-	if err != nil {
-		return err
 	}
 
 	wfType := a.WorkflowType
@@ -341,6 +336,7 @@ func (e *Engine) continueAsNew(ctx context.Context, wf *domain.WorkflowExecution
 
 	newWF := domain.WorkflowExecution{
 		ID:           newID,
+		Namespace:    wf.Namespace,
 		WorkflowType: workflowType,
 		TaskQueue:    taskQueue,
 		Status:       domain.WorkflowStatusRunning,
@@ -380,6 +376,7 @@ func (e *Engine) continueAsNew(ctx context.Context, wf *domain.WorkflowExecution
 	}
 
 	return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+		Namespace:   wf.Namespace,
 		QueueName:   taskQueue,
 		WorkflowID:  newID,
 		ScheduledAt: time.Now(),

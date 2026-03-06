@@ -35,6 +35,7 @@ func runSignal(cmd *cobra.Command, args []string) error {
 		WorkflowId: args[0],
 		SignalName: name,
 		Input:      []byte(input),
+		Namespace:  namespace,
 	})
 	if err != nil {
 		return err

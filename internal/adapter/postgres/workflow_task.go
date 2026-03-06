@@ -15,31 +15,31 @@ type WorkflowTaskStore struct {
 
 func (s *WorkflowTaskStore) Enqueue(ctx context.Context, task domain.WorkflowTask) error {
 	_, err := s.store.conn(ctx).ExecContext(ctx,
-		`INSERT INTO workflow_tasks (queue_name, workflow_id, status, scheduled_at)
-		 VALUES ($1, $2, 'PENDING', COALESCE($3, NOW()))`,
-		task.QueueName, task.WorkflowID, nullTimeIfZero(task.ScheduledAt),
+		`INSERT INTO workflow_tasks (namespace, queue_name, workflow_id, status, scheduled_at)
+		 VALUES ($1, $2, $3, 'PENDING', COALESCE($4, NOW()))`,
+		task.Namespace, task.QueueName, task.WorkflowID, nullTimeIfZero(task.ScheduledAt),
 	)
 	return err
 }
 
-func (s *WorkflowTaskStore) Poll(ctx context.Context, queueName string, workerID string) (*domain.WorkflowTask, error) {
+func (s *WorkflowTaskStore) Poll(ctx context.Context, namespace string, queueName string, workerID string) (*domain.WorkflowTask, error) {
 	var task domain.WorkflowTask
 	err := s.store.conn(ctx).QueryRowContext(ctx,
 		`UPDATE workflow_tasks SET
 			status = 'RUNNING',
 			started_at = NOW(),
-			locked_by = $2,
+			locked_by = $3,
 			locked_until = NOW() + INTERVAL '30 seconds'
 		 WHERE id = (
 			SELECT id FROM workflow_tasks
-			WHERE queue_name = $1 AND status = 'PENDING' AND scheduled_at <= NOW()
+			WHERE namespace = $1 AND queue_name = $2 AND status = 'PENDING' AND scheduled_at <= NOW()
 			ORDER BY scheduled_at ASC
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		 )
-		 RETURNING id, queue_name, workflow_id, status, scheduled_at`,
-		queueName, workerID,
-	).Scan(&task.ID, &task.QueueName, &task.WorkflowID, &task.Status, &task.ScheduledAt)
+		 RETURNING id, namespace, queue_name, workflow_id, status, scheduled_at`,
+		namespace, queueName, workerID,
+	).Scan(&task.ID, &task.Namespace, &task.QueueName, &task.WorkflowID, &task.Status, &task.ScheduledAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNoTaskAvailable
 	}
@@ -70,9 +70,9 @@ func (s *WorkflowTaskStore) Complete(ctx context.Context, taskID int64) error {
 func (s *WorkflowTaskStore) GetByID(ctx context.Context, taskID int64) (*domain.WorkflowTask, error) {
 	var task domain.WorkflowTask
 	err := s.store.conn(ctx).QueryRowContext(ctx,
-		`SELECT id, queue_name, workflow_id, status, scheduled_at
+		`SELECT id, namespace, queue_name, workflow_id, status, scheduled_at
 		 FROM workflow_tasks WHERE id = $1`, taskID,
-	).Scan(&task.ID, &task.QueueName, &task.WorkflowID, &task.Status, &task.ScheduledAt)
+	).Scan(&task.ID, &task.Namespace, &task.QueueName, &task.WorkflowID, &task.Status, &task.ScheduledAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrTaskNotFound
 	}

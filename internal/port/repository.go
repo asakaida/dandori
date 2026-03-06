@@ -9,9 +9,15 @@ import (
 	"github.com/google/uuid"
 )
 
+type NamespaceRepository interface {
+	GetByName(ctx context.Context, name string) (*domain.Namespace, error)
+	Create(ctx context.Context, ns domain.Namespace) error
+	List(ctx context.Context) ([]domain.Namespace, error)
+}
+
 type WorkflowRepository interface {
 	Create(ctx context.Context, wf domain.WorkflowExecution) error
-	Get(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
+	Get(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error
 	List(ctx context.Context, params ListWorkflowsParams) ([]domain.WorkflowExecution, error)
 	SetContinuedAsNewID(ctx context.Context, id uuid.UUID, newID uuid.UUID) error
@@ -25,7 +31,7 @@ type EventRepository interface {
 
 type WorkflowTaskRepository interface {
 	Enqueue(ctx context.Context, task domain.WorkflowTask) error
-	Poll(ctx context.Context, queueName string, workerID string) (*domain.WorkflowTask, error)
+	Poll(ctx context.Context, namespace string, queueName string, workerID string) (*domain.WorkflowTask, error)
 	Complete(ctx context.Context, taskID int64) error
 	GetByID(ctx context.Context, taskID int64) (*domain.WorkflowTask, error)
 	RecoverStaleTasks(ctx context.Context) (int, error)
@@ -34,7 +40,7 @@ type WorkflowTaskRepository interface {
 
 type ActivityTaskRepository interface {
 	Enqueue(ctx context.Context, task domain.ActivityTask) error
-	Poll(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error)
+	Poll(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error)
 	Complete(ctx context.Context, taskID int64) error
 	GetByID(ctx context.Context, taskID int64) (*domain.ActivityTask, error)
 	GetTimedOut(ctx context.Context) ([]domain.ActivityTask, error)

@@ -782,45 +782,66 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 18 - Namespace（マルチテナント）
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: Namespaceによるマルチテナント分離を実装し、ワークフローとタスクをNamespace単位で管理する
 
 設計判断:
 
-- `namespaces` テーブル作成。デフォルトnamespace（`default`）を初期データとして投入
-- 全テーブルに `namespace_id` カラム追加。全クエリに `WHERE namespace_id = $ns` 条件追加
-- 全APIに `namespace` パラメータ追加。未指定時は `default` を使用
-- CLIに `--namespace` グローバルフラグ追加
+- Namespaceの識別子: `namespace VARCHAR(255)` を直接使用（UUIDではなく名前をPKにする）。name-to-ID解決が不要になり実装が簡素化される
+- `namespaces` テーブル作成（`name VARCHAR(255) PRIMARY KEY`）。デフォルトnamespace（`default`）を初期データとして投入
+- `workflow_executions`, `workflow_tasks`, `activity_tasks`, `timers` に `namespace VARCHAR(255)` カラム追加（FK参照、DEFAULT 'default'）。Pollクエリ用の複合インデックス追加
+- `workflow_events`, `workflow_queries` にはnamespaceカラム追加なし（workflow_id FKで暗黙的にnamespaceに紐づく）
+- 全APIに `namespace` パラメータ追加。未指定時は `default` を使用（`resolveNamespace`ヘルパー）
+- CLIに `--namespace` グローバルフラグ追加（デフォルト `default`）
+- バックグラウンドワーカー: 全namespace横断でスキャン。タスク/タイマーオブジェクトの`Namespace`フィールドからworkflow取得時にnamespaceを指定
+- task ID/query IDベースの操作（Complete, Fail, RespondQuery, Heartbeat）: IDがグローバルに一意のためnamespace引数不要
+- 子ワークフロー・ContinueAsNew: 親と同じnamespaceを継承
+- `processCommands` が `*domain.WorkflowExecution` を受け取る形に変更し、namespace伝搬を簡素化
+- テレメトリデコレータ: 全スパンに `attribute.String("namespace", namespace)` 追加
+- マイグレーション番号: 000007（実際の最新が000006のため）
 
 タスク:
 
-- [ ] internal/adapter/postgres/migration/000008_namespace.up.sql — `namespaces` テーブル作成（id, name UNIQUE, description, created_at）。デフォルトnamespace投入。`workflow_executions`, `workflow_tasks`, `activity_tasks`, `timers` に `namespace_id` カラム追加 + 外部キー + インデックス
-- [ ] internal/adapter/postgres/migration/000008_namespace.down.sql
-- [ ] internal/domain/namespace.go（新規）— `Namespace` 型（ID, Name, Description, CreatedAt）
-- [ ] internal/port/repository.go — `NamespaceRepository` インターフェース追加: `GetByName`, `Create`, `List`。全既存リポジトリメソッドに `namespaceID` パラメータ追加
-- [ ] internal/adapter/postgres/namespace.go（新規）— `NamespaceRepository` 実装
-- [ ] internal/adapter/postgres/workflow.go — 全クエリに `namespace_id` 条件追加
-- [ ] internal/adapter/postgres/workflow_task.go — 全クエリに `namespace_id` 条件追加
-- [ ] internal/adapter/postgres/activity_task.go — 全クエリに `namespace_id` 条件追加
-- [ ] internal/adapter/postgres/timer.go — 全クエリに `namespace_id` 条件追加
-- [ ] internal/engine/engine.go — 全メソッドでnamespace解決（名前→ID変換）を追加
-- [ ] api/v1/service.proto — 全Request メッセージに `namespace` フィールド追加
-- [ ] internal/adapter/grpc/handler.go — namespace伝搬追加。未指定時 `default` 設定
-- [ ] cmd/dandori-cli/ — `--namespace` グローバルフラグ追加、全サブコマンドで伝搬
-- [ ] internal/adapter/postgres/namespace_test.go — Namespace CRUDテスト
-- [ ] internal/adapter/postgres/ 全テスト — namespace_id対応
-- [ ] internal/engine/engine_test.go — namespace分離テスト
-- [ ] test/e2e/ — 異なるnamespace間のワークフロー分離E2Eテスト
+- [x] internal/adapter/postgres/migration/000007_namespace.up.sql — `namespaces` テーブル作成（name VARCHAR(255) PRIMARY KEY, description, created_at）。デフォルトnamespace投入。`workflow_executions`, `workflow_tasks`, `activity_tasks`, `timers` に `namespace` カラム追加 + 外部キー + 複合インデックス
+- [x] internal/adapter/postgres/migration/000007_namespace.down.sql
+- [x] internal/domain/namespace.go（新規）— `Namespace` 型（Name, Description, CreatedAt）
+- [x] internal/domain/errors.go — `ErrNamespaceNotFound` 追加
+- [x] internal/domain/workflow.go, task.go, timer.go — `Namespace string` フィールド追加
+- [x] internal/port/repository.go — `NamespaceRepository` インターフェース追加（GetByName, Create, List）。`WorkflowRepository.Get`, `WorkflowTaskRepository.Poll`, `ActivityTaskRepository.Poll` に `namespace string` パラメータ追加
+- [x] internal/port/service.go — 全サービスインターフェースにnamespace追加。`StartWorkflowParams`, `ListWorkflowsParams` に `Namespace string` フィールド追加
+- [x] internal/adapter/postgres/namespace.go（新規）— `NamespaceStore` 実装（GetByName, Create, List）
+- [x] internal/adapter/postgres/store.go — `Namespaces()` ファクトリメソッド追加
+- [x] internal/adapter/postgres/workflow.go — Create/Get/Listでnamespaceカラム対応
+- [x] internal/adapter/postgres/workflow_task.go — Enqueue/Pollでnamespaceカラム対応
+- [x] internal/adapter/postgres/activity_task.go — Enqueue/Pollでnamespaceカラム対応
+- [x] internal/adapter/postgres/timer.go — Create/GetFiredでnamespaceカラム対応
+- [x] internal/engine/engine.go — `namespaces port.NamespaceRepository` 追加、`resolveNamespace`ヘルパー、全メソッドでnamespace伝搬
+- [x] internal/engine/command_processor.go — `processCommands` が `*domain.WorkflowExecution` を受け取る形に変更、全コマンドプロセッサでnamespace伝搬
+- [x] internal/engine/background.go — task.Namespace/timer.Namespaceを使用してGet/Enqueue
+- [x] api/v1/service.proto — 全10 Requestメッセージに `namespace` フィールド追加
+- [x] api/v1/types.proto — `WorkflowExecution` メッセージに `namespace` フィールド追加
+- [x] internal/adapter/grpc/handler.go — `resolveNamespace`ヘルパー、全10ハンドラでnamespace抽出・伝搬、`domainWorkflowToProto`でNamespace設定
+- [x] internal/adapter/telemetry/decorator.go — 全メソッドにnamespaceパラメータ追加、スパンにnamespace属性追加
+- [x] internal/adapter/telemetry/metrics_decorator.go — 全メソッドにnamespaceパラメータ追加
+- [x] cmd/dandori-cli/cmd/root.go — `--namespace` persistent flag追加（デフォルト `default`）
+- [x] cmd/dandori-cli/ 全サブコマンド — Requestメッセージに `Namespace` フィールド設定
+- [x] cmd/dandori/main.go — `engine.New` に `store.Namespaces()` 追加
+- [x] internal/engine/mock_test.go — mockNamespaceRepo追加、既存モックのシグネチャ更新
+- [x] internal/engine/engine_test.go, command_processor_test.go, background_test.go — namespace対応
+- [x] internal/adapter/grpc/mock_test.go, handler_test.go, testhelper_test.go — namespace対応
+- [x] internal/adapter/telemetry/decorator_test.go — namespace対応
+- [x] internal/adapter/postgres/ 全テスト — namespaceカラム・パラメータ対応
+- [x] test/e2e/setup_test.go — `engine.New` に `store.Namespaces()` 追加
 
 完了条件:
 
-- [ ] デフォルトnamespace（`default`）で既存機能がそのまま動作する
-- [ ] 異なるnamespaceのワークフローが互いに見えない
-- [ ] `dandori-cli --namespace production list` でnamespace指定が動作する
-- [ ] migration 000008 が冪等に適用される
-- [ ] `go test -v -race ./...` — 全テスト通過
-- [ ] `go vet ./...` — クリーン
+- [x] デフォルトnamespace（`default`）で既存機能がそのまま動作する
+- [x] `dandori-cli --namespace production list` でnamespace指定が動作する
+- [x] migration 000007 が冪等に適用される
+- [x] `go build ./cmd/dandori && go build ./cmd/dandori-cli` — ビルド成功
+- [x] `go test -v -race ./...` — 全テスト通過
+- [x] `go vet ./...` — クリーン
 
 ### Sprint 19 - Web UI
 

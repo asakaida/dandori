@@ -23,6 +23,7 @@ func (s WorkflowStatus) IsTerminal() bool {
 
 type WorkflowExecution struct {
 	ID               uuid.UUID
+	Namespace        string
 	WorkflowType     string
 	TaskQueue        string
 	Status           WorkflowStatus

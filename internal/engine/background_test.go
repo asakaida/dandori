@@ -18,7 +18,7 @@ func TestBackgroundWorker_CheckActivityTimeouts(t *testing.T) {
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -64,7 +64,7 @@ func TestBackgroundWorker_CheckActivityTimeouts_TerminalWorkflow(t *testing.T) {
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},
@@ -122,7 +122,7 @@ func TestBackgroundWorker_CheckHeartbeatTimeouts(t *testing.T) {
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -169,7 +169,7 @@ func TestBackgroundWorker_CheckScheduleToCloseTimeout(t *testing.T) {
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -222,7 +222,7 @@ func TestBackgroundWorker_CheckScheduleToStartTimeout(t *testing.T) {
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -274,7 +274,7 @@ func TestBackgroundWorker_CheckScheduleToStartTimeout_TerminalWorkflow(t *testin
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},
@@ -319,7 +319,7 @@ func TestBackgroundWorker_PollFiredTimers(t *testing.T) {
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
 			},
 		},
@@ -391,7 +391,7 @@ func TestBackgroundWorker_PollFiredTimers_TerminalWorkflow(t *testing.T) {
 
 	w := NewBackgroundWorker(
 		&mockWorkflowRepo{
-			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			GetFn: func(_ context.Context, _ string, _ uuid.UUID) (*domain.WorkflowExecution, error) {
 				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
 			},
 		},

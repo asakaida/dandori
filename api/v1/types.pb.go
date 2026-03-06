@@ -164,6 +164,7 @@ type WorkflowExecution struct {
 	ParentSeqId      int64                   `protobuf:"varint,12,opt,name=parent_seq_id,json=parentSeqId,proto3" json:"parent_seq_id,omitempty"`
 	CronSchedule     string                  `protobuf:"bytes,13,opt,name=cron_schedule,json=cronSchedule,proto3" json:"cron_schedule,omitempty"`
 	ContinuedAsNewId string                  `protobuf:"bytes,14,opt,name=continued_as_new_id,json=continuedAsNewId,proto3" json:"continued_as_new_id,omitempty"`
+	Namespace        string                  `protobuf:"bytes,15,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -292,6 +293,13 @@ func (x *WorkflowExecution) GetCronSchedule() string {
 func (x *WorkflowExecution) GetContinuedAsNewId() string {
 	if x != nil {
 		return x.ContinuedAsNewId
+	}
+	return ""
+}
+
+func (x *WorkflowExecution) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -1156,7 +1164,7 @@ var File_api_v1_types_proto protoreflect.FileDescriptor
 
 const file_api_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd0\x04\n" +
+	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xee\x04\n" +
 	"\x11WorkflowExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\x12\x1d\n" +
@@ -1175,7 +1183,8 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x12parent_workflow_id\x18\v \x01(\tR\x10parentWorkflowId\x12\"\n" +
 	"\rparent_seq_id\x18\f \x01(\x03R\vparentSeqId\x12#\n" +
 	"\rcron_schedule\x18\r \x01(\tR\fcronSchedule\x12-\n" +
-	"\x13continued_as_new_id\x18\x0e \x01(\tR\x10continuedAsNewId\"\xda\x01\n" +
+	"\x13continued_as_new_id\x18\x0e \x01(\tR\x10continuedAsNewId\x12\x1c\n" +
+	"\tnamespace\x18\x0f \x01(\tR\tnamespace\"\xda\x01\n" +
 	"\fHistoryEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +

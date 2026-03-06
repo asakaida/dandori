@@ -30,6 +30,7 @@ type StartWorkflowRequest struct {
 	TaskQueue     string                 `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	Input         []byte                 `protobuf:"bytes,4,opt,name=input,proto3" json:"input,omitempty"`
 	CronSchedule  string                 `protobuf:"bytes,5,opt,name=cron_schedule,json=cronSchedule,proto3" json:"cron_schedule,omitempty"`
+	Namespace     string                 `protobuf:"bytes,6,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -99,6 +100,13 @@ func (x *StartWorkflowRequest) GetCronSchedule() string {
 	return ""
 }
 
+func (x *StartWorkflowRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type StartWorkflowResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
@@ -146,6 +154,7 @@ func (x *StartWorkflowResponse) GetWorkflowId() string {
 type DescribeWorkflowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -183,6 +192,13 @@ func (*DescribeWorkflowRequest) Descriptor() ([]byte, []int) {
 func (x *DescribeWorkflowRequest) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *DescribeWorkflowRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -234,6 +250,7 @@ func (x *DescribeWorkflowResponse) GetWorkflowExecution() *WorkflowExecution {
 type GetWorkflowHistoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -271,6 +288,13 @@ func (*GetWorkflowHistoryRequest) Descriptor() ([]byte, []int) {
 func (x *GetWorkflowHistoryRequest) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *GetWorkflowHistoryRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -323,6 +347,7 @@ type TerminateWorkflowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -371,6 +396,13 @@ func (x *TerminateWorkflowRequest) GetReason() string {
 	return ""
 }
 
+func (x *TerminateWorkflowRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type TerminateWorkflowResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -412,6 +444,7 @@ type SignalWorkflowRequest struct {
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	SignalName    string                 `protobuf:"bytes,2,opt,name=signal_name,json=signalName,proto3" json:"signal_name,omitempty"`
 	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -467,6 +500,13 @@ func (x *SignalWorkflowRequest) GetInput() []byte {
 	return nil
 }
 
+func (x *SignalWorkflowRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type SignalWorkflowResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -507,6 +547,7 @@ type PollWorkflowTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	WorkerId      string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -551,6 +592,13 @@ func (x *PollWorkflowTaskRequest) GetQueueName() string {
 func (x *PollWorkflowTaskRequest) GetWorkerId() string {
 	if x != nil {
 		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *PollWorkflowTaskRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -827,6 +875,7 @@ type PollActivityTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	WorkerId      string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -871,6 +920,13 @@ func (x *PollActivityTaskRequest) GetQueueName() string {
 func (x *PollActivityTaskRequest) GetWorkerId() string {
 	if x != nil {
 		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *PollActivityTaskRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -1138,6 +1194,7 @@ func (*FailActivityTaskResponse) Descriptor() ([]byte, []int) {
 type CancelWorkflowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1175,6 +1232,13 @@ func (*CancelWorkflowRequest) Descriptor() ([]byte, []int) {
 func (x *CancelWorkflowRequest) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *CancelWorkflowRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -1222,6 +1286,7 @@ type ListWorkflowsRequest struct {
 	StatusFilter  string                 `protobuf:"bytes,3,opt,name=status_filter,json=statusFilter,proto3" json:"status_filter,omitempty"`
 	TypeFilter    string                 `protobuf:"bytes,4,opt,name=type_filter,json=typeFilter,proto3" json:"type_filter,omitempty"`
 	QueueFilter   string                 `protobuf:"bytes,5,opt,name=queue_filter,json=queueFilter,proto3" json:"queue_filter,omitempty"`
+	Namespace     string                 `protobuf:"bytes,6,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1287,6 +1352,13 @@ func (x *ListWorkflowsRequest) GetTypeFilter() string {
 func (x *ListWorkflowsRequest) GetQueueFilter() string {
 	if x != nil {
 		return x.QueueFilter
+	}
+	return ""
+}
+
+func (x *ListWorkflowsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -1436,6 +1508,7 @@ type QueryWorkflowRequest struct {
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	QueryType     string                 `protobuf:"bytes,2,opt,name=query_type,json=queryType,proto3" json:"query_type,omitempty"`
 	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1489,6 +1562,13 @@ func (x *QueryWorkflowRequest) GetInput() []byte {
 		return x.Input
 	}
 	return nil
+}
+
+func (x *QueryWorkflowRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type QueryWorkflowResponse struct {
@@ -1643,7 +1723,7 @@ var File_api_v1_service_proto protoreflect.FileDescriptor
 
 const file_api_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"\x14api/v1/service.proto\x12\x0edandori.api.v1\x1a\x12api/v1/types.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb6\x01\n" +
+	"\x14api/v1/service.proto\x12\x0edandori.api.v1\x1a\x12api/v1/types.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd4\x01\n" +
 	"\x14StartWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12#\n" +
@@ -1651,36 +1731,42 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"task_queue\x18\x03 \x01(\tR\ttaskQueue\x12\x14\n" +
 	"\x05input\x18\x04 \x01(\fR\x05input\x12#\n" +
-	"\rcron_schedule\x18\x05 \x01(\tR\fcronSchedule\"8\n" +
+	"\rcron_schedule\x18\x05 \x01(\tR\fcronSchedule\x12\x1c\n" +
+	"\tnamespace\x18\x06 \x01(\tR\tnamespace\"8\n" +
 	"\x15StartWorkflowResponse\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
-	"workflowId\":\n" +
+	"workflowId\"X\n" +
 	"\x17DescribeWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
-	"workflowId\"l\n" +
+	"workflowId\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"l\n" +
 	"\x18DescribeWorkflowResponse\x12P\n" +
-	"\x12workflow_execution\x18\x01 \x01(\v2!.dandori.api.v1.WorkflowExecutionR\x11workflowExecution\"<\n" +
+	"\x12workflow_execution\x18\x01 \x01(\v2!.dandori.api.v1.WorkflowExecutionR\x11workflowExecution\"Z\n" +
 	"\x19GetWorkflowHistoryRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
-	"workflowId\"R\n" +
+	"workflowId\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"R\n" +
 	"\x1aGetWorkflowHistoryResponse\x124\n" +
-	"\x06events\x18\x01 \x03(\v2\x1c.dandori.api.v1.HistoryEventR\x06events\"S\n" +
+	"\x06events\x18\x01 \x03(\v2\x1c.dandori.api.v1.HistoryEventR\x06events\"q\n" +
 	"\x18TerminateWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x1b\n" +
-	"\x19TerminateWorkflowResponse\"o\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\x1b\n" +
+	"\x19TerminateWorkflowResponse\"\x8d\x01\n" +
 	"\x15SignalWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x1f\n" +
 	"\vsignal_name\x18\x02 \x01(\tR\n" +
 	"signalName\x12\x14\n" +
-	"\x05input\x18\x03 \x01(\fR\x05input\"\x18\n" +
-	"\x16SignalWorkflowResponse\"U\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\"\x18\n" +
+	"\x16SignalWorkflowResponse\"s\n" +
 	"\x17PollWorkflowTaskRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1b\n" +
-	"\tworker_id\x18\x02 \x01(\tR\bworkerId\"\xf6\x01\n" +
+	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xf6\x01\n" +
 	"\x18PollWorkflowTaskResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -1700,11 +1786,12 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x14\n" +
 	"\x05cause\x18\x02 \x01(\tR\x05cause\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\"\x1a\n" +
-	"\x18FailWorkflowTaskResponse\"U\n" +
+	"\x18FailWorkflowTaskResponse\"s\n" +
 	"\x17PollActivityTaskRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1b\n" +
-	"\tworker_id\x18\x02 \x01(\tR\bworkerId\"\xf9\x01\n" +
+	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xf9\x01\n" +
 	"\x18PollActivityTaskResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -1720,31 +1807,34 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\x17FailActivityTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x129\n" +
 	"\afailure\x18\x02 \x01(\v2\x1f.dandori.api.v1.ActivityFailureR\afailure\"\x1a\n" +
-	"\x18FailActivityTaskResponse\"8\n" +
+	"\x18FailActivityTaskResponse\"V\n" +
 	"\x15CancelWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
-	"workflowId\"\x18\n" +
-	"\x16CancelWorkflowResponse\"\xc4\x01\n" +
+	"workflowId\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"\x18\n" +
+	"\x16CancelWorkflowResponse\"\xe2\x01\n" +
 	"\x14ListWorkflowsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12#\n" +
 	"\rstatus_filter\x18\x03 \x01(\tR\fstatusFilter\x12\x1f\n" +
 	"\vtype_filter\x18\x04 \x01(\tR\n" +
 	"typeFilter\x12!\n" +
-	"\fqueue_filter\x18\x05 \x01(\tR\vqueueFilter\"\x80\x01\n" +
+	"\fqueue_filter\x18\x05 \x01(\tR\vqueueFilter\x12\x1c\n" +
+	"\tnamespace\x18\x06 \x01(\tR\tnamespace\"\x80\x01\n" +
 	"\x15ListWorkflowsResponse\x12?\n" +
 	"\tworkflows\x18\x01 \x03(\v2!.dandori.api.v1.WorkflowExecutionR\tworkflows\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"S\n" +
 	"\x1eRecordActivityHeartbeatRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x18\n" +
 	"\adetails\x18\x02 \x01(\fR\adetails\"!\n" +
-	"\x1fRecordActivityHeartbeatResponse\"l\n" +
+	"\x1fRecordActivityHeartbeatResponse\"\x8a\x01\n" +
 	"\x14QueryWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x1d\n" +
 	"\n" +
 	"query_type\x18\x02 \x01(\tR\tqueryType\x12\x14\n" +
-	"\x05input\x18\x03 \x01(\fR\x05input\"T\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\"T\n" +
 	"\x15QueryWorkflowResponse\x12\x16\n" +
 	"\x06result\x18\x01 \x01(\fR\x06result\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"q\n" +

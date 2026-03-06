@@ -72,6 +72,7 @@ func newTestHandler(t *testing.T) *adaptgrpc.Handler {
 		store.ActivityTasks(),
 		store.Timers(),
 		store.Queries(),
+		store.Namespaces(),
 		store,
 	)
 	return adaptgrpc.NewHandler(eng, eng, eng)

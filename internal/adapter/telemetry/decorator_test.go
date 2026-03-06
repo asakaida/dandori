@@ -33,29 +33,29 @@ func (m *mockClientService) StartWorkflow(ctx context.Context, params port.Start
 	}
 	return &domain.WorkflowExecution{ID: params.ID}, nil
 }
-func (m *mockClientService) DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+func (m *mockClientService) DescribeWorkflow(_ context.Context, _ string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 	return &domain.WorkflowExecution{ID: id}, nil
 }
-func (m *mockClientService) GetWorkflowHistory(context.Context, uuid.UUID) ([]domain.HistoryEvent, error) {
+func (m *mockClientService) GetWorkflowHistory(context.Context, string, uuid.UUID) ([]domain.HistoryEvent, error) {
 	return nil, nil
 }
-func (m *mockClientService) TerminateWorkflow(context.Context, uuid.UUID, string) error {
+func (m *mockClientService) TerminateWorkflow(context.Context, string, uuid.UUID, string) error {
 	return nil
 }
-func (m *mockClientService) SignalWorkflow(context.Context, uuid.UUID, string, json.RawMessage) error {
+func (m *mockClientService) SignalWorkflow(context.Context, string, uuid.UUID, string, json.RawMessage) error {
 	return nil
 }
-func (m *mockClientService) CancelWorkflow(context.Context, uuid.UUID) error { return nil }
+func (m *mockClientService) CancelWorkflow(context.Context, string, uuid.UUID) error { return nil }
 func (m *mockClientService) ListWorkflows(context.Context, port.ListWorkflowsParams) (*port.ListWorkflowsResult, error) {
 	return &port.ListWorkflowsResult{}, nil
 }
-func (m *mockClientService) QueryWorkflow(context.Context, uuid.UUID, string, json.RawMessage) (*domain.WorkflowQuery, error) {
+func (m *mockClientService) QueryWorkflow(context.Context, string, uuid.UUID, string, json.RawMessage) (*domain.WorkflowQuery, error) {
 	return &domain.WorkflowQuery{}, nil
 }
 
 type mockWorkflowTaskService struct{}
 
-func (m *mockWorkflowTaskService) PollWorkflowTask(context.Context, string, string) (*port.WorkflowTaskResult, error) {
+func (m *mockWorkflowTaskService) PollWorkflowTask(context.Context, string, string, string) (*port.WorkflowTaskResult, error) {
 	return nil, nil
 }
 func (m *mockWorkflowTaskService) CompleteWorkflowTask(context.Context, int64, []domain.Command) error {
@@ -70,7 +70,7 @@ func (m *mockWorkflowTaskService) RespondQueryTask(context.Context, int64, json.
 
 type mockActivityTaskService struct{}
 
-func (m *mockActivityTaskService) PollActivityTask(context.Context, string, string) (*domain.ActivityTask, error) {
+func (m *mockActivityTaskService) PollActivityTask(context.Context, string, string, string) (*domain.ActivityTask, error) {
 	return nil, nil
 }
 func (m *mockActivityTaskService) CompleteActivityTask(context.Context, int64, json.RawMessage) error {
@@ -140,7 +140,7 @@ func TestTracingWorkflowTaskService_PollCreatesSpan(t *testing.T) {
 	mock := &mockWorkflowTaskService{}
 	svc := telemetry.NewTracingWorkflowTaskService(mock, tracer)
 
-	_, err := svc.PollWorkflowTask(context.Background(), "default", "worker-1")
+	_, err := svc.PollWorkflowTask(context.Background(), "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	spans := exporter.GetSpans()
@@ -156,7 +156,7 @@ func TestTracingActivityTaskService_PollCreatesSpan(t *testing.T) {
 	mock := &mockActivityTaskService{}
 	svc := telemetry.NewTracingActivityTaskService(mock, tracer)
 
-	_, err := svc.PollActivityTask(context.Background(), "default", "worker-1")
+	_, err := svc.PollActivityTask(context.Background(), "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	spans := exporter.GetSpans()

@@ -366,6 +366,12 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -426,6 +432,12 @@
             "name": "workflowId",
             "in": "path",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
             "type": "string"
           }
         ],
@@ -494,6 +506,12 @@
             "name": "workflowId",
             "in": "path",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
             "type": "string"
           }
         ],
@@ -619,7 +637,12 @@
   },
   "definitions": {
     "DandoriServiceCancelWorkflowBody": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "type": "string"
+        }
+      }
     },
     "DandoriServiceCompleteActivityTaskBody": {
       "type": "object",
@@ -676,6 +699,9 @@
         "input": {
           "type": "string",
           "format": "byte"
+        },
+        "namespace": {
+          "type": "string"
         }
       }
     },
@@ -709,6 +735,9 @@
         "input": {
           "type": "string",
           "format": "byte"
+        },
+        "namespace": {
+          "type": "string"
         }
       }
     },
@@ -716,6 +745,9 @@
       "type": "object",
       "properties": {
         "reason": {
+          "type": "string"
+        },
+        "namespace": {
           "type": "string"
         }
       }
@@ -890,6 +922,9 @@
         },
         "workerId": {
           "type": "string"
+        },
+        "namespace": {
+          "type": "string"
         }
       }
     },
@@ -927,6 +962,9 @@
           "type": "string"
         },
         "workerId": {
+          "type": "string"
+        },
+        "namespace": {
           "type": "string"
         }
       }
@@ -999,6 +1037,9 @@
         },
         "cronSchedule": {
           "type": "string"
+        },
+        "namespace": {
+          "type": "string"
         }
       }
     },
@@ -1062,6 +1103,9 @@
           "type": "string"
         },
         "continuedAsNewId": {
+          "type": "string"
+        },
+        "namespace": {
           "type": "string"
         }
       }

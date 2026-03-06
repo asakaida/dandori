@@ -13,16 +13,16 @@ type TimerStore struct {
 
 func (s *TimerStore) Create(ctx context.Context, timer domain.Timer) error {
 	_, err := s.store.conn(ctx).ExecContext(ctx,
-		`INSERT INTO timers (workflow_id, seq_id, fire_at, status)
-		 VALUES ($1, $2, $3, 'PENDING')`,
-		timer.WorkflowID, timer.SeqID, timer.FireAt,
+		`INSERT INTO timers (namespace, workflow_id, seq_id, fire_at, status)
+		 VALUES ($1, $2, $3, $4, 'PENDING')`,
+		timer.Namespace, timer.WorkflowID, timer.SeqID, timer.FireAt,
 	)
 	return err
 }
 
 func (s *TimerStore) GetFired(ctx context.Context) ([]domain.Timer, error) {
 	rows, err := s.store.conn(ctx).QueryContext(ctx,
-		`SELECT id, workflow_id, seq_id, fire_at, status, created_at
+		`SELECT id, namespace, workflow_id, seq_id, fire_at, status, created_at
 		 FROM timers WHERE status = 'PENDING' AND fire_at <= NOW()`,
 	)
 	if err != nil {
@@ -33,7 +33,7 @@ func (s *TimerStore) GetFired(ctx context.Context) ([]domain.Timer, error) {
 	var timers []domain.Timer
 	for rows.Next() {
 		var t domain.Timer
-		if err := rows.Scan(&t.ID, &t.WorkflowID, &t.SeqID, &t.FireAt, &t.Status, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Namespace, &t.WorkflowID, &t.SeqID, &t.FireAt, &t.Status, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		timers = append(timers, t)

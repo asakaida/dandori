@@ -19,15 +19,15 @@ func TestAdvisoryLock_SameWorkflow_Serialized(t *testing.T) {
 
 	// Enqueue two workflow tasks for the same workflow
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
 
-	task1, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	task1, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
-	task2, err := store.WorkflowTasks().Poll(ctx, "default", "worker-2")
+	task2, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-2")
 	require.NoError(t, err)
 
 	var mu sync.Mutex
@@ -76,15 +76,15 @@ func TestAdvisoryLock_DifferentWorkflows_Concurrent(t *testing.T) {
 	wfID2 := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID1,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID1,
 	}))
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID2,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID2,
 	}))
 
-	task1, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	task1, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
-	task2, err := store.WorkflowTasks().Poll(ctx, "default", "worker-2")
+	task2, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-2")
 	require.NoError(t, err)
 
 	var mu sync.Mutex
@@ -129,9 +129,9 @@ func TestAdvisoryLock_NoLockOutsideTransaction(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
-		QueueName: "default", WorkflowID: wfID,
+		Namespace: "default", QueueName: "default", WorkflowID: wfID,
 	}))
-	task, err := store.WorkflowTasks().Poll(ctx, "default", "worker-1")
+	task, err := store.WorkflowTasks().Poll(ctx, "default", "default", "worker-1")
 	require.NoError(t, err)
 
 	// GetByID outside a transaction should succeed without advisory lock

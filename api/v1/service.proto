@@ -121,6 +121,7 @@ message StartWorkflowRequest {
   string task_queue = 3;
   bytes input = 4;
   string cron_schedule = 5;
+  string namespace = 6;
 }
 
 message StartWorkflowResponse {
@@ -129,6 +130,7 @@ message StartWorkflowResponse {
 
 message DescribeWorkflowRequest {
   string workflow_id = 1;
+  string namespace = 2;
 }
 
 message DescribeWorkflowResponse {
@@ -137,6 +139,7 @@ message DescribeWorkflowResponse {
 
 message GetWorkflowHistoryRequest {
   string workflow_id = 1;
+  string namespace = 2;
 }
 
 message GetWorkflowHistoryResponse {
@@ -146,6 +149,7 @@ message GetWorkflowHistoryResponse {
 message TerminateWorkflowRequest {
   string workflow_id = 1;
   string reason = 2;
+  string namespace = 3;
 }
 
 message TerminateWorkflowResponse {}
@@ -154,6 +158,7 @@ message SignalWorkflowRequest {
   string workflow_id = 1;
   string signal_name = 2;
   bytes input = 3;
+  string namespace = 4;
 }
 
 message SignalWorkflowResponse {}
@@ -163,6 +168,7 @@ message SignalWorkflowResponse {}
 message PollWorkflowTaskRequest {
   string queue_name = 1;
   string worker_id = 2;
+  string namespace = 3;
 }
 
 message PollWorkflowTaskResponse {
@@ -194,6 +200,7 @@ message FailWorkflowTaskResponse {}
 message PollActivityTaskRequest {
   string queue_name = 1;
   string worker_id = 2;
+  string namespace = 3;
 }
 
 message PollActivityTaskResponse {
@@ -221,6 +228,7 @@ message FailActivityTaskResponse {}
 
 message CancelWorkflowRequest {
   string workflow_id = 1;
+  string namespace = 2;
 }
 
 message CancelWorkflowResponse {}
@@ -231,6 +239,7 @@ message ListWorkflowsRequest {
   string status_filter = 3;
   string type_filter = 4;
   string queue_filter = 5;
+  string namespace = 6;
 }
 
 message ListWorkflowsResponse {
@@ -249,6 +258,7 @@ message QueryWorkflowRequest {
   string workflow_id = 1;
   string query_type = 2;
   bytes input = 3;
+  string namespace = 4;
 }
 
 message QueryWorkflowResponse {

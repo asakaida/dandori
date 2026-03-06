@@ -18,6 +18,7 @@ func TestTimerStore_Create_GetFired_MarkFired(t *testing.T) {
 
 	// Create a timer that already fired (fire_at in the past)
 	err := store.Timers().Create(ctx, domain.Timer{
+		Namespace:  "default",
 		WorkflowID: wfID,
 		SeqID:      1,
 		FireAt:     time.Now().Add(-1 * time.Second),
@@ -46,6 +47,7 @@ func TestTimerStore_DeleteByWorkflowID(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		Namespace:  "default",
 		WorkflowID: wfID,
 		SeqID:      1,
 		FireAt:     time.Now().Add(-1 * time.Second),
@@ -65,6 +67,7 @@ func TestTimerStore_GetFired_FutureTimerNotReturned(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	err := store.Timers().Create(ctx, domain.Timer{
+		Namespace:  "default",
 		WorkflowID: wfID,
 		SeqID:      1,
 		FireAt:     time.Now().Add(1 * time.Hour),
@@ -82,6 +85,7 @@ func TestTimerStore_Cancel_Pending(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		Namespace:  "default",
 		WorkflowID: wfID,
 		SeqID:      1,
 		FireAt:     time.Now().Add(1 * time.Hour),
@@ -103,6 +107,7 @@ func TestTimerStore_Cancel_AlreadyFired(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		Namespace:  "default",
 		WorkflowID: wfID,
 		SeqID:      1,
 		FireAt:     time.Now().Add(-1 * time.Second),
@@ -138,6 +143,7 @@ func TestTimerStore_MarkFired_PendingGuard(t *testing.T) {
 	wfID := setupWorkflow(t, ctx, store.Workflows())
 
 	require.NoError(t, store.Timers().Create(ctx, domain.Timer{
+		Namespace:  "default",
 		WorkflowID: wfID,
 		SeqID:      1,
 		FireAt:     time.Now().Add(-1 * time.Second),

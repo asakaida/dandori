@@ -21,6 +21,7 @@ func TestTxManager_RunInTx_Commit(t *testing.T) {
 	err := store.RunInTx(ctx, func(ctx context.Context) error {
 		return store.Workflows().Create(ctx, domain.WorkflowExecution{
 			ID:           wfID,
+			Namespace:    "default",
 			WorkflowType: "test-wf",
 			TaskQueue:    "default",
 			Status:       domain.WorkflowStatusRunning,
@@ -29,7 +30,7 @@ func TestTxManager_RunInTx_Commit(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, wfID, wf.ID)
 }
@@ -42,6 +43,7 @@ func TestTxManager_RunInTx_Rollback(t *testing.T) {
 	err := store.RunInTx(ctx, func(ctx context.Context) error {
 		if err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 			ID:           wfID,
+			Namespace:    "default",
 			WorkflowType: "test-wf",
 			TaskQueue:    "default",
 			Status:       domain.WorkflowStatusRunning,
@@ -52,7 +54,7 @@ func TestTxManager_RunInTx_Rollback(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	_, err = store.Workflows().Get(ctx, wfID)
+	_, err = store.Workflows().Get(ctx, "default", wfID)
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotFound)
 }
 
@@ -64,6 +66,7 @@ func TestTxManager_RunInTx_MultiRepo(t *testing.T) {
 	err := store.RunInTx(ctx, func(ctx context.Context) error {
 		if err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 			ID:           wfID,
+			Namespace:    "default",
 			WorkflowType: "test-wf",
 			TaskQueue:    "default",
 			Status:       domain.WorkflowStatusRunning,
@@ -79,13 +82,14 @@ func TestTxManager_RunInTx_MultiRepo(t *testing.T) {
 			return err
 		}
 		return store.WorkflowTasks().Enqueue(ctx, domain.WorkflowTask{
+			Namespace:  "default",
 			QueueName:  "default",
 			WorkflowID: wfID,
 		})
 	})
 	require.NoError(t, err)
 
-	wf, err := store.Workflows().Get(ctx, wfID)
+	wf, err := store.Workflows().Get(ctx, "default", wfID)
 	require.NoError(t, err)
 	assert.Equal(t, domain.WorkflowStatusRunning, wf.Status)
 
@@ -102,6 +106,7 @@ func TestTxManager_RunInTx_Nested(t *testing.T) {
 	err := store.RunInTx(ctx, func(ctx context.Context) error {
 		if err := store.Workflows().Create(ctx, domain.WorkflowExecution{
 			ID:           wfID,
+			Namespace:    "default",
 			WorkflowType: "test-wf",
 			TaskQueue:    "default",
 			Status:       domain.WorkflowStatusRunning,

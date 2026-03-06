@@ -17,6 +17,7 @@ func setupWorkflow(t *testing.T, ctx context.Context, wfRepo interface{ Create(c
 	wfID := uuid.New()
 	err := wfRepo.Create(ctx, domain.WorkflowExecution{
 		ID:           wfID,
+		Namespace:    "default",
 		WorkflowType: "test-wf",
 		TaskQueue:    "default",
 		Status:       domain.WorkflowStatusRunning,

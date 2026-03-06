@@ -30,6 +30,7 @@ func runTerminate(cmd *cobra.Command, args []string) error {
 	_, err = client.TerminateWorkflow(context.Background(), &apiv1.TerminateWorkflowRequest{
 		WorkflowId: args[0],
 		Reason:     reason,
+		Namespace:  namespace,
 	})
 	if err != nil {
 		return err

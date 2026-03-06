@@ -27,6 +27,7 @@ func runHistory(cmd *cobra.Command, args []string) error {
 
 	resp, err := client.GetWorkflowHistory(context.Background(), &apiv1.GetWorkflowHistoryRequest{
 		WorkflowId: args[0],
+		Namespace:  namespace,
 	})
 	if err != nil {
 		return err

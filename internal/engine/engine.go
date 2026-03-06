@@ -18,6 +18,7 @@ type Engine struct {
 	activityTasks port.ActivityTaskRepository
 	timers        port.TimerRepository
 	queries       port.QueryRepository
+	namespaces    port.NamespaceRepository
 	tx            port.TxManager
 	queryTimeout  time.Duration
 }
@@ -33,6 +34,7 @@ func New(
 	activityTasks port.ActivityTaskRepository,
 	timers port.TimerRepository,
 	queries port.QueryRepository,
+	namespaces port.NamespaceRepository,
 	tx port.TxManager,
 ) *Engine {
 	return &Engine{
@@ -42,14 +44,24 @@ func New(
 		activityTasks: activityTasks,
 		timers:        timers,
 		queries:       queries,
+		namespaces:    namespaces,
 		tx:            tx,
 		queryTimeout:  10 * time.Second,
 	}
 }
 
+func resolveNamespace(ns string) string {
+	if ns == "" {
+		return "default"
+	}
+	return ns
+}
+
 // --- ClientService ---
 
 func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error) {
+	params.Namespace = resolveNamespace(params.Namespace)
+
 	if params.ID == uuid.Nil {
 		params.ID = uuid.New()
 	}
@@ -62,7 +74,7 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 
 	var wf *domain.WorkflowExecution
 	err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
-		existing, err := e.workflows.Get(ctx, params.ID)
+		existing, err := e.workflows.Get(ctx, params.Namespace, params.ID)
 		if err != nil && !errors.Is(err, domain.ErrWorkflowNotFound) {
 			return err
 		}
@@ -91,6 +103,7 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 
 		newWF := domain.WorkflowExecution{
 			ID:           params.ID,
+			Namespace:    params.Namespace,
 			WorkflowType: params.WorkflowType,
 			TaskQueue:    params.TaskQueue,
 			Status:       domain.WorkflowStatusRunning,
@@ -112,6 +125,7 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 		}
 
 		if err := e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   params.Namespace,
 			QueueName:   params.TaskQueue,
 			WorkflowID:  params.ID,
 			ScheduledAt: time.Now(),
@@ -128,17 +142,23 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 	return wf, nil
 }
 
-func (e *Engine) DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
-	return e.workflows.Get(ctx, id)
+func (e *Engine) DescribeWorkflow(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error) {
+	namespace = resolveNamespace(namespace)
+	return e.workflows.Get(ctx, namespace, id)
 }
 
-func (e *Engine) GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
+func (e *Engine) GetWorkflowHistory(ctx context.Context, namespace string, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
+	namespace = resolveNamespace(namespace)
+	if _, err := e.workflows.Get(ctx, namespace, workflowID); err != nil {
+		return nil, err
+	}
 	return e.events.GetByWorkflowID(ctx, workflowID)
 }
 
-func (e *Engine) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error {
+func (e *Engine) TerminateWorkflow(ctx context.Context, namespace string, id uuid.UUID, reason string) error {
+	namespace = resolveNamespace(namespace)
 	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
-		wf, err := e.workflows.Get(ctx, id)
+		wf, err := e.workflows.Get(ctx, namespace, id)
 		if err != nil {
 			return err
 		}
@@ -160,9 +180,10 @@ func (e *Engine) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason str
 	})
 }
 
-func (e *Engine) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error {
+func (e *Engine) SignalWorkflow(ctx context.Context, namespace string, id uuid.UUID, signalName string, input json.RawMessage) error {
+	namespace = resolveNamespace(namespace)
 	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
-		wf, err := e.workflows.Get(ctx, id)
+		wf, err := e.workflows.Get(ctx, namespace, id)
 		if err != nil {
 			return err
 		}
@@ -184,6 +205,7 @@ func (e *Engine) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName st
 		}
 
 		return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   wf.Namespace,
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  id,
 			ScheduledAt: time.Now(),
@@ -192,6 +214,7 @@ func (e *Engine) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName st
 }
 
 func (e *Engine) ListWorkflows(ctx context.Context, params port.ListWorkflowsParams) (*port.ListWorkflowsResult, error) {
+	params.Namespace = resolveNamespace(params.Namespace)
 	if params.PageSize <= 0 {
 		params.PageSize = 20
 	}
@@ -222,9 +245,10 @@ func (e *Engine) ListWorkflows(ctx context.Context, params port.ListWorkflowsPar
 	}, nil
 }
 
-func (e *Engine) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
+func (e *Engine) CancelWorkflow(ctx context.Context, namespace string, id uuid.UUID) error {
+	namespace = resolveNamespace(namespace)
 	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
-		wf, err := e.workflows.Get(ctx, id)
+		wf, err := e.workflows.Get(ctx, namespace, id)
 		if err != nil {
 			return err
 		}
@@ -239,6 +263,7 @@ func (e *Engine) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
 		}
 
 		return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   wf.Namespace,
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  id,
 			ScheduledAt: time.Now(),
@@ -248,8 +273,9 @@ func (e *Engine) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
 
 // --- WorkflowTaskService ---
 
-func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
-	task, err := e.workflowTasks.Poll(ctx, queueName, workerID)
+func (e *Engine) PollWorkflowTask(ctx context.Context, namespace string, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
+	namespace = resolveNamespace(namespace)
+	task, err := e.workflowTasks.Poll(ctx, namespace, queueName, workerID)
 	if errors.Is(err, domain.ErrNoTaskAvailable) {
 		return nil, nil
 	}
@@ -257,7 +283,7 @@ func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerI
 		return nil, err
 	}
 
-	wf, err := e.workflows.Get(ctx, task.WorkflowID)
+	wf, err := e.workflows.Get(ctx, task.Namespace, task.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -291,12 +317,12 @@ func (e *Engine) CompleteWorkflowTask(ctx context.Context, taskID int64, command
 			return err
 		}
 
-		wf, err := e.workflows.Get(ctx, task.WorkflowID)
+		wf, err := e.workflows.Get(ctx, task.Namespace, task.WorkflowID)
 		if err != nil {
 			return err
 		}
 
-		return e.processCommands(ctx, task.WorkflowID, wf.TaskQueue, commands)
+		return e.processCommands(ctx, wf, commands)
 	})
 }
 
@@ -325,7 +351,7 @@ func (e *Engine) FailWorkflowTask(ctx context.Context, taskID int64, cause strin
 			return err
 		}
 
-		wf, err := e.workflows.Get(ctx, task.WorkflowID)
+		wf, err := e.workflows.Get(ctx, task.Namespace, task.WorkflowID)
 		if err != nil {
 			return err
 		}
@@ -341,10 +367,11 @@ func (e *Engine) RespondQueryTask(ctx context.Context, queryID int64, result jso
 	return e.queries.SetResult(ctx, queryID, result, errMsg)
 }
 
-func (e *Engine) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
+func (e *Engine) QueryWorkflow(ctx context.Context, namespace string, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
+	namespace = resolveNamespace(namespace)
 	var queryID int64
 	err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
-		wf, err := e.workflows.Get(ctx, id)
+		wf, err := e.workflows.Get(ctx, namespace, id)
 		if err != nil {
 			return err
 		}
@@ -363,6 +390,7 @@ func (e *Engine) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType stri
 		}
 
 		return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   wf.Namespace,
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  id,
 			ScheduledAt: time.Now(),
@@ -396,8 +424,9 @@ func (e *Engine) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType stri
 
 // --- ActivityTaskService ---
 
-func (e *Engine) PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error) {
-	task, err := e.activityTasks.Poll(ctx, queueName, workerID)
+func (e *Engine) PollActivityTask(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error) {
+	namespace = resolveNamespace(namespace)
+	task, err := e.activityTasks.Poll(ctx, namespace, queueName, workerID)
 	if errors.Is(err, domain.ErrNoTaskAvailable) {
 		return nil, nil
 	}
@@ -418,7 +447,7 @@ func (e *Engine) CompleteActivityTask(ctx context.Context, taskID int64, result 
 			return err
 		}
 
-		wf, err := e.workflows.Get(ctx, task.WorkflowID)
+		wf, err := e.workflows.Get(ctx, task.Namespace, task.WorkflowID)
 		if err != nil {
 			return err
 		}
@@ -445,6 +474,7 @@ func (e *Engine) CompleteActivityTask(ctx context.Context, taskID int64, result 
 		}
 
 		return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   wf.Namespace,
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  task.WorkflowID,
 			ScheduledAt: time.Now(),
@@ -459,7 +489,7 @@ func (e *Engine) FailActivityTask(ctx context.Context, taskID int64, failure dom
 			return err
 		}
 
-		wf, err := e.workflows.Get(ctx, task.WorkflowID)
+		wf, err := e.workflows.Get(ctx, task.Namespace, task.WorkflowID)
 		if err != nil {
 			return err
 		}
@@ -487,6 +517,7 @@ func (e *Engine) FailActivityTask(ctx context.Context, taskID int64, failure dom
 			}
 
 			return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+				Namespace:   wf.Namespace,
 				QueueName:   wf.TaskQueue,
 				WorkflowID:  task.WorkflowID,
 				ScheduledAt: time.Now(),
@@ -502,7 +533,7 @@ func (e *Engine) propagateToParent(ctx context.Context, childWF *domain.Workflow
 		return nil
 	}
 
-	parentWF, err := e.workflows.Get(ctx, *childWF.ParentWorkflowID)
+	parentWF, err := e.workflows.Get(ctx, childWF.Namespace, *childWF.ParentWorkflowID)
 	if err != nil {
 		return err
 	}
@@ -521,6 +552,7 @@ func (e *Engine) propagateToParent(ctx context.Context, childWF *domain.Workflow
 	}
 
 	return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+		Namespace:   parentWF.Namespace,
 		QueueName:   parentWF.TaskQueue,
 		WorkflowID:  parentWF.ID,
 		ScheduledAt: time.Now(),

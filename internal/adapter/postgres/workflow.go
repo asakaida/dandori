@@ -19,9 +19,10 @@ type WorkflowStore struct {
 
 func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution) error {
 	res, err := s.store.conn(ctx).ExecContext(ctx,
-		`INSERT INTO workflow_executions (id, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at, parent_workflow_id, parent_seq_id, cron_schedule)
-		 VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, NOW(), $6, $7, $8)
+		`INSERT INTO workflow_executions (id, namespace, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at, parent_workflow_id, parent_seq_id, cron_schedule)
+		 VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, NULL, NOW(), $7, $8, $9)
 		 ON CONFLICT (id) DO UPDATE SET
+			namespace = EXCLUDED.namespace,
 			workflow_type = EXCLUDED.workflow_type,
 			task_queue = EXCLUDED.task_queue,
 			status = EXCLUDED.status,
@@ -34,7 +35,7 @@ func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution)
 			parent_seq_id = EXCLUDED.parent_seq_id,
 			cron_schedule = EXCLUDED.cron_schedule
 		 WHERE workflow_executions.status IN ('COMPLETED', 'FAILED', 'TERMINATED', 'CONTINUED_AS_NEW')`,
-		wf.ID, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input, wf.ParentWorkflowID, wf.ParentSeqID, wf.CronSchedule,
+		wf.ID, wf.Namespace, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input, wf.ParentWorkflowID, wf.ParentSeqID, wf.CronSchedule,
 	)
 	if err != nil {
 		return err
@@ -49,7 +50,7 @@ func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution)
 	return nil
 }
 
-func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+func (s *WorkflowStore) Get(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 	var wf domain.WorkflowExecution
 	var input, result []byte
 	var errMsg sql.NullString
@@ -59,10 +60,10 @@ func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.Workflow
 	var cronSchedule sql.NullString
 	var continuedAsNewID sql.NullString
 	err := s.store.conn(ctx).QueryRowContext(ctx,
-		`SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
-		 FROM workflow_executions WHERE id = $1`, id,
+		`SELECT id, namespace, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
+		 FROM workflow_executions WHERE id = $1 AND namespace = $2`, id, namespace,
 	).Scan(
-		&wf.ID, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
+		&wf.ID, &wf.Namespace, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 		&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
 		&parentWFID, &parentSeqID, &cronSchedule, &continuedAsNewID,
 	)
@@ -104,10 +105,10 @@ func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.Workflow
 }
 
 func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
-	query := `SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
-		 FROM workflow_executions WHERE 1=1`
-	args := []any{}
-	argIdx := 1
+	query := `SELECT id, namespace, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
+		 FROM workflow_executions WHERE namespace = $1`
+	args := []any{params.Namespace}
+	argIdx := 2
 
 	if params.StatusFilter != "" {
 		query += fmt.Sprintf(" AND status = $%d", argIdx)
@@ -151,7 +152,7 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 		var cronSchedule sql.NullString
 		var continuedAsNewID sql.NullString
 		if err := rows.Scan(
-			&wf.ID, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
+			&wf.ID, &wf.Namespace, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 			&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
 			&parentWFID, &parentSeqID, &cronSchedule, &continuedAsNewID,
 		); err != nil {

@@ -43,6 +43,7 @@ message WorkflowExecution {
   int64 parent_seq_id = 12;
   string cron_schedule = 13;
   string continued_as_new_id = 14;
+  string namespace = 15;
 }
 
 message HistoryEvent {

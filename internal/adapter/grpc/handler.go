@@ -30,6 +30,13 @@ func NewHandler(client port.ClientService, wfTask port.WorkflowTaskService, actT
 	}
 }
 
+func resolveNamespace(ns string) string {
+	if ns == "" {
+		return "default"
+	}
+	return ns
+}
+
 // --- Client API ---
 
 func (h *Handler) StartWorkflow(ctx context.Context, req *apiv1.StartWorkflowRequest) (*apiv1.StartWorkflowResponse, error) {
@@ -44,6 +51,7 @@ func (h *Handler) StartWorkflow(ctx context.Context, req *apiv1.StartWorkflowReq
 
 	wf, err := h.client.StartWorkflow(ctx, port.StartWorkflowParams{
 		ID:           wfID,
+		Namespace:    resolveNamespace(req.GetNamespace()),
 		WorkflowType: req.GetWorkflowType(),
 		TaskQueue:    req.GetTaskQueue(),
 		Input:        json.RawMessage(req.GetInput()),
@@ -61,7 +69,7 @@ func (h *Handler) DescribeWorkflow(ctx context.Context, req *apiv1.DescribeWorkf
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
 	}
 
-	wf, err := h.client.DescribeWorkflow(ctx, id)
+	wf, err := h.client.DescribeWorkflow(ctx, resolveNamespace(req.GetNamespace()), id)
 	if err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
@@ -74,7 +82,7 @@ func (h *Handler) GetWorkflowHistory(ctx context.Context, req *apiv1.GetWorkflow
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
 	}
 
-	events, err := h.client.GetWorkflowHistory(ctx, id)
+	events, err := h.client.GetWorkflowHistory(ctx, resolveNamespace(req.GetNamespace()), id)
 	if err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
@@ -87,7 +95,7 @@ func (h *Handler) TerminateWorkflow(ctx context.Context, req *apiv1.TerminateWor
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
 	}
 
-	if err := h.client.TerminateWorkflow(ctx, id, req.GetReason()); err != nil {
+	if err := h.client.TerminateWorkflow(ctx, resolveNamespace(req.GetNamespace()), id, req.GetReason()); err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
 	return &apiv1.TerminateWorkflowResponse{}, nil
@@ -99,7 +107,7 @@ func (h *Handler) SignalWorkflow(ctx context.Context, req *apiv1.SignalWorkflowR
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
 	}
 
-	if err := h.client.SignalWorkflow(ctx, id, req.GetSignalName(), json.RawMessage(req.GetInput())); err != nil {
+	if err := h.client.SignalWorkflow(ctx, resolveNamespace(req.GetNamespace()), id, req.GetSignalName(), json.RawMessage(req.GetInput())); err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
 	return &apiv1.SignalWorkflowResponse{}, nil
@@ -107,6 +115,7 @@ func (h *Handler) SignalWorkflow(ctx context.Context, req *apiv1.SignalWorkflowR
 
 func (h *Handler) ListWorkflows(ctx context.Context, req *apiv1.ListWorkflowsRequest) (*apiv1.ListWorkflowsResponse, error) {
 	params := port.ListWorkflowsParams{
+		Namespace:    resolveNamespace(req.GetNamespace()),
 		PageSize:     int(req.GetPageSize()),
 		StatusFilter: req.GetStatusFilter(),
 		TypeFilter:   req.GetTypeFilter(),
@@ -144,7 +153,7 @@ func (h *Handler) CancelWorkflow(ctx context.Context, req *apiv1.CancelWorkflowR
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
 	}
 
-	if err := h.client.CancelWorkflow(ctx, id); err != nil {
+	if err := h.client.CancelWorkflow(ctx, resolveNamespace(req.GetNamespace()), id); err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
 	return &apiv1.CancelWorkflowResponse{}, nil
@@ -156,7 +165,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, req *apiv1.QueryWorkflowReq
 		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
 	}
 
-	q, err := h.client.QueryWorkflow(ctx, id, req.GetQueryType(), json.RawMessage(req.GetInput()))
+	q, err := h.client.QueryWorkflow(ctx, resolveNamespace(req.GetNamespace()), id, req.GetQueryType(), json.RawMessage(req.GetInput()))
 	if err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
@@ -169,7 +178,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, req *apiv1.QueryWorkflowReq
 // --- Workflow Task API ---
 
 func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowTaskRequest) (*apiv1.PollWorkflowTaskResponse, error) {
-	result, err := h.wfTask.PollWorkflowTask(ctx, req.GetQueueName(), req.GetWorkerId())
+	result, err := h.wfTask.PollWorkflowTask(ctx, resolveNamespace(req.GetNamespace()), req.GetQueueName(), req.GetWorkerId())
 	if err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
@@ -226,7 +235,7 @@ func (h *Handler) RespondQueryTask(ctx context.Context, req *apiv1.RespondQueryT
 // --- Activity Task API ---
 
 func (h *Handler) PollActivityTask(ctx context.Context, req *apiv1.PollActivityTaskRequest) (*apiv1.PollActivityTaskResponse, error) {
-	task, err := h.actTask.PollActivityTask(ctx, req.GetQueueName(), req.GetWorkerId())
+	task, err := h.actTask.PollActivityTask(ctx, resolveNamespace(req.GetNamespace()), req.GetQueueName(), req.GetWorkerId())
 	if err != nil {
 		return nil, domainErrorToGRPC(err)
 	}
@@ -317,6 +326,7 @@ func workflowStatusToProto(s domain.WorkflowStatus) apiv1.WorkflowExecutionStatu
 func domainWorkflowToProto(wf *domain.WorkflowExecution) *apiv1.WorkflowExecution {
 	pb := &apiv1.WorkflowExecution{
 		Id:           wf.ID.String(),
+		Namespace:    wf.Namespace,
 		WorkflowType: wf.WorkflowType,
 		TaskQueue:    wf.TaskQueue,
 		Status:       workflowStatusToProto(wf.Status),

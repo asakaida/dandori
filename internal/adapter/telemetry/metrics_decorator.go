@@ -32,23 +32,23 @@ func (s *MetricsClientService) StartWorkflow(ctx context.Context, params port.St
 	return wf, err
 }
 
-func (s *MetricsClientService) DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+func (s *MetricsClientService) DescribeWorkflow(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 	start := time.Now()
-	wf, err := s.next.DescribeWorkflow(ctx, id)
+	wf, err := s.next.DescribeWorkflow(ctx, namespace, id)
 	s.metrics.OperationDuration.WithLabelValues("DescribeWorkflow").Observe(time.Since(start).Seconds())
 	return wf, err
 }
 
-func (s *MetricsClientService) GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
+func (s *MetricsClientService) GetWorkflowHistory(ctx context.Context, namespace string, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
 	start := time.Now()
-	events, err := s.next.GetWorkflowHistory(ctx, workflowID)
+	events, err := s.next.GetWorkflowHistory(ctx, namespace, workflowID)
 	s.metrics.OperationDuration.WithLabelValues("GetWorkflowHistory").Observe(time.Since(start).Seconds())
 	return events, err
 }
 
-func (s *MetricsClientService) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error {
+func (s *MetricsClientService) TerminateWorkflow(ctx context.Context, namespace string, id uuid.UUID, reason string) error {
 	start := time.Now()
-	err := s.next.TerminateWorkflow(ctx, id, reason)
+	err := s.next.TerminateWorkflow(ctx, namespace, id, reason)
 	s.metrics.OperationDuration.WithLabelValues("TerminateWorkflow").Observe(time.Since(start).Seconds())
 	if err == nil {
 		s.metrics.WorkflowTerminatedTotal.Inc()
@@ -57,16 +57,16 @@ func (s *MetricsClientService) TerminateWorkflow(ctx context.Context, id uuid.UU
 	return err
 }
 
-func (s *MetricsClientService) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error {
+func (s *MetricsClientService) SignalWorkflow(ctx context.Context, namespace string, id uuid.UUID, signalName string, input json.RawMessage) error {
 	start := time.Now()
-	err := s.next.SignalWorkflow(ctx, id, signalName, input)
+	err := s.next.SignalWorkflow(ctx, namespace, id, signalName, input)
 	s.metrics.OperationDuration.WithLabelValues("SignalWorkflow").Observe(time.Since(start).Seconds())
 	return err
 }
 
-func (s *MetricsClientService) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
+func (s *MetricsClientService) CancelWorkflow(ctx context.Context, namespace string, id uuid.UUID) error {
 	start := time.Now()
-	err := s.next.CancelWorkflow(ctx, id)
+	err := s.next.CancelWorkflow(ctx, namespace, id)
 	s.metrics.OperationDuration.WithLabelValues("CancelWorkflow").Observe(time.Since(start).Seconds())
 	if err == nil {
 		s.metrics.WorkflowCanceledTotal.Inc()
@@ -81,9 +81,9 @@ func (s *MetricsClientService) ListWorkflows(ctx context.Context, params port.Li
 	return result, err
 }
 
-func (s *MetricsClientService) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
+func (s *MetricsClientService) QueryWorkflow(ctx context.Context, namespace string, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
 	start := time.Now()
-	q, err := s.next.QueryWorkflow(ctx, id, queryType, input)
+	q, err := s.next.QueryWorkflow(ctx, namespace, id, queryType, input)
 	s.metrics.OperationDuration.WithLabelValues("QueryWorkflow").Observe(time.Since(start).Seconds())
 	return q, err
 }
@@ -99,9 +99,9 @@ func NewMetricsWorkflowTaskService(next port.WorkflowTaskService, metrics *Metri
 	return &MetricsWorkflowTaskService{next: next, metrics: metrics}
 }
 
-func (s *MetricsWorkflowTaskService) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
+func (s *MetricsWorkflowTaskService) PollWorkflowTask(ctx context.Context, namespace string, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
 	start := time.Now()
-	result, err := s.next.PollWorkflowTask(ctx, queueName, workerID)
+	result, err := s.next.PollWorkflowTask(ctx, namespace, queueName, workerID)
 	s.metrics.OperationDuration.WithLabelValues("PollWorkflowTask").Observe(time.Since(start).Seconds())
 	s.metrics.WorkflowTaskPollTotal.Inc()
 	return result, err
@@ -146,9 +146,9 @@ func NewMetricsActivityTaskService(next port.ActivityTaskService, metrics *Metri
 	return &MetricsActivityTaskService{next: next, metrics: metrics}
 }
 
-func (s *MetricsActivityTaskService) PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error) {
+func (s *MetricsActivityTaskService) PollActivityTask(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error) {
 	start := time.Now()
-	task, err := s.next.PollActivityTask(ctx, queueName, workerID)
+	task, err := s.next.PollActivityTask(ctx, namespace, queueName, workerID)
 	s.metrics.OperationDuration.WithLabelValues("PollActivityTask").Observe(time.Since(start).Seconds())
 	s.metrics.ActivityTaskPollTotal.Inc()
 	return task, err

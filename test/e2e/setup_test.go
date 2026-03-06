@@ -79,6 +79,7 @@ func TestMain(m *testing.M) {
 		store.ActivityTasks(),
 		store.Timers(),
 		store.Queries(),
+		store.Namespaces(),
 		store,
 	)
 	bgWorker := engine.NewBackgroundWorker(

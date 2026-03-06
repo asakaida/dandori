@@ -26,6 +26,7 @@ func NewTracingClientService(next port.ClientService, tracer trace.Tracer) *Trac
 func (s *TracingClientService) StartWorkflow(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error) {
 	ctx, span := s.tracer.Start(ctx, "ClientService.StartWorkflow",
 		trace.WithAttributes(
+			attribute.String("namespace", params.Namespace),
 			attribute.String("workflow.id", params.ID.String()),
 			attribute.String("workflow.type", params.WorkflowType),
 			attribute.String("workflow.task_queue", params.TaskQueue),
@@ -40,12 +41,15 @@ func (s *TracingClientService) StartWorkflow(ctx context.Context, params port.St
 	return wf, err
 }
 
-func (s *TracingClientService) DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+func (s *TracingClientService) DescribeWorkflow(ctx context.Context, namespace string, id uuid.UUID) (*domain.WorkflowExecution, error) {
 	ctx, span := s.tracer.Start(ctx, "ClientService.DescribeWorkflow",
-		trace.WithAttributes(attribute.String("workflow.id", id.String())),
+		trace.WithAttributes(
+			attribute.String("namespace", namespace),
+			attribute.String("workflow.id", id.String()),
+		),
 	)
 	defer span.End()
-	wf, err := s.next.DescribeWorkflow(ctx, id)
+	wf, err := s.next.DescribeWorkflow(ctx, namespace, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -53,12 +57,15 @@ func (s *TracingClientService) DescribeWorkflow(ctx context.Context, id uuid.UUI
 	return wf, err
 }
 
-func (s *TracingClientService) GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
+func (s *TracingClientService) GetWorkflowHistory(ctx context.Context, namespace string, workflowID uuid.UUID) ([]domain.HistoryEvent, error) {
 	ctx, span := s.tracer.Start(ctx, "ClientService.GetWorkflowHistory",
-		trace.WithAttributes(attribute.String("workflow.id", workflowID.String())),
+		trace.WithAttributes(
+			attribute.String("namespace", namespace),
+			attribute.String("workflow.id", workflowID.String()),
+		),
 	)
 	defer span.End()
-	events, err := s.next.GetWorkflowHistory(ctx, workflowID)
+	events, err := s.next.GetWorkflowHistory(ctx, namespace, workflowID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -66,12 +73,15 @@ func (s *TracingClientService) GetWorkflowHistory(ctx context.Context, workflowI
 	return events, err
 }
 
-func (s *TracingClientService) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error {
+func (s *TracingClientService) TerminateWorkflow(ctx context.Context, namespace string, id uuid.UUID, reason string) error {
 	ctx, span := s.tracer.Start(ctx, "ClientService.TerminateWorkflow",
-		trace.WithAttributes(attribute.String("workflow.id", id.String())),
+		trace.WithAttributes(
+			attribute.String("namespace", namespace),
+			attribute.String("workflow.id", id.String()),
+		),
 	)
 	defer span.End()
-	err := s.next.TerminateWorkflow(ctx, id, reason)
+	err := s.next.TerminateWorkflow(ctx, namespace, id, reason)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -79,15 +89,16 @@ func (s *TracingClientService) TerminateWorkflow(ctx context.Context, id uuid.UU
 	return err
 }
 
-func (s *TracingClientService) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error {
+func (s *TracingClientService) SignalWorkflow(ctx context.Context, namespace string, id uuid.UUID, signalName string, input json.RawMessage) error {
 	ctx, span := s.tracer.Start(ctx, "ClientService.SignalWorkflow",
 		trace.WithAttributes(
+			attribute.String("namespace", namespace),
 			attribute.String("workflow.id", id.String()),
 			attribute.String("signal.name", signalName),
 		),
 	)
 	defer span.End()
-	err := s.next.SignalWorkflow(ctx, id, signalName, input)
+	err := s.next.SignalWorkflow(ctx, namespace, id, signalName, input)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -95,12 +106,15 @@ func (s *TracingClientService) SignalWorkflow(ctx context.Context, id uuid.UUID,
 	return err
 }
 
-func (s *TracingClientService) CancelWorkflow(ctx context.Context, id uuid.UUID) error {
+func (s *TracingClientService) CancelWorkflow(ctx context.Context, namespace string, id uuid.UUID) error {
 	ctx, span := s.tracer.Start(ctx, "ClientService.CancelWorkflow",
-		trace.WithAttributes(attribute.String("workflow.id", id.String())),
+		trace.WithAttributes(
+			attribute.String("namespace", namespace),
+			attribute.String("workflow.id", id.String()),
+		),
 	)
 	defer span.End()
-	err := s.next.CancelWorkflow(ctx, id)
+	err := s.next.CancelWorkflow(ctx, namespace, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -111,6 +125,7 @@ func (s *TracingClientService) CancelWorkflow(ctx context.Context, id uuid.UUID)
 func (s *TracingClientService) ListWorkflows(ctx context.Context, params port.ListWorkflowsParams) (*port.ListWorkflowsResult, error) {
 	ctx, span := s.tracer.Start(ctx, "ClientService.ListWorkflows",
 		trace.WithAttributes(
+			attribute.String("namespace", params.Namespace),
 			attribute.Int("list.page_size", params.PageSize),
 			attribute.String("list.status_filter", params.StatusFilter),
 		),
@@ -124,15 +139,16 @@ func (s *TracingClientService) ListWorkflows(ctx context.Context, params port.Li
 	return result, err
 }
 
-func (s *TracingClientService) QueryWorkflow(ctx context.Context, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
+func (s *TracingClientService) QueryWorkflow(ctx context.Context, namespace string, id uuid.UUID, queryType string, input json.RawMessage) (*domain.WorkflowQuery, error) {
 	ctx, span := s.tracer.Start(ctx, "ClientService.QueryWorkflow",
 		trace.WithAttributes(
+			attribute.String("namespace", namespace),
 			attribute.String("workflow.id", id.String()),
 			attribute.String("query.type", queryType),
 		),
 	)
 	defer span.End()
-	q, err := s.next.QueryWorkflow(ctx, id, queryType, input)
+	q, err := s.next.QueryWorkflow(ctx, namespace, id, queryType, input)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -151,15 +167,16 @@ func NewTracingWorkflowTaskService(next port.WorkflowTaskService, tracer trace.T
 	return &TracingWorkflowTaskService{next: next, tracer: tracer}
 }
 
-func (s *TracingWorkflowTaskService) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
+func (s *TracingWorkflowTaskService) PollWorkflowTask(ctx context.Context, namespace string, queueName string, workerID string) (*port.WorkflowTaskResult, error) {
 	ctx, span := s.tracer.Start(ctx, "WorkflowTaskService.PollWorkflowTask",
 		trace.WithAttributes(
+			attribute.String("namespace", namespace),
 			attribute.String("task.queue", queueName),
 			attribute.String("worker.id", workerID),
 		),
 	)
 	defer span.End()
-	result, err := s.next.PollWorkflowTask(ctx, queueName, workerID)
+	result, err := s.next.PollWorkflowTask(ctx, namespace, queueName, workerID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -220,15 +237,16 @@ func NewTracingActivityTaskService(next port.ActivityTaskService, tracer trace.T
 	return &TracingActivityTaskService{next: next, tracer: tracer}
 }
 
-func (s *TracingActivityTaskService) PollActivityTask(ctx context.Context, queueName string, workerID string) (*domain.ActivityTask, error) {
+func (s *TracingActivityTaskService) PollActivityTask(ctx context.Context, namespace string, queueName string, workerID string) (*domain.ActivityTask, error) {
 	ctx, span := s.tracer.Start(ctx, "ActivityTaskService.PollActivityTask",
 		trace.WithAttributes(
+			attribute.String("namespace", namespace),
 			attribute.String("task.queue", queueName),
 			attribute.String("worker.id", workerID),
 		),
 	)
 	defer span.End()
-	task, err := s.next.PollActivityTask(ctx, queueName, workerID)
+	task, err := s.next.PollActivityTask(ctx, namespace, queueName, workerID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

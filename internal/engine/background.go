@@ -98,7 +98,7 @@ func (w *BackgroundWorker) checkActivityTimeouts(ctx context.Context) error {
 
 func (w *BackgroundWorker) handleTimedOutTask(ctx context.Context, task domain.ActivityTask) error {
 	return w.tx.RunInTx(ctx, func(ctx context.Context) error {
-		wf, err := w.workflows.Get(ctx, task.WorkflowID)
+		wf, err := w.workflows.Get(ctx, task.Namespace, task.WorkflowID)
 		if err != nil {
 			return err
 		}
@@ -124,6 +124,7 @@ func (w *BackgroundWorker) handleTimedOutTask(ctx context.Context, task domain.A
 		}
 
 		return w.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   task.Namespace,
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  task.WorkflowID,
 			ScheduledAt: time.Now(),
@@ -133,7 +134,7 @@ func (w *BackgroundWorker) handleTimedOutTask(ctx context.Context, task domain.A
 
 func (w *BackgroundWorker) handleScheduleToStartTimedOutTask(ctx context.Context, task domain.ActivityTask) error {
 	return w.tx.RunInTx(ctx, func(ctx context.Context) error {
-		wf, err := w.workflows.Get(ctx, task.WorkflowID)
+		wf, err := w.workflows.Get(ctx, task.Namespace, task.WorkflowID)
 		if err != nil {
 			return err
 		}
@@ -159,6 +160,7 @@ func (w *BackgroundWorker) handleScheduleToStartTimedOutTask(ctx context.Context
 		}
 
 		return w.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   task.Namespace,
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  task.WorkflowID,
 			ScheduledAt: time.Now(),
@@ -236,7 +238,7 @@ func (w *BackgroundWorker) handleFiredTimer(ctx context.Context, timer domain.Ti
 			return nil
 		}
 
-		wf, err := w.workflows.Get(ctx, timer.WorkflowID)
+		wf, err := w.workflows.Get(ctx, timer.Namespace, timer.WorkflowID)
 		if err != nil {
 			return err
 		}
@@ -257,6 +259,7 @@ func (w *BackgroundWorker) handleFiredTimer(ctx context.Context, timer domain.Ti
 		}
 
 		return w.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			Namespace:   timer.Namespace,
 			QueueName:   wf.TaskQueue,
 			WorkflowID:  timer.WorkflowID,
 			ScheduledAt: time.Now(),

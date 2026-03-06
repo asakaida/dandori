@@ -26,6 +26,7 @@ func runDescribe(_ *cobra.Command, args []string) error {
 
 	resp, err := client.DescribeWorkflow(context.Background(), &apiv1.DescribeWorkflowRequest{
 		WorkflowId: args[0],
+		Namespace:  namespace,
 	})
 	if err != nil {
 		return err

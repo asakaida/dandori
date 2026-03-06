@@ -26,6 +26,7 @@ func runCancel(_ *cobra.Command, args []string) error {
 
 	_, err = client.CancelWorkflow(context.Background(), &apiv1.CancelWorkflowRequest{
 		WorkflowId: args[0],
+		Namespace:  namespace,
 	})
 	if err != nil {
 		return err
