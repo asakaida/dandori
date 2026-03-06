@@ -27,7 +27,7 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 2. ワーカーから返されたコマンドの処理（コマンド→イベント変換）
 3. タスクキューの管理（Workflow Task + Activity Taskの2種類）
 4. タイマーの管理（発火時刻到達の検知）
-5. 外部APIの提供（StartWorkflow, DescribeWorkflow等）
+5. 外部APIの提供（StartWorkflow, DescribeWorkflow, SignalWorkflow等）
 6. Activityタイムアウトの監視（StartToCloseTimeout超過の検知）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
@@ -124,7 +124,8 @@ dandori/
 │       ├── retry_test.go                     # リトライ + non_retryable
 │       ├── timeout_test.go                   # Activityタイムアウト
 │       ├── terminate_test.go                 # Terminate + 結果破棄
-│       └── nondeterminism_test.go            # 非決定性エラー
+│       ├── nondeterminism_test.go            # 非決定性エラー
+│       └── signal_test.go                    # Signal送信・受信・複数Signal
 ├── docker-compose.yml
 └── go.mod
 ```
@@ -187,10 +188,11 @@ const (
     EventTimerFired                 EventType = "TimerFired"
     EventTimerCanceled              EventType = "TimerCanceled"
 
+    EventWorkflowSignaled           EventType = "WorkflowSignaled"
+
     // Phase 2 で追加:
     // EventWorkflowExecutionCancelRequested
     // EventWorkflowExecutionCanceled
-    // EventWorkflowSignaled
 )
 
 type HistoryEvent struct {
@@ -346,6 +348,7 @@ type ClientService interface {
     DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
     GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
     TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error
+    SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
 }
 
 // WorkflowTaskService はワーカーのWorkflow Task操作を定義する。
@@ -577,6 +580,37 @@ func (e *Engine) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason str
             Type:       domain.EventWorkflowExecutionTerminated,
             Data:       data,
         }})
+    })
+}
+
+func (e *Engine) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error {
+    return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+        wf, err := e.workflows.Get(ctx, id)
+        if err != nil {
+            return err
+        }
+        if wf.Status != domain.WorkflowStatusRunning {
+            return domain.ErrWorkflowNotRunning
+        }
+
+        eventData, err := json.Marshal(map[string]any{
+            "signal_name": signalName,
+            "input":       input,
+        })
+        if err != nil {
+            return err
+        }
+        if err := e.events.Append(ctx, []domain.HistoryEvent{{
+            WorkflowID: id,
+            Type:       domain.EventWorkflowSignaled,
+            Data:       eventData,
+        }}); err != nil {
+            return err
+        }
+        return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+            QueueName:  wf.TaskQueue,
+            WorkflowID: id,
+        })
     })
 }
 
@@ -1045,6 +1079,7 @@ func main() {
 | CompleteActivityTask | ワークフロー状態チェック + イベント記録 + Workflow Task投入 |
 | FailActivityTask | ワークフロー状態チェック + リトライ判定 + イベント記録 + タスク再投入 or Workflow Task投入 |
 | TerminateWorkflow | ワークフロー状態チェック + イベント記録 + ステータスをTERMINATEDに更新 |
+| SignalWorkflow | ワークフロー状態チェック（RUNNING確認） + WorkflowSignaledイベント記録 + Workflow Task投入 |
 
 ### バックグラウンドプロセス
 
@@ -1066,6 +1101,7 @@ BackgroundWorkerが管理する:
 | DescribeWorkflow | *WorkflowExecution | ErrWorkflowNotFound |
 | GetWorkflowHistory | []HistoryEvent | ErrWorkflowNotFound |
 | TerminateWorkflow | nil | ErrWorkflowNotFound, ErrWorkflowNotRunning |
+| SignalWorkflow | nil | ErrWorkflowNotFound, ErrWorkflowNotRunning |
 | PollWorkflowTask | *WorkflowTaskResult (nil=タスクなし) | — |
 | CompleteWorkflowTask | nil | ErrTaskNotFound, ErrTaskAlreadyCompleted |
 | FailWorkflowTask | nil | ErrTaskNotFound |
@@ -1160,12 +1196,13 @@ Phase 3 で追加: StartChildWorkflow。なおSaga関連のコマンドはない
 | Activityタイムアウト検知 | ActivityTaskTimedOut | Workflow Task生成 |
 | タイマー発火検知（TimerPoller） | TimerFired | Workflow Task生成 |
 | TerminateWorkflow API | WorkflowExecutionTerminated | ステータスをTERMINATEDに更新 |
+| SignalWorkflow API | WorkflowSignaled | Workflow Task生成 |
 
 ### イベントタイプ一覧
 
-MVP: WorkflowExecutionStarted, WorkflowExecutionCompleted, WorkflowExecutionFailed, WorkflowExecutionTerminated, ActivityTaskScheduled, ActivityTaskCompleted, ActivityTaskFailed, ActivityTaskTimedOut, TimerStarted, TimerFired, TimerCanceled
+MVP + Phase 2実装済み: WorkflowExecutionStarted, WorkflowExecutionCompleted, WorkflowExecutionFailed, WorkflowExecutionTerminated, ActivityTaskScheduled, ActivityTaskCompleted, ActivityTaskFailed, ActivityTaskTimedOut, TimerStarted, TimerFired, TimerCanceled, WorkflowSignaled
 
-Phase 2（残り）: WorkflowExecutionCancelRequested, WorkflowExecutionCanceled, WorkflowSignaled
+Phase 2（残り）: WorkflowExecutionCancelRequested, WorkflowExecutionCanceled
 
 ## 5. Saga / 補償トランザクションの設計
 
@@ -1490,9 +1527,9 @@ service DandoriService {
   rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse);
   rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
   rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
+  rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
 
   // Phase 2:
-  // rpc SignalWorkflow(...);
   // rpc CancelWorkflow(...);
   // rpc ListWorkflows(...);
 
@@ -1591,11 +1628,11 @@ MVPではDescribeWorkflowのポーリングで実現する。
 
 | テスト層 | パッケージ | テスト内容 | テスト数 |
 |---------|-----------|-----------|---------|
-| ユニットテスト | engine | モック構造体によるビジネスロジック検証 | 41 |
-| ユニットテスト | adapter/grpc (grpc_test) | モックサービスによるハンドラ・エラーマッピング検証 | 12 |
+| ユニットテスト | engine | モック構造体によるビジネスロジック検証 | 44 |
+| ユニットテスト | adapter/grpc (grpc_test) | モックサービスによるハンドラ・エラーマッピング検証 | 14 |
 | インテグレーションテスト | adapter/postgres (postgres_test) | testcontainers + PostgreSQL 16による全CRUD・Advisory Lock検証 | 45 |
 | インテグレーションテスト | adapter/grpc (grpc_test) | testcontainers + Engine + PostgreSQL Storeの実スタック検証 | 7 |
-| E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + testcontainers + BackgroundWorker による全主要シナリオ検証 | 13 |
+| E2Eテスト | test/e2e (e2e_test) | bufconn gRPC + testcontainers + BackgroundWorker による全主要シナリオ検証 | 16 |
 
 ### テストパターン
 
@@ -1649,7 +1686,7 @@ test/e2e/ では `google.golang.org/grpc/test/bufconn` を使い、実際のgRPC
 6. adapter/grpc/: gRPCハンドラ（役割別インターフェース受取、domainErrorToGRPC）
 7. cmd/dandori/: DI、サーバー起動、BackgroundWorker起動、graceful shutdown
 8. ユニットテスト + インテグレーションテスト
-9. E2Eテスト: bufconn gRPC + testcontainers + BackgroundWorkerによる全主要シナリオ検証（10テスト）
+9. E2Eテスト: bufconn gRPC + testcontainers + BackgroundWorkerによる全主要シナリオ検証（16テスト）
 
 ### Go SDK
 
