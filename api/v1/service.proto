@@ -5,34 +5,112 @@ package dandori.api.v1;
 option go_package = "github.com/asakaida/dandori/api/v1;apiv1";
 
 import "api/v1/types.proto";
+import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
 service DandoriService {
   // Client API
-  rpc StartWorkflow(StartWorkflowRequest) returns (StartWorkflowResponse);
-  rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse);
-  rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
-  rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
-  rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
-  rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
-  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
-  rpc QueryWorkflow(QueryWorkflowRequest) returns (QueryWorkflowResponse);
+  rpc StartWorkflow(StartWorkflowRequest) returns (StartWorkflowResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflows"
+      body: "*"
+    };
+  }
+  rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse) {
+    option (google.api.http) = {
+      get: "/v1/workflows/{workflow_id}"
+    };
+  }
+  rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse) {
+    option (google.api.http) = {
+      get: "/v1/workflows/{workflow_id}/history"
+    };
+  }
+  rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflows/{workflow_id}/termination"
+      body: "*"
+    };
+  }
+  rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflows/{workflow_id}/signals"
+      body: "*"
+    };
+  }
+  rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflows/{workflow_id}/cancellation"
+      body: "*"
+    };
+  }
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse) {
+    option (google.api.http) = {
+      get: "/v1/workflows"
+    };
+  }
+  rpc QueryWorkflow(QueryWorkflowRequest) returns (QueryWorkflowResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflows/{workflow_id}/queries"
+      body: "*"
+    };
+  }
 
   // Worker API: Workflow Task
-  rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
-  rpc CompleteWorkflowTask(CompleteWorkflowTaskRequest) returns (CompleteWorkflowTaskResponse);
-  rpc FailWorkflowTask(FailWorkflowTaskRequest) returns (FailWorkflowTaskResponse);
+  rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflow-tasks/poll"
+      body: "*"
+    };
+  }
+  rpc CompleteWorkflowTask(CompleteWorkflowTaskRequest) returns (CompleteWorkflowTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflow-tasks/{task_id}/completion"
+      body: "*"
+    };
+  }
+  rpc FailWorkflowTask(FailWorkflowTaskRequest) returns (FailWorkflowTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/workflow-tasks/{task_id}/failure"
+      body: "*"
+    };
+  }
 
   // Worker API: Activity Task
-  rpc PollActivityTask(PollActivityTaskRequest) returns (PollActivityTaskResponse);
-  rpc CompleteActivityTask(CompleteActivityTaskRequest) returns (CompleteActivityTaskResponse);
-  rpc FailActivityTask(FailActivityTaskRequest) returns (FailActivityTaskResponse);
+  rpc PollActivityTask(PollActivityTaskRequest) returns (PollActivityTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/activity-tasks/poll"
+      body: "*"
+    };
+  }
+  rpc CompleteActivityTask(CompleteActivityTaskRequest) returns (CompleteActivityTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/activity-tasks/{task_id}/completion"
+      body: "*"
+    };
+  }
+  rpc FailActivityTask(FailActivityTaskRequest) returns (FailActivityTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/activity-tasks/{task_id}/failure"
+      body: "*"
+    };
+  }
 
   // Worker API: Query
-  rpc RespondQueryTask(RespondQueryTaskRequest) returns (RespondQueryTaskResponse);
+  rpc RespondQueryTask(RespondQueryTaskRequest) returns (RespondQueryTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/queries/{query_id}/response"
+      body: "*"
+    };
+  }
 
   // Heartbeat API
-  rpc RecordActivityHeartbeat(RecordActivityHeartbeatRequest) returns (RecordActivityHeartbeatResponse);
+  rpc RecordActivityHeartbeat(RecordActivityHeartbeatRequest) returns (RecordActivityHeartbeatResponse) {
+    option (google.api.http) = {
+      post: "/v1/activity-tasks/{task_id}/heartbeats"
+      body: "*"
+    };
+  }
 }
 
 // === Client API Messages ===

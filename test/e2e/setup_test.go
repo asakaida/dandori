@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	grpcadapter "github.com/asakaida/dandori/internal/adapter/grpc"
 	"github.com/asakaida/dandori/internal/adapter/postgres"
 	"github.com/asakaida/dandori/internal/engine"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	_ "github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -22,14 +25,16 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const bufSize = 1024 * 1024
 
 var (
-	testDB   *sql.DB
-	client   apiv1.DandoriServiceClient
-	bgCancel context.CancelFunc
+	testDB     *sql.DB
+	client     apiv1.DandoriServiceClient
+	httpServer *httptest.Server
+	bgCancel   context.CancelFunc
 )
 
 func TestMain(m *testing.M) {
@@ -110,6 +115,24 @@ func TestMain(m *testing.M) {
 	}
 	client = apiv1.NewDandoriServiceClient(conn)
 
+	// HTTP server (gRPC-Gateway) for HTTP API tests
+	gwMux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions: protojson.MarshalOptions{
+				EmitUnpopulated: true,
+			},
+			UnmarshalOptions: protojson.UnmarshalOptions{
+				DiscardUnknown: true,
+			},
+		}),
+	)
+	if err := apiv1.RegisterDandoriServiceHandlerServer(ctx, gwMux, handler); err != nil {
+		log.Fatalf("failed to register gateway handler: %v", err)
+	}
+	topMux := http.NewServeMux()
+	topMux.Handle("/", gwMux)
+	httpServer = httptest.NewServer(topMux)
+
 	// Background workers with fast intervals for testing
 	bgCtx, cancel := context.WithCancel(ctx)
 	bgCancel = cancel
@@ -140,6 +163,7 @@ func TestMain(m *testing.M) {
 
 	// Cleanup
 	bgCancel()
+	httpServer.Close()
 	srv.GracefulStop()
 	conn.Close()
 	testDB.Close()

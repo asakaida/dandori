@@ -7,6 +7,7 @@
 package apiv1
 
 import (
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1642,7 +1643,7 @@ var File_api_v1_service_proto protoreflect.FileDescriptor
 
 const file_api_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"\x14api/v1/service.proto\x12\x0edandori.api.v1\x1a\x12api/v1/types.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb6\x01\n" +
+	"\x14api/v1/service.proto\x12\x0edandori.api.v1\x1a\x12api/v1/types.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb6\x01\n" +
 	"\x14StartWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12#\n" +
@@ -1751,24 +1752,24 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\bquery_id\x18\x01 \x01(\x03R\aqueryId\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\fR\x06result\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\x1a\n" +
-	"\x18RespondQueryTaskResponse2\x8f\r\n" +
-	"\x0eDandoriService\x12\\\n" +
-	"\rStartWorkflow\x12$.dandori.api.v1.StartWorkflowRequest\x1a%.dandori.api.v1.StartWorkflowResponse\x12e\n" +
-	"\x10DescribeWorkflow\x12'.dandori.api.v1.DescribeWorkflowRequest\x1a(.dandori.api.v1.DescribeWorkflowResponse\x12k\n" +
-	"\x12GetWorkflowHistory\x12).dandori.api.v1.GetWorkflowHistoryRequest\x1a*.dandori.api.v1.GetWorkflowHistoryResponse\x12h\n" +
-	"\x11TerminateWorkflow\x12(.dandori.api.v1.TerminateWorkflowRequest\x1a).dandori.api.v1.TerminateWorkflowResponse\x12_\n" +
-	"\x0eSignalWorkflow\x12%.dandori.api.v1.SignalWorkflowRequest\x1a&.dandori.api.v1.SignalWorkflowResponse\x12_\n" +
-	"\x0eCancelWorkflow\x12%.dandori.api.v1.CancelWorkflowRequest\x1a&.dandori.api.v1.CancelWorkflowResponse\x12\\\n" +
-	"\rListWorkflows\x12$.dandori.api.v1.ListWorkflowsRequest\x1a%.dandori.api.v1.ListWorkflowsResponse\x12\\\n" +
-	"\rQueryWorkflow\x12$.dandori.api.v1.QueryWorkflowRequest\x1a%.dandori.api.v1.QueryWorkflowResponse\x12e\n" +
-	"\x10PollWorkflowTask\x12'.dandori.api.v1.PollWorkflowTaskRequest\x1a(.dandori.api.v1.PollWorkflowTaskResponse\x12q\n" +
-	"\x14CompleteWorkflowTask\x12+.dandori.api.v1.CompleteWorkflowTaskRequest\x1a,.dandori.api.v1.CompleteWorkflowTaskResponse\x12e\n" +
-	"\x10FailWorkflowTask\x12'.dandori.api.v1.FailWorkflowTaskRequest\x1a(.dandori.api.v1.FailWorkflowTaskResponse\x12e\n" +
-	"\x10PollActivityTask\x12'.dandori.api.v1.PollActivityTaskRequest\x1a(.dandori.api.v1.PollActivityTaskResponse\x12q\n" +
-	"\x14CompleteActivityTask\x12+.dandori.api.v1.CompleteActivityTaskRequest\x1a,.dandori.api.v1.CompleteActivityTaskResponse\x12e\n" +
-	"\x10FailActivityTask\x12'.dandori.api.v1.FailActivityTaskRequest\x1a(.dandori.api.v1.FailActivityTaskResponse\x12e\n" +
-	"\x10RespondQueryTask\x12'.dandori.api.v1.RespondQueryTaskRequest\x1a(.dandori.api.v1.RespondQueryTaskResponse\x12z\n" +
-	"\x17RecordActivityHeartbeat\x12..dandori.api.v1.RecordActivityHeartbeatRequest\x1a/.dandori.api.v1.RecordActivityHeartbeatResponseB*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
+	"\x18RespondQueryTaskResponse2\xdb\x12\n" +
+	"\x0eDandoriService\x12v\n" +
+	"\rStartWorkflow\x12$.dandori.api.v1.StartWorkflowRequest\x1a%.dandori.api.v1.StartWorkflowResponse\"\x18\x82\xd3\xe4\x93\x02\x12:\x01*\"\r/v1/workflows\x12\x8a\x01\n" +
+	"\x10DescribeWorkflow\x12'.dandori.api.v1.DescribeWorkflowRequest\x1a(.dandori.api.v1.DescribeWorkflowResponse\"#\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/workflows/{workflow_id}\x12\x98\x01\n" +
+	"\x12GetWorkflowHistory\x12).dandori.api.v1.GetWorkflowHistoryRequest\x1a*.dandori.api.v1.GetWorkflowHistoryResponse\"+\x82\xd3\xe4\x93\x02%\x12#/v1/workflows/{workflow_id}/history\x12\x9c\x01\n" +
+	"\x11TerminateWorkflow\x12(.dandori.api.v1.TerminateWorkflowRequest\x1a).dandori.api.v1.TerminateWorkflowResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/workflows/{workflow_id}/termination\x12\x8f\x01\n" +
+	"\x0eSignalWorkflow\x12%.dandori.api.v1.SignalWorkflowRequest\x1a&.dandori.api.v1.SignalWorkflowResponse\".\x82\xd3\xe4\x93\x02(:\x01*\"#/v1/workflows/{workflow_id}/signals\x12\x94\x01\n" +
+	"\x0eCancelWorkflow\x12%.dandori.api.v1.CancelWorkflowRequest\x1a&.dandori.api.v1.CancelWorkflowResponse\"3\x82\xd3\xe4\x93\x02-:\x01*\"(/v1/workflows/{workflow_id}/cancellation\x12s\n" +
+	"\rListWorkflows\x12$.dandori.api.v1.ListWorkflowsRequest\x1a%.dandori.api.v1.ListWorkflowsResponse\"\x15\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/workflows\x12\x8c\x01\n" +
+	"\rQueryWorkflow\x12$.dandori.api.v1.QueryWorkflowRequest\x1a%.dandori.api.v1.QueryWorkflowResponse\".\x82\xd3\xe4\x93\x02(:\x01*\"#/v1/workflows/{workflow_id}/queries\x12\x89\x01\n" +
+	"\x10PollWorkflowTask\x12'.dandori.api.v1.PollWorkflowTaskRequest\x1a(.dandori.api.v1.PollWorkflowTaskResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/workflow-tasks/poll\x12\xa5\x01\n" +
+	"\x14CompleteWorkflowTask\x12+.dandori.api.v1.CompleteWorkflowTaskRequest\x1a,.dandori.api.v1.CompleteWorkflowTaskResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/workflow-tasks/{task_id}/completion\x12\x96\x01\n" +
+	"\x10FailWorkflowTask\x12'.dandori.api.v1.FailWorkflowTaskRequest\x1a(.dandori.api.v1.FailWorkflowTaskResponse\"/\x82\xd3\xe4\x93\x02):\x01*\"$/v1/workflow-tasks/{task_id}/failure\x12\x89\x01\n" +
+	"\x10PollActivityTask\x12'.dandori.api.v1.PollActivityTaskRequest\x1a(.dandori.api.v1.PollActivityTaskResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/activity-tasks/poll\x12\xa5\x01\n" +
+	"\x14CompleteActivityTask\x12+.dandori.api.v1.CompleteActivityTaskRequest\x1a,.dandori.api.v1.CompleteActivityTaskResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/activity-tasks/{task_id}/completion\x12\x96\x01\n" +
+	"\x10FailActivityTask\x12'.dandori.api.v1.FailActivityTaskRequest\x1a(.dandori.api.v1.FailActivityTaskResponse\"/\x82\xd3\xe4\x93\x02):\x01*\"$/v1/activity-tasks/{task_id}/failure\x12\x91\x01\n" +
+	"\x10RespondQueryTask\x12'.dandori.api.v1.RespondQueryTaskRequest\x1a(.dandori.api.v1.RespondQueryTaskResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/queries/{query_id}/response\x12\xae\x01\n" +
+	"\x17RecordActivityHeartbeat\x12..dandori.api.v1.RecordActivityHeartbeatRequest\x1a/.dandori.api.v1.RecordActivityHeartbeatResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/activity-tasks/{task_id}/heartbeatsB*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_service_proto_rawDescOnce sync.Once

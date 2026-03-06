@@ -164,7 +164,7 @@ Phase 3:
 - Query（実装済み: QueryWorkflow API + RespondQueryTask API。workflow_queriesテーブルでクエリ管理、PollWorkflowTaskにpending_queries含む。RUNNINGワークフローのみ対象）
 - Cron / スケジュール実行（実装済み: cron_schedule指定、CompleteWorkflow時にContinue-as-Newで自動再起動）
 - Continue-as-New（実装済み: ContinueAsNewコマンド、CONTINUED_AS_NEWステータス、continued_as_new_id追跡）
-- HTTP API（grpc-gateway）
+- HTTP API（実装済み: grpc-gateway、リソース志向URL設計、OpenAPI v2自動生成、`/swagger.json`エンドポイント）
 - OpenTelemetryトレーシング
 - Prometheusメトリクス
 
@@ -420,7 +420,7 @@ sagaパッケージはSDK側で提供する。サーバーにとっては補償A
 - Query（実装済み）
 - Cron / スケジュール実行（実装済み）
 - Continue-as-New（実装済み）
-- HTTP API（grpc-gateway）
+- HTTP API（実装済み: grpc-gateway、リソース志向URL設計、OpenAPI v2自動生成）
 - OpenTelemetryトレーシング
 - Prometheusメトリクス
 
@@ -437,6 +437,7 @@ sagaパッケージはSDK側で提供する。サーバーにとっては補償A
 ### 使用ライブラリ（最小構成）
 
 - gRPC: google.golang.org/grpc + protoc-gen-go
+- HTTP API: github.com/grpc-ecosystem/grpc-gateway/v2（Phase 3）
 - PostgreSQLドライバ: database/sql + github.com/lib/pq
 - マイグレーション: embed.FS（標準ライブラリ、外部依存なし）
 - CLI: github.com/spf13/cobra（Phase 2）

@@ -689,34 +689,51 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 16 - HTTP API (grpc-gateway)
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: gRPC-Gatewayを導入し、RESTful HTTP APIとSwaggerドキュメントを提供する
 
 設計判断:
 
 - proto ファイルにHTTPアノテーション追加（`google.api.http`）
+- リソース志向のURL設計: パス内に動詞を使わず名詞のみ（terminate→termination, signal→signals, cancel→cancellation, query→queries, complete→completion, fail→failure, heartbeat→heartbeats, respond→response）。ワーカーAPIもtask_id/query_idをパスパラメータに含めてリソース操作として表現
 - `runtime.NewServeMux()` でgRPC-Gatewayマルチプレクサを生成し、HTTPサーバーで提供
-- Swagger（OpenAPI）JSON自動生成、`/swagger.json` エンドポイントで提供
+- Swagger（OpenAPI v2）JSON自動生成、`/swagger.json` エンドポイントで提供
+- `protoc-gen-grpc-gateway` / `protoc-gen-openapiv2` プラグインを使用（buf不使用、既存のprotocベースの生成フローを維持）
+- `third_party/google/api/` に `annotations.proto`, `http.proto` を配置してプロトコルアノテーション依存を解決
+- swagger.jsonはembed.FSでバイナリに組み込み、`/swagger.json` エンドポイントで提供
+- E2EテストではRegisterDandoriServiceHandlerServer（in-process方式）を使用し、bufconnとの共存を実現
+- HTTPサーバーのgraceful shutdownは5秒のタイムアウト付きでgRPCサーバーより先に実行
 
 タスク:
 
-- [ ] api/v1/service.proto — 各RPCに `option (google.api.http)` アノテーション追加（POST /v1/workflows, GET /v1/workflows/{id}, POST /v1/workflows/{id}/terminate, etc.）
-- [ ] buf.gen.yaml / protoc設定 — `grpc-gateway`, `openapiv2` プラグイン追加
-- [ ] internal/adapter/http/gateway.go（新規）— `NewGatewayMux(ctx, grpcAddr) (*runtime.ServeMux, error)`: gRPC-Gateway設定。JSON marshaler設定（EmitUnpopulated等）
-- [ ] internal/adapter/http/swagger.go（新規）— embed.FSでSwagger JSON提供。`/swagger.json` ハンドラ
-- [ ] cmd/dandori/main.go — HTTP_PORT環境変数追加。HTTPサーバー起動（Gateway + Swagger）。graceful shutdown統合
-- [ ] api/v1/service.swagger.json（自動生成）
-- [ ] test/e2e/ — HTTP API経由のStartWorkflow、DescribeWorkflow E2Eテスト
+- [x] api/v1/service.proto — 全17 RPCに `option (google.api.http)` アノテーション追加。リソース志向のパス設計: Client API: `GET/POST /v1/workflows`, `GET /v1/workflows/{workflow_id}`, `GET /v1/workflows/{workflow_id}/history`, `POST /v1/workflows/{workflow_id}/termination`, `POST /v1/workflows/{workflow_id}/signals`, `POST /v1/workflows/{workflow_id}/cancellation`, `POST /v1/workflows/{workflow_id}/queries`。Worker API: `POST /v1/workflow-tasks/poll`, `POST /v1/workflow-tasks/{task_id}/completion|failure`, `POST /v1/activity-tasks/poll`, `POST /v1/activity-tasks/{task_id}/completion|failure|heartbeats`, `POST /v1/queries/{query_id}/response`
+- [x] protoc設定 — `protoc-gen-grpc-gateway`, `protoc-gen-openapiv2` プラグインインストール。`third_party/google/api/` に `annotations.proto`, `http.proto` 配置。`--grpc-gateway_out`, `--openapiv2_out` オプション追加
+- [x] internal/adapter/http/gateway.go（新規）— `NewGatewayMux(ctx, grpcAddr) (*runtime.ServeMux, error)`: gRPC-Gateway設定。`protojson.MarshalOptions{EmitUnpopulated: true}`, `protojson.UnmarshalOptions{DiscardUnknown: true}` 設定。`NewHTTPHandler(gatewayMux) http.Handler`: Gateway + Swagger統合ルーティング
+- [x] internal/adapter/http/swagger.go（新規）— `//go:embed swagger.json` でSwagger JSON組み込み。`/swagger.json` ハンドラ
+- [x] internal/adapter/http/swagger.json — `api/v1/service.swagger.json` をコピー（embed用）
+- [x] cmd/dandori/main.go — `HTTP_PORT` 環境変数追加（デフォルト8080）。`httpadapter.NewGatewayMux` → `httpadapter.NewHTTPHandler` → `http.Server` 起動。graceful shutdown統合（HTTPサーバー→gRPCサーバーの順）
+- [x] api/v1/service.swagger.json（自動生成）— OpenAPI v2仕様。全17エンドポイントの定義
+- [x] api/v1/service.pb.gw.go（自動生成）— gRPC-Gatewayリバースプロキシコード
+- [x] test/e2e/setup_test.go — `httptest.Server` + `RegisterDandoriServiceHandlerServer`（in-process方式）追加
+- [x] test/e2e/http_api_test.go（新規）— HTTP API E2Eテスト（8テスト）
+  - TestHTTP_StartWorkflow: POST /v1/workflows でワークフロー開始
+  - TestHTTP_StartAndDescribeWorkflow: 開始 → GET /v1/workflows/{id} で詳細取得
+  - TestHTTP_DescribeWorkflow_NotFound: 存在しないID → 404
+  - TestHTTP_TerminateWorkflow: POST /v1/workflows/{id}/termination → TERMINATED
+  - TestHTTP_GetWorkflowHistory: GET /v1/workflows/{id}/history → イベント一覧
+  - TestHTTP_ListWorkflows: GET /v1/workflows?page_size=10 → 一覧
+  - TestHTTP_ListWorkflows_WithFilter: GET /v1/workflows?status_filter=RUNNING → フィルタ
+  - TestHTTP_FullWorkflowLifecycle: HTTP開始 → gRPCワーカー処理 → HTTP完了確認
 
 完了条件:
 
-- [ ] `curl -X POST http://localhost:8080/v1/workflows` でワークフロー開始可能
-- [ ] `curl http://localhost:8080/v1/workflows/{id}` でワークフロー詳細取得可能
-- [ ] `/swagger.json` でOpenAPI仕様が取得できる
-- [ ] gRPCとHTTPの両方が同時に動作する
-- [ ] `go test -v -race ./...` — 全テスト通過
-- [ ] `go vet ./...` — クリーン
+- [x] `curl -X POST http://localhost:8080/v1/workflows` でワークフロー開始可能（リソース作成）
+- [x] `curl http://localhost:8080/v1/workflows/{id}` でワークフロー詳細取得可能（リソース取得）
+- [x] `/swagger.json` でOpenAPI仕様が取得できる
+- [x] gRPCとHTTPの両方が同時に動作する
+- [x] `go test -v -race ./...` — 全テスト通過
+- [x] `go vet ./...` — クリーン
 
 ### Sprint 17 - Observability (OpenTelemetry + Prometheus)
 

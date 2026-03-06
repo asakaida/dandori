@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +14,7 @@ import (
 
 	apiv1 "github.com/asakaida/dandori/api/v1"
 	grpcadapter "github.com/asakaida/dandori/internal/adapter/grpc"
+	httpadapter "github.com/asakaida/dandori/internal/adapter/http"
 	"github.com/asakaida/dandori/internal/adapter/postgres"
 	"github.com/asakaida/dandori/internal/engine"
 	_ "github.com/lib/pq"
@@ -25,6 +27,7 @@ func main() {
 
 	databaseURL := envOrDefault("DATABASE_URL", "postgres://dandori:dandori@localhost:5432/dandori?sslmode=disable")
 	grpcPort := envOrDefault("GRPC_PORT", "7233")
+	httpPort := envOrDefault("HTTP_PORT", "8080")
 
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
@@ -93,6 +96,7 @@ func main() {
 		}
 	}()
 
+	// gRPC server
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", grpcPort))
 	if err != nil {
 		slog.Error("failed to listen", "error", err)
@@ -104,9 +108,31 @@ func main() {
 	reflection.Register(srv)
 
 	go func() {
-		slog.Info("dandori server listening", "port", grpcPort)
+		slog.Info("dandori gRPC server listening", "port", grpcPort)
 		if err := srv.Serve(lis); err != nil {
-			slog.Error("failed to serve", "error", err)
+			slog.Error("failed to serve gRPC", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// HTTP server (gRPC-Gateway)
+	grpcAddr := fmt.Sprintf("localhost:%s", grpcPort)
+	gatewayMux, err := httpadapter.NewGatewayMux(ctx, grpcAddr)
+	if err != nil {
+		slog.Error("failed to create gateway mux", "error", err)
+		os.Exit(1)
+	}
+
+	httpHandler := httpadapter.NewHTTPHandler(gatewayMux)
+	httpSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", httpPort),
+		Handler: httpHandler,
+	}
+
+	go func() {
+		slog.Info("dandori HTTP server listening", "port", httpPort)
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("failed to serve HTTP", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -117,6 +143,11 @@ func main() {
 	slog.Info("received signal, shutting down", "signal", sig.String())
 
 	cancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	httpSrv.Shutdown(shutdownCtx)
+
 	srv.GracefulStop()
 	db.Close()
 	slog.Info("shutdown complete")
