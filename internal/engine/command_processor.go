@@ -14,23 +14,23 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
 	for _, cmd := range commands {
 		switch cmd.Type {
 		case domain.CommandScheduleActivityTask:
-			if err := e.processScheduleActivity(ctx, workflowID, taskQueue, cmd.Attributes); err != nil {
+			if err := e.processScheduleActivity(ctx, workflowID, taskQueue, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandCompleteWorkflow:
-			if err := e.processCompleteWorkflow(ctx, workflowID, cmd.Attributes); err != nil {
+			if err := e.processCompleteWorkflow(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandFailWorkflow:
-			if err := e.processFailWorkflow(ctx, workflowID, cmd.Attributes); err != nil {
+			if err := e.processFailWorkflow(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandStartTimer:
-			if err := e.processStartTimer(ctx, workflowID, cmd.Attributes); err != nil {
+			if err := e.processStartTimer(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		case domain.CommandCancelTimer:
-			if err := e.processCancelTimer(ctx, workflowID, cmd.Attributes); err != nil {
+			if err := e.processCancelTimer(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
 		default:
@@ -40,7 +40,7 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
 	return nil
 }
 
-func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage) error {
+func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.ScheduleActivityTaskAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal ScheduleActivityTaskAttributes: %w", err)
@@ -84,7 +84,7 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
 		return err
 	}
 
-	eventData, err := json.Marshal(a)
+	eventData, err := marshalEventData(a, metadata)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
 	})
 }
 
-func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage) error {
+func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.CompleteWorkflowAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal CompleteWorkflowAttributes: %w", err)
@@ -103,7 +103,7 @@ func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UU
 		return err
 	}
 
-	eventData, err := json.Marshal(a)
+	eventData, err := marshalEventData(a, metadata)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UU
 	})
 }
 
-func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage) error {
+func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.FailWorkflowAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal FailWorkflowAttributes: %w", err)
@@ -122,7 +122,7 @@ func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, 
 		return err
 	}
 
-	eventData, err := json.Marshal(a)
+	eventData, err := marshalEventData(a, metadata)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (e *Engine) processFailWorkflow(ctx context.Context, workflowID uuid.UUID, 
 	})
 }
 
-func (e *Engine) processStartTimer(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage) error {
+func (e *Engine) processStartTimer(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.StartTimerAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal StartTimerAttributes: %w", err)
@@ -146,7 +146,7 @@ func (e *Engine) processStartTimer(ctx context.Context, workflowID uuid.UUID, at
 		return err
 	}
 
-	eventData, err := json.Marshal(a)
+	eventData, err := marshalEventData(a, metadata)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (e *Engine) processStartTimer(ctx context.Context, workflowID uuid.UUID, at
 	})
 }
 
-func (e *Engine) processCancelTimer(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage) error {
+func (e *Engine) processCancelTimer(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
 	var a domain.CancelTimerAttributes
 	if err := json.Unmarshal(attrs, &a); err != nil {
 		return fmt.Errorf("unmarshal CancelTimerAttributes: %w", err)
@@ -170,11 +170,31 @@ func (e *Engine) processCancelTimer(ctx context.Context, workflowID uuid.UUID, a
 		return nil
 	}
 
-	eventData, err := json.Marshal(a)
+	eventData, err := marshalEventData(a, metadata)
 	if err != nil {
 		return err
 	}
 	return e.events.Append(ctx, []domain.HistoryEvent{
 		{WorkflowID: workflowID, Type: domain.EventTimerCanceled, Data: eventData},
 	})
+}
+
+func marshalEventData(attrs any, metadata map[string]string) (json.RawMessage, error) {
+	if len(metadata) == 0 {
+		return json.Marshal(attrs)
+	}
+	base, err := json.Marshal(attrs)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	mdJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, err
+	}
+	m["metadata"] = mdJSON
+	return json.Marshal(m)
 }

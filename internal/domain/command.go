@@ -18,6 +18,7 @@ const (
 type Command struct {
 	Type       CommandType
 	Attributes json.RawMessage
+	Metadata   map[string]string
 }
 
 type ScheduleActivityTaskAttributes struct {

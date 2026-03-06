@@ -172,6 +172,11 @@ func (h *Handler) CompleteWorkflowTask(ctx context.Context, req *apiv1.CompleteW
 	if err != nil {
 		return nil, err
 	}
+	if md := req.GetMetadata(); len(md) > 0 {
+		for i := range commands {
+			commands[i].Metadata = md
+		}
+	}
 	if err := h.wfTask.CompleteWorkflowTask(ctx, req.GetTaskId(), commands); err != nil {
 		return nil, domainErrorToGRPC(err)
 	}

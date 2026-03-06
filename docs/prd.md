@@ -153,7 +153,7 @@ Phase 2:
 Phase 3:
 
 - Child Workflow
-- Saga / 補償トランザクション: Temporalと同じPure SDKパターン。サーバー側はobservability用のmetadataフィールド追加とE2Eテストのみ。SDK側でsagaパッケージ（AddCompensation, Compensate, ContinueWithError）を提供
+- Saga / 補償トランザクション（サーバー側実装済み: metadataフィールド + E2Eテスト）: Temporalと同じPure SDKパターン。サーバーはsagaの概念を持たず、SDK側でsagaパッケージ（AddCompensation, Compensate, ContinueWithError）を提供
 - SideEffect
 - Query
 - Cron / スケジュール実行
@@ -408,7 +408,7 @@ sagaパッケージはSDK側で提供する。サーバーにとっては補償A
 
 ### Phase 3: 高度な機能
 
-- Saga / 補償トランザクション（サーバー: metadataフィールド + E2E、SDK: sagaパッケージ）
+- Saga / 補償トランザクション（サーバー側実装済み: metadataフィールド + E2E。SDK: sagaパッケージ）
 - Child Workflow
 - SideEffect
 - Query

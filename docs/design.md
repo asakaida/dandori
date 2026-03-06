@@ -239,6 +239,7 @@ const (
 type Command struct {
     Type       CommandType
     Attributes json.RawMessage
+    Metadata   map[string]string
 }
 
 type ScheduleActivityTaskAttributes struct {
@@ -871,17 +872,18 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
     for _, cmd := range commands {
         switch cmd.Type {
         case domain.CommandScheduleActivityTask:
-            if err := e.processScheduleActivity(ctx, workflowID, taskQueue, cmd.Attributes); err != nil {
+            if err := e.processScheduleActivity(ctx, workflowID, taskQueue, cmd.Attributes, cmd.Metadata); err != nil {
                 return err
             }
         case domain.CommandCompleteWorkflow:
-            if err := e.processCompleteWorkflow(ctx, workflowID, cmd.Attributes); err != nil {
+            if err := e.processCompleteWorkflow(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
                 return err
             }
         case domain.CommandFailWorkflow:
-            if err := e.processFailWorkflow(ctx, workflowID, cmd.Attributes); err != nil {
+            if err := e.processFailWorkflow(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
                 return err
             }
+        // StartTimer, CancelTimer も同様に cmd.Metadata を渡す
         default:
             return fmt.Errorf("unknown command type: %s", cmd.Type)
         }
@@ -889,7 +891,7 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
     return nil
 }
 
-func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage) error {
+func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UUID, taskQueue string, attrs json.RawMessage, metadata map[string]string) error {
     var a domain.ScheduleActivityTaskAttributes
     if err := json.Unmarshal(attrs, &a); err != nil {
         return err
@@ -922,7 +924,9 @@ func (e *Engine) processScheduleActivity(ctx context.Context, workflowID uuid.UU
         return err
     }
 
-    eventData, _ := json.Marshal(a)
+    // marshalEventData: metadataが空ならjson.Marshal(a)と同等、
+    // 非空ならevent_dataに"metadata"キーを追加して保存
+    eventData, _ := marshalEventData(a, metadata)
     return e.events.Append(ctx, []domain.HistoryEvent{{
         WorkflowID: workflowID,
         Type:       domain.EventActivityTaskScheduled,
@@ -1221,7 +1225,7 @@ replay時にこのseqIDをキーとしてイベント履歴を検索する。
 | StartTimer | タイマー開始（SeqID, Duration指定） |
 | CancelTimer | タイマーキャンセル（PENDING状態のタイマーのみキャンセル可能） |
 
-Phase 3 で追加: StartChildWorkflow。なおSaga関連のコマンドはない（Pure SDKパターンのため、サーバーは通常のActivityコマンドとして処理する）。observability用にCompleteWorkflowTaskのmetadataフィールドを追加し、SDK側がsaga実行中かどうかのヒントを付与可能にする
+Phase 3 で追加予定: StartChildWorkflow。なおSaga関連のコマンドはない（Pure SDKパターンのため、サーバーは通常のActivityコマンドとして処理する）。observability用にCompleteWorkflowTaskのmetadataフィールドを追加済み（Sprint 12）。SDK側がsaga実行中かどうかのヒントを付与可能
 
 ### コマンド → イベント変換
 
@@ -1288,19 +1292,26 @@ Round 4: 補償実行 (cancel-hotel, cancel-flight を逆順で実行)
 
 サーバーは各ラウンドを既存の仕組みで処理するだけであり、sagaであることを意識しない。
 
-### Observability用metadataフィールド
+### Observability用metadataフィールド（実装済み）
 
-サーバーに構造的変更は不要だが、observability向上のためにCompleteWorkflowTaskRequestにオプショナルなmetadataフィールドを追加する:
+observability向上のためにCompleteWorkflowTaskRequestにオプショナルなmetadataフィールドを追加している:
 
 ```protobuf
 message CompleteWorkflowTaskRequest {
   int64 task_id = 1;
   repeated Command commands = 2;
-  map<string, string> metadata = 3;  // オプショナル: SDK側のヒント情報
+  map<string, string> metadata = 3;
 }
 ```
 
-SDK側がsaga実行中に `{"saga_compensating": "true"}` のようなヒントを設定することで、ログやトレーシングでsaga補償フェーズを識別可能にする。このフィールドはイベントのevent_dataに保存され、GetWorkflowHistoryで取得可能になる。
+SDK側がsaga実行中に `{"saga_compensating": "true"}` のようなヒントを設定することで、ログやトレーシングでsaga補償フェーズを識別可能にする。
+
+metadataの伝搬フロー:
+
+1. gRPCハンドラがリクエストのmetadataを全domain.Commandに設定
+2. command_processor.goの各process関数がmarshalEventDataヘルパーでevent_dataにmetadataを含めて保存
+3. metadataが空の場合は既存と同じJSON構造を維持（後方互換性）
+4. GetWorkflowHistoryでevent_data内のmetadataを取得可能
 
 ### SDK側saga APIの設計（dandori-sdk-goリポジトリで実装）
 

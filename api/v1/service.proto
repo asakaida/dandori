@@ -92,6 +92,7 @@ message PollWorkflowTaskResponse {
 message CompleteWorkflowTaskRequest {
   int64 task_id = 1;
   repeated Command commands = 2;
+  map<string, string> metadata = 3;
 }
 
 message CompleteWorkflowTaskResponse {}

@@ -618,6 +618,7 @@ type CompleteWorkflowTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskId        int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	Commands      []*Command             `protobuf:"bytes,2,rep,name=commands,proto3" json:"commands,omitempty"`
+	Metadata      map[string]string      `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -662,6 +663,13 @@ func (x *CompleteWorkflowTaskRequest) GetTaskId() int64 {
 func (x *CompleteWorkflowTaskRequest) GetCommands() []*Command {
 	if x != nil {
 		return x.Commands
+	}
+	return nil
+}
+
+func (x *CompleteWorkflowTaskRequest) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
 	}
 	return nil
 }
@@ -1452,10 +1460,14 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12#\n" +
 	"\rworkflow_type\x18\x03 \x01(\tR\fworkflowType\x124\n" +
-	"\x06events\x18\x04 \x03(\v2\x1c.dandori.api.v1.HistoryEventR\x06events\"k\n" +
+	"\x06events\x18\x04 \x03(\v2\x1c.dandori.api.v1.HistoryEventR\x06events\"\xff\x01\n" +
 	"\x1bCompleteWorkflowTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x123\n" +
-	"\bcommands\x18\x02 \x03(\v2\x17.dandori.api.v1.CommandR\bcommands\"\x1e\n" +
+	"\bcommands\x18\x02 \x03(\v2\x17.dandori.api.v1.CommandR\bcommands\x12U\n" +
+	"\bmetadata\x18\x03 \x03(\v29.dandori.api.v1.CompleteWorkflowTaskRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x1e\n" +
 	"\x1cCompleteWorkflowTaskResponse\"b\n" +
 	"\x17FailWorkflowTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x14\n" +
@@ -1528,7 +1540,7 @@ func file_api_v1_service_proto_rawDescGZIP() []byte {
 	return file_api_v1_service_proto_rawDescData
 }
 
-var file_api_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_api_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_api_v1_service_proto_goTypes = []any{
 	(*StartWorkflowRequest)(nil),            // 0: dandori.api.v1.StartWorkflowRequest
 	(*StartWorkflowResponse)(nil),           // 1: dandori.api.v1.StartWorkflowResponse
@@ -1558,53 +1570,55 @@ var file_api_v1_service_proto_goTypes = []any{
 	(*ListWorkflowsResponse)(nil),           // 25: dandori.api.v1.ListWorkflowsResponse
 	(*RecordActivityHeartbeatRequest)(nil),  // 26: dandori.api.v1.RecordActivityHeartbeatRequest
 	(*RecordActivityHeartbeatResponse)(nil), // 27: dandori.api.v1.RecordActivityHeartbeatResponse
-	(*WorkflowExecution)(nil),               // 28: dandori.api.v1.WorkflowExecution
-	(*HistoryEvent)(nil),                    // 29: dandori.api.v1.HistoryEvent
-	(*Command)(nil),                         // 30: dandori.api.v1.Command
-	(*timestamppb.Timestamp)(nil),           // 31: google.protobuf.Timestamp
-	(*ActivityFailure)(nil),                 // 32: dandori.api.v1.ActivityFailure
+	nil,                                     // 28: dandori.api.v1.CompleteWorkflowTaskRequest.MetadataEntry
+	(*WorkflowExecution)(nil),               // 29: dandori.api.v1.WorkflowExecution
+	(*HistoryEvent)(nil),                    // 30: dandori.api.v1.HistoryEvent
+	(*Command)(nil),                         // 31: dandori.api.v1.Command
+	(*timestamppb.Timestamp)(nil),           // 32: google.protobuf.Timestamp
+	(*ActivityFailure)(nil),                 // 33: dandori.api.v1.ActivityFailure
 }
 var file_api_v1_service_proto_depIdxs = []int32{
-	28, // 0: dandori.api.v1.DescribeWorkflowResponse.workflow_execution:type_name -> dandori.api.v1.WorkflowExecution
-	29, // 1: dandori.api.v1.GetWorkflowHistoryResponse.events:type_name -> dandori.api.v1.HistoryEvent
-	29, // 2: dandori.api.v1.PollWorkflowTaskResponse.events:type_name -> dandori.api.v1.HistoryEvent
-	30, // 3: dandori.api.v1.CompleteWorkflowTaskRequest.commands:type_name -> dandori.api.v1.Command
-	31, // 4: dandori.api.v1.PollActivityTaskResponse.scheduled_at:type_name -> google.protobuf.Timestamp
-	32, // 5: dandori.api.v1.FailActivityTaskRequest.failure:type_name -> dandori.api.v1.ActivityFailure
-	28, // 6: dandori.api.v1.ListWorkflowsResponse.workflows:type_name -> dandori.api.v1.WorkflowExecution
-	0,  // 7: dandori.api.v1.DandoriService.StartWorkflow:input_type -> dandori.api.v1.StartWorkflowRequest
-	2,  // 8: dandori.api.v1.DandoriService.DescribeWorkflow:input_type -> dandori.api.v1.DescribeWorkflowRequest
-	4,  // 9: dandori.api.v1.DandoriService.GetWorkflowHistory:input_type -> dandori.api.v1.GetWorkflowHistoryRequest
-	6,  // 10: dandori.api.v1.DandoriService.TerminateWorkflow:input_type -> dandori.api.v1.TerminateWorkflowRequest
-	8,  // 11: dandori.api.v1.DandoriService.SignalWorkflow:input_type -> dandori.api.v1.SignalWorkflowRequest
-	22, // 12: dandori.api.v1.DandoriService.CancelWorkflow:input_type -> dandori.api.v1.CancelWorkflowRequest
-	24, // 13: dandori.api.v1.DandoriService.ListWorkflows:input_type -> dandori.api.v1.ListWorkflowsRequest
-	10, // 14: dandori.api.v1.DandoriService.PollWorkflowTask:input_type -> dandori.api.v1.PollWorkflowTaskRequest
-	12, // 15: dandori.api.v1.DandoriService.CompleteWorkflowTask:input_type -> dandori.api.v1.CompleteWorkflowTaskRequest
-	14, // 16: dandori.api.v1.DandoriService.FailWorkflowTask:input_type -> dandori.api.v1.FailWorkflowTaskRequest
-	16, // 17: dandori.api.v1.DandoriService.PollActivityTask:input_type -> dandori.api.v1.PollActivityTaskRequest
-	18, // 18: dandori.api.v1.DandoriService.CompleteActivityTask:input_type -> dandori.api.v1.CompleteActivityTaskRequest
-	20, // 19: dandori.api.v1.DandoriService.FailActivityTask:input_type -> dandori.api.v1.FailActivityTaskRequest
-	26, // 20: dandori.api.v1.DandoriService.RecordActivityHeartbeat:input_type -> dandori.api.v1.RecordActivityHeartbeatRequest
-	1,  // 21: dandori.api.v1.DandoriService.StartWorkflow:output_type -> dandori.api.v1.StartWorkflowResponse
-	3,  // 22: dandori.api.v1.DandoriService.DescribeWorkflow:output_type -> dandori.api.v1.DescribeWorkflowResponse
-	5,  // 23: dandori.api.v1.DandoriService.GetWorkflowHistory:output_type -> dandori.api.v1.GetWorkflowHistoryResponse
-	7,  // 24: dandori.api.v1.DandoriService.TerminateWorkflow:output_type -> dandori.api.v1.TerminateWorkflowResponse
-	9,  // 25: dandori.api.v1.DandoriService.SignalWorkflow:output_type -> dandori.api.v1.SignalWorkflowResponse
-	23, // 26: dandori.api.v1.DandoriService.CancelWorkflow:output_type -> dandori.api.v1.CancelWorkflowResponse
-	25, // 27: dandori.api.v1.DandoriService.ListWorkflows:output_type -> dandori.api.v1.ListWorkflowsResponse
-	11, // 28: dandori.api.v1.DandoriService.PollWorkflowTask:output_type -> dandori.api.v1.PollWorkflowTaskResponse
-	13, // 29: dandori.api.v1.DandoriService.CompleteWorkflowTask:output_type -> dandori.api.v1.CompleteWorkflowTaskResponse
-	15, // 30: dandori.api.v1.DandoriService.FailWorkflowTask:output_type -> dandori.api.v1.FailWorkflowTaskResponse
-	17, // 31: dandori.api.v1.DandoriService.PollActivityTask:output_type -> dandori.api.v1.PollActivityTaskResponse
-	19, // 32: dandori.api.v1.DandoriService.CompleteActivityTask:output_type -> dandori.api.v1.CompleteActivityTaskResponse
-	21, // 33: dandori.api.v1.DandoriService.FailActivityTask:output_type -> dandori.api.v1.FailActivityTaskResponse
-	27, // 34: dandori.api.v1.DandoriService.RecordActivityHeartbeat:output_type -> dandori.api.v1.RecordActivityHeartbeatResponse
-	21, // [21:35] is the sub-list for method output_type
-	7,  // [7:21] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	29, // 0: dandori.api.v1.DescribeWorkflowResponse.workflow_execution:type_name -> dandori.api.v1.WorkflowExecution
+	30, // 1: dandori.api.v1.GetWorkflowHistoryResponse.events:type_name -> dandori.api.v1.HistoryEvent
+	30, // 2: dandori.api.v1.PollWorkflowTaskResponse.events:type_name -> dandori.api.v1.HistoryEvent
+	31, // 3: dandori.api.v1.CompleteWorkflowTaskRequest.commands:type_name -> dandori.api.v1.Command
+	28, // 4: dandori.api.v1.CompleteWorkflowTaskRequest.metadata:type_name -> dandori.api.v1.CompleteWorkflowTaskRequest.MetadataEntry
+	32, // 5: dandori.api.v1.PollActivityTaskResponse.scheduled_at:type_name -> google.protobuf.Timestamp
+	33, // 6: dandori.api.v1.FailActivityTaskRequest.failure:type_name -> dandori.api.v1.ActivityFailure
+	29, // 7: dandori.api.v1.ListWorkflowsResponse.workflows:type_name -> dandori.api.v1.WorkflowExecution
+	0,  // 8: dandori.api.v1.DandoriService.StartWorkflow:input_type -> dandori.api.v1.StartWorkflowRequest
+	2,  // 9: dandori.api.v1.DandoriService.DescribeWorkflow:input_type -> dandori.api.v1.DescribeWorkflowRequest
+	4,  // 10: dandori.api.v1.DandoriService.GetWorkflowHistory:input_type -> dandori.api.v1.GetWorkflowHistoryRequest
+	6,  // 11: dandori.api.v1.DandoriService.TerminateWorkflow:input_type -> dandori.api.v1.TerminateWorkflowRequest
+	8,  // 12: dandori.api.v1.DandoriService.SignalWorkflow:input_type -> dandori.api.v1.SignalWorkflowRequest
+	22, // 13: dandori.api.v1.DandoriService.CancelWorkflow:input_type -> dandori.api.v1.CancelWorkflowRequest
+	24, // 14: dandori.api.v1.DandoriService.ListWorkflows:input_type -> dandori.api.v1.ListWorkflowsRequest
+	10, // 15: dandori.api.v1.DandoriService.PollWorkflowTask:input_type -> dandori.api.v1.PollWorkflowTaskRequest
+	12, // 16: dandori.api.v1.DandoriService.CompleteWorkflowTask:input_type -> dandori.api.v1.CompleteWorkflowTaskRequest
+	14, // 17: dandori.api.v1.DandoriService.FailWorkflowTask:input_type -> dandori.api.v1.FailWorkflowTaskRequest
+	16, // 18: dandori.api.v1.DandoriService.PollActivityTask:input_type -> dandori.api.v1.PollActivityTaskRequest
+	18, // 19: dandori.api.v1.DandoriService.CompleteActivityTask:input_type -> dandori.api.v1.CompleteActivityTaskRequest
+	20, // 20: dandori.api.v1.DandoriService.FailActivityTask:input_type -> dandori.api.v1.FailActivityTaskRequest
+	26, // 21: dandori.api.v1.DandoriService.RecordActivityHeartbeat:input_type -> dandori.api.v1.RecordActivityHeartbeatRequest
+	1,  // 22: dandori.api.v1.DandoriService.StartWorkflow:output_type -> dandori.api.v1.StartWorkflowResponse
+	3,  // 23: dandori.api.v1.DandoriService.DescribeWorkflow:output_type -> dandori.api.v1.DescribeWorkflowResponse
+	5,  // 24: dandori.api.v1.DandoriService.GetWorkflowHistory:output_type -> dandori.api.v1.GetWorkflowHistoryResponse
+	7,  // 25: dandori.api.v1.DandoriService.TerminateWorkflow:output_type -> dandori.api.v1.TerminateWorkflowResponse
+	9,  // 26: dandori.api.v1.DandoriService.SignalWorkflow:output_type -> dandori.api.v1.SignalWorkflowResponse
+	23, // 27: dandori.api.v1.DandoriService.CancelWorkflow:output_type -> dandori.api.v1.CancelWorkflowResponse
+	25, // 28: dandori.api.v1.DandoriService.ListWorkflows:output_type -> dandori.api.v1.ListWorkflowsResponse
+	11, // 29: dandori.api.v1.DandoriService.PollWorkflowTask:output_type -> dandori.api.v1.PollWorkflowTaskResponse
+	13, // 30: dandori.api.v1.DandoriService.CompleteWorkflowTask:output_type -> dandori.api.v1.CompleteWorkflowTaskResponse
+	15, // 31: dandori.api.v1.DandoriService.FailWorkflowTask:output_type -> dandori.api.v1.FailWorkflowTaskResponse
+	17, // 32: dandori.api.v1.DandoriService.PollActivityTask:output_type -> dandori.api.v1.PollActivityTaskResponse
+	19, // 33: dandori.api.v1.DandoriService.CompleteActivityTask:output_type -> dandori.api.v1.CompleteActivityTaskResponse
+	21, // 34: dandori.api.v1.DandoriService.FailActivityTask:output_type -> dandori.api.v1.FailActivityTaskResponse
+	27, // 35: dandori.api.v1.DandoriService.RecordActivityHeartbeat:output_type -> dandori.api.v1.RecordActivityHeartbeatResponse
+	22, // [22:36] is the sub-list for method output_type
+	8,  // [8:22] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_service_proto_init() }
@@ -1619,7 +1633,7 @@ func file_api_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_service_proto_rawDesc), len(file_api_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
