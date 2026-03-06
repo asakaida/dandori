@@ -17,10 +17,11 @@ func (m *mockTxManager) RunInTx(_ context.Context, fn func(ctx context.Context) 
 }
 
 type mockWorkflowRepo struct {
-	CreateFn       func(ctx context.Context, wf domain.WorkflowExecution) error
-	GetFn          func(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
-	UpdateStatusFn func(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error
-	ListFn         func(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error)
+	CreateFn              func(ctx context.Context, wf domain.WorkflowExecution) error
+	GetFn                 func(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
+	UpdateStatusFn        func(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error
+	ListFn                func(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error)
+	SetContinuedAsNewIDFn func(ctx context.Context, id uuid.UUID, newID uuid.UUID) error
 }
 
 func (m *mockWorkflowRepo) Create(ctx context.Context, wf domain.WorkflowExecution) error {
@@ -49,6 +50,13 @@ func (m *mockWorkflowRepo) List(ctx context.Context, params port.ListWorkflowsPa
 		return m.ListFn(ctx, params)
 	}
 	return nil, nil
+}
+
+func (m *mockWorkflowRepo) SetContinuedAsNewID(ctx context.Context, id uuid.UUID, newID uuid.UUID) error {
+	if m.SetContinuedAsNewIDFn != nil {
+		return m.SetContinuedAsNewIDFn(ctx, id, newID)
+	}
+	return nil
 }
 
 type mockEventRepo struct {

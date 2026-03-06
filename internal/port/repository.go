@@ -14,6 +14,7 @@ type WorkflowRepository interface {
 	Get(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error
 	List(ctx context.Context, params ListWorkflowsParams) ([]domain.WorkflowExecution, error)
+	SetContinuedAsNewID(ctx context.Context, id uuid.UUID, newID uuid.UUID) error
 }
 
 type EventRepository interface {

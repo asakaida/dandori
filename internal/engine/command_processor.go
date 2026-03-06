@@ -41,6 +41,10 @@ func (e *Engine) processCommands(ctx context.Context, workflowID uuid.UUID, task
 			if err := e.processRecordSideEffect(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
+		case domain.CommandContinueAsNew:
+			if err := e.processContinueAsNew(ctx, workflowID, cmd.Attributes, cmd.Metadata); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown command type: %s", cmd.Type)
 		}
@@ -107,6 +111,24 @@ func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UU
 		return fmt.Errorf("unmarshal CompleteWorkflowAttributes: %w", err)
 	}
 
+	wf, err := e.workflows.Get(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+
+	if wf.CronSchedule != "" {
+		eventData, err := marshalEventData(a, metadata)
+		if err != nil {
+			return err
+		}
+		if err := e.events.Append(ctx, []domain.HistoryEvent{
+			{WorkflowID: workflowID, Type: domain.EventWorkflowExecutionCompleted, Data: eventData},
+		}); err != nil {
+			return err
+		}
+		return e.continueAsNew(ctx, wf, wf.WorkflowType, wf.TaskQueue, a.Result, metadata)
+	}
+
 	if err := e.workflows.UpdateStatus(ctx, workflowID, domain.WorkflowStatusCompleted, a.Result, ""); err != nil {
 		return err
 	}
@@ -121,10 +143,6 @@ func (e *Engine) processCompleteWorkflow(ctx context.Context, workflowID uuid.UU
 		return err
 	}
 
-	wf, err := e.workflows.Get(ctx, workflowID)
-	if err != nil {
-		return err
-	}
 	return e.propagateToParent(ctx, wf, domain.EventChildWorkflowExecutionCompleted, map[string]any{
 		"child_workflow_id": workflowID.String(),
 		"seq_id":            wf.ParentSeqID,
@@ -288,6 +306,83 @@ func (e *Engine) processRecordSideEffect(ctx context.Context, workflowID uuid.UU
 	}
 	return e.events.Append(ctx, []domain.HistoryEvent{
 		{WorkflowID: workflowID, Type: domain.EventSideEffectRecorded, Data: eventData},
+	})
+}
+
+func (e *Engine) processContinueAsNew(ctx context.Context, workflowID uuid.UUID, attrs json.RawMessage, metadata map[string]string) error {
+	var a domain.ContinueAsNewAttributes
+	if err := json.Unmarshal(attrs, &a); err != nil {
+		return fmt.Errorf("unmarshal ContinueAsNewAttributes: %w", err)
+	}
+
+	wf, err := e.workflows.Get(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+
+	wfType := a.WorkflowType
+	if wfType == "" {
+		wfType = wf.WorkflowType
+	}
+	taskQueue := a.TaskQueue
+	if taskQueue == "" {
+		taskQueue = wf.TaskQueue
+	}
+
+	return e.continueAsNew(ctx, wf, wfType, taskQueue, a.Input, metadata)
+}
+
+func (e *Engine) continueAsNew(ctx context.Context, wf *domain.WorkflowExecution, workflowType string, taskQueue string, input json.RawMessage, metadata map[string]string) error {
+	newID := uuid.New()
+
+	if err := e.workflows.UpdateStatus(ctx, wf.ID, domain.WorkflowStatusContinuedAsNew, nil, ""); err != nil {
+		return err
+	}
+
+	newWF := domain.WorkflowExecution{
+		ID:           newID,
+		WorkflowType: workflowType,
+		TaskQueue:    taskQueue,
+		Status:       domain.WorkflowStatusRunning,
+		Input:        input,
+		CronSchedule: wf.CronSchedule,
+	}
+	if err := e.workflows.Create(ctx, newWF); err != nil {
+		return err
+	}
+
+	if err := e.workflows.SetContinuedAsNewID(ctx, wf.ID, newID); err != nil {
+		return err
+	}
+
+	canEventData, err := marshalEventData(map[string]any{
+		"new_workflow_id": newID.String(),
+		"workflow_type":   workflowType,
+		"task_queue":      taskQueue,
+	}, metadata)
+	if err != nil {
+		return err
+	}
+	if err := e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: wf.ID, Type: domain.EventWorkflowExecutionContinuedAsNew, Data: canEventData},
+	}); err != nil {
+		return err
+	}
+
+	startEventData, err := json.Marshal(map[string]json.RawMessage{"input": input})
+	if err != nil {
+		return err
+	}
+	if err := e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: newID, Type: domain.EventWorkflowExecutionStarted, Data: startEventData},
+	}); err != nil {
+		return err
+	}
+
+	return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+		QueueName:   taskQueue,
+		WorkflowID:  newID,
+		ScheduledAt: time.Now(),
 	})
 }
 

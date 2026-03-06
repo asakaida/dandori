@@ -1608,3 +1608,248 @@ func TestPollWorkflowTask_IncludesPendingQueries(t *testing.T) {
 	assert.Equal(t, int64(10), result.PendingQueries[0].ID)
 	assert.Equal(t, "getState", result.PendingQueries[0].QueryType)
 }
+
+// --- CronSchedule ---
+
+func TestStartWorkflow_WithCronSchedule(t *testing.T) {
+	var createdWF domain.WorkflowExecution
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn:    func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) { return nil, domain.ErrWorkflowNotFound },
+			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error { createdWF = wf; return nil },
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{},
+	)
+
+	wf, err := e.StartWorkflow(context.Background(), port.StartWorkflowParams{
+		ID:           uuid.New(),
+		WorkflowType: "cron-wf",
+		TaskQueue:    "default",
+		Input:        json.RawMessage(`{}`),
+		CronSchedule: "*/5 * * * *",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "*/5 * * * *", wf.CronSchedule)
+	assert.Equal(t, "*/5 * * * *", createdWF.CronSchedule)
+}
+
+func TestStartWorkflow_InvalidCronSchedule(t *testing.T) {
+	e := newTestEngine(
+		&mockWorkflowRepo{},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{},
+	)
+
+	_, err := e.StartWorkflow(context.Background(), port.StartWorkflowParams{
+		ID:           uuid.New(),
+		WorkflowType: "cron-wf",
+		TaskQueue:    "default",
+		Input:        json.RawMessage(`{}`),
+		CronSchedule: "not-valid",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid cron schedule")
+}
+
+// --- ContinueAsNew ---
+
+func TestProcessCommands_ContinueAsNew(t *testing.T) {
+	wfID := uuid.New()
+	var updatedStatus domain.WorkflowStatus
+	var setContinuedNewID uuid.UUID
+	var createdWFs []domain.WorkflowExecution
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTasks []domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == wfID {
+					return &domain.WorkflowExecution{
+						ID:           wfID,
+						WorkflowType: "my-wf",
+						TaskQueue:    "default",
+						Status:       domain.WorkflowStatusRunning,
+					}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, _ string) error {
+				updatedStatus = status
+				return nil
+			},
+			SetContinuedAsNewIDFn: func(_ context.Context, _ uuid.UUID, newID uuid.UUID) error {
+				setContinuedNewID = newID
+				return nil
+			},
+			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error {
+				createdWFs = append(createdWFs, wf)
+				return nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = append(appendedEvents, events...)
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, _ int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: 1, WorkflowID: wfID}, nil
+			},
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error {
+				enqueuedTasks = append(enqueuedTasks, task)
+				return nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.ContinueAsNewAttributes{
+		Input: json.RawMessage(`{"next":true}`),
+	})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandContinueAsNew, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, domain.WorkflowStatusContinuedAsNew, updatedStatus)
+	assert.NotEqual(t, uuid.Nil, setContinuedNewID)
+	require.Len(t, createdWFs, 1)
+	assert.Equal(t, "my-wf", createdWFs[0].WorkflowType)
+	assert.Equal(t, "default", createdWFs[0].TaskQueue)
+	assert.Equal(t, domain.WorkflowStatusRunning, createdWFs[0].Status)
+	require.Len(t, enqueuedTasks, 1)
+	assert.Equal(t, createdWFs[0].ID, enqueuedTasks[0].WorkflowID)
+}
+
+func TestProcessCommands_ContinueAsNew_InheritsValues(t *testing.T) {
+	wfID := uuid.New()
+	var createdWFs []domain.WorkflowExecution
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == wfID {
+					return &domain.WorkflowExecution{
+						ID:           wfID,
+						WorkflowType: "original-wf",
+						TaskQueue:    "original-q",
+						Status:       domain.WorkflowStatusRunning,
+						CronSchedule: "0 * * * *",
+					}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, _ domain.WorkflowStatus, _ json.RawMessage, _ string) error { return nil },
+			SetContinuedAsNewIDFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { return nil },
+			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error {
+				createdWFs = append(createdWFs, wf)
+				return nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, _ int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: 1, WorkflowID: wfID}, nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.ContinueAsNewAttributes{
+		Input: json.RawMessage(`{}`),
+	})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandContinueAsNew, Attributes: attrs},
+	})
+	require.NoError(t, err)
+	require.Len(t, createdWFs, 1)
+	assert.Equal(t, "original-wf", createdWFs[0].WorkflowType)
+	assert.Equal(t, "original-q", createdWFs[0].TaskQueue)
+	assert.Equal(t, "0 * * * *", createdWFs[0].CronSchedule)
+}
+
+func TestProcessCommands_CompleteWorkflow_CronAutoRestart(t *testing.T) {
+	wfID := uuid.New()
+	var updatedStatuses []domain.WorkflowStatus
+	var createdWFs []domain.WorkflowExecution
+	var appendedEvents []domain.HistoryEvent
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, id uuid.UUID) (*domain.WorkflowExecution, error) {
+				if id == wfID {
+					return &domain.WorkflowExecution{
+						ID:           wfID,
+						WorkflowType: "cron-wf",
+						TaskQueue:    "default",
+						Status:       domain.WorkflowStatusRunning,
+						CronSchedule: "* * * * *",
+					}, nil
+				}
+				return nil, domain.ErrWorkflowNotFound
+			},
+			UpdateStatusFn: func(_ context.Context, _ uuid.UUID, status domain.WorkflowStatus, _ json.RawMessage, _ string) error {
+				updatedStatuses = append(updatedStatuses, status)
+				return nil
+			},
+			SetContinuedAsNewIDFn: func(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { return nil },
+			CreateFn: func(_ context.Context, wf domain.WorkflowExecution) error {
+				createdWFs = append(createdWFs, wf)
+				return nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error {
+				appendedEvents = append(appendedEvents, events...)
+				return nil
+			},
+		},
+		&mockWorkflowTaskRepo{
+			GetByIDFn: func(_ context.Context, _ int64) (*domain.WorkflowTask, error) {
+				return &domain.WorkflowTask{ID: 1, WorkflowID: wfID}, nil
+			},
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+		&mockQueryRepo{},
+	)
+
+	attrs, _ := json.Marshal(domain.CompleteWorkflowAttributes{
+		Result: json.RawMessage(`{"done":true}`),
+	})
+	err := e.CompleteWorkflowTask(context.Background(), 1, []domain.Command{
+		{Type: domain.CommandCompleteWorkflow, Attributes: attrs},
+	})
+	require.NoError(t, err)
+
+	// Should have CONTINUED_AS_NEW status (from continueAsNew)
+	require.Len(t, updatedStatuses, 1)
+	assert.Equal(t, domain.WorkflowStatusContinuedAsNew, updatedStatuses[0])
+
+	// New workflow created
+	require.Len(t, createdWFs, 1)
+	assert.Equal(t, "cron-wf", createdWFs[0].WorkflowType)
+	assert.Equal(t, "* * * * *", createdWFs[0].CronSchedule)
+
+	// Events: WorkflowExecutionCompleted + WorkflowExecutionContinuedAsNew + WorkflowExecutionStarted
+	var eventTypes []domain.EventType
+	for _, e := range appendedEvents {
+		eventTypes = append(eventTypes, e.Type)
+	}
+	assert.Contains(t, eventTypes, domain.EventWorkflowExecutionCompleted)
+	assert.Contains(t, eventTypes, domain.EventWorkflowExecutionContinuedAsNew)
+	assert.Contains(t, eventTypes, domain.EventWorkflowExecutionStarted)
+}

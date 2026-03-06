@@ -367,6 +367,85 @@ func TestWorkflowStore_List_WithParent(t *testing.T) {
 	assert.Equal(t, int64(1), child.ParentSeqID)
 }
 
+func TestWorkflowStore_Create_Get_WithCronSchedule(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	wfID := uuid.New()
+	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           wfID,
+		WorkflowType: "cron-wf",
+		TaskQueue:    "default",
+		Status:       domain.WorkflowStatusRunning,
+		Input:        json.RawMessage(`{}`),
+		CronSchedule: "*/5 * * * *",
+	})
+	require.NoError(t, err)
+
+	wf, err := store.Workflows().Get(ctx, wfID)
+	require.NoError(t, err)
+	assert.Equal(t, "*/5 * * * *", wf.CronSchedule)
+	assert.Nil(t, wf.ContinuedAsNewID)
+}
+
+func TestWorkflowStore_SetContinuedAsNewID(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	oldID := uuid.New()
+	newID := uuid.New()
+
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           oldID,
+		WorkflowType: "wf",
+		TaskQueue:    "q",
+		Status:       domain.WorkflowStatusRunning,
+	}))
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           newID,
+		WorkflowType: "wf",
+		TaskQueue:    "q",
+		Status:       domain.WorkflowStatusRunning,
+	}))
+
+	err := store.Workflows().SetContinuedAsNewID(ctx, oldID, newID)
+	require.NoError(t, err)
+
+	wf, err := store.Workflows().Get(ctx, oldID)
+	require.NoError(t, err)
+	require.NotNil(t, wf.ContinuedAsNewID)
+	assert.Equal(t, newID, *wf.ContinuedAsNewID)
+}
+
+func TestWorkflowStore_Create_UpsertContinuedAsNew(t *testing.T) {
+	store := newStore(t)
+	ctx := context.Background()
+
+	wfID := uuid.New()
+	require.NoError(t, store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           wfID,
+		WorkflowType: "old-wf",
+		TaskQueue:    "default",
+		Status:       domain.WorkflowStatusRunning,
+	}))
+	require.NoError(t, store.Workflows().UpdateStatus(ctx, wfID, domain.WorkflowStatusContinuedAsNew, nil, ""))
+
+	// Re-create with same ID should succeed since it's CONTINUED_AS_NEW
+	err := store.Workflows().Create(ctx, domain.WorkflowExecution{
+		ID:           wfID,
+		WorkflowType: "new-wf",
+		TaskQueue:    "new-queue",
+		Status:       domain.WorkflowStatusRunning,
+		Input:        json.RawMessage(`{"new":true}`),
+	})
+	require.NoError(t, err)
+
+	wf, err := store.Workflows().Get(ctx, wfID)
+	require.NoError(t, err)
+	assert.Equal(t, "new-wf", wf.WorkflowType)
+	assert.Equal(t, domain.WorkflowStatusRunning, wf.Status)
+}
+
 func TestWorkflowStore_UpdateStatus_Failed(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()

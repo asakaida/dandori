@@ -341,6 +341,24 @@ func startChildWorkflowCmd(seqID int64, workflowType string, taskQueue string, i
 	}
 }
 
+// continueAsNewCmd creates a ContinueAsNew command.
+func continueAsNewCmd(input json.RawMessage, workflowType string, taskQueue string) *apiv1.Command {
+	attrs := map[string]any{
+		"input": input,
+	}
+	if workflowType != "" {
+		attrs["workflow_type"] = workflowType
+	}
+	if taskQueue != "" {
+		attrs["task_queue"] = taskQueue
+	}
+	data, _ := json.Marshal(attrs)
+	return &apiv1.Command{
+		Type:       apiv1.CommandType_COMMAND_TYPE_CONTINUE_AS_NEW,
+		Attributes: data,
+	}
+}
+
 // cancelTimerCmd creates a CancelTimer command.
 func cancelTimerCmd(seqID int64) *apiv1.Command {
 	attrs, _ := json.Marshal(map[string]any{

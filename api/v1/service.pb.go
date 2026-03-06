@@ -28,6 +28,7 @@ type StartWorkflowRequest struct {
 	WorkflowType  string                 `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	Input         []byte                 `protobuf:"bytes,4,opt,name=input,proto3" json:"input,omitempty"`
+	CronSchedule  string                 `protobuf:"bytes,5,opt,name=cron_schedule,json=cronSchedule,proto3" json:"cron_schedule,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -88,6 +89,13 @@ func (x *StartWorkflowRequest) GetInput() []byte {
 		return x.Input
 	}
 	return nil
+}
+
+func (x *StartWorkflowRequest) GetCronSchedule() string {
+	if x != nil {
+		return x.CronSchedule
+	}
+	return ""
 }
 
 type StartWorkflowResponse struct {
@@ -1634,14 +1642,15 @@ var File_api_v1_service_proto protoreflect.FileDescriptor
 
 const file_api_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"\x14api/v1/service.proto\x12\x0edandori.api.v1\x1a\x12api/v1/types.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x01\n" +
+	"\x14api/v1/service.proto\x12\x0edandori.api.v1\x1a\x12api/v1/types.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb6\x01\n" +
 	"\x14StartWorkflowRequest\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12#\n" +
 	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x03 \x01(\tR\ttaskQueue\x12\x14\n" +
-	"\x05input\x18\x04 \x01(\fR\x05input\"8\n" +
+	"\x05input\x18\x04 \x01(\fR\x05input\x12#\n" +
+	"\rcron_schedule\x18\x05 \x01(\tR\fcronSchedule\"8\n" +
 	"\x15StartWorkflowResponse\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\":\n" +

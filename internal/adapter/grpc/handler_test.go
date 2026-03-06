@@ -402,6 +402,60 @@ func TestRespondQueryTask_Success(t *testing.T) {
 	}
 }
 
+func TestCommandTypeFromProto_ContinueAsNew(t *testing.T) {
+	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{
+		CompleteWorkflowTaskFn: func(_ context.Context, _ int64, commands []domain.Command) error {
+			if len(commands) != 1 {
+				t.Fatalf("expected 1 command, got %d", len(commands))
+			}
+			if commands[0].Type != domain.CommandContinueAsNew {
+				t.Errorf("got command type %s, want ContinueAsNew", commands[0].Type)
+			}
+			return nil
+		},
+	}, &mockActivityTaskService{})
+
+	_, err := h.CompleteWorkflowTask(context.Background(), &apiv1.CompleteWorkflowTaskRequest{
+		TaskId: 1,
+		Commands: []*apiv1.Command{
+			{Type: apiv1.CommandType_COMMAND_TYPE_CONTINUE_AS_NEW, Attributes: []byte(`{"input":"{}"}`)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWorkflowStatusToProto_ContinuedAsNew(t *testing.T) {
+	wfID := uuid.New()
+	h := adaptgrpc.NewHandler(
+		&mockClientService{DescribeWorkflowFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+			return &domain.WorkflowExecution{
+				ID:           wfID,
+				WorkflowType: "wf",
+				TaskQueue:    "q",
+				Status:       domain.WorkflowStatusContinuedAsNew,
+				CronSchedule: "* * * * *",
+			}, nil
+		}},
+		&mockWorkflowTaskService{},
+		&mockActivityTaskService{},
+	)
+
+	resp, err := h.DescribeWorkflow(context.Background(), &apiv1.DescribeWorkflowRequest{
+		WorkflowId: wfID.String(),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetWorkflowExecution().GetStatus() != apiv1.WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+		t.Errorf("got status %v, want CONTINUED_AS_NEW", resp.GetWorkflowExecution().GetStatus())
+	}
+	if resp.GetWorkflowExecution().GetCronSchedule() != "* * * * *" {
+		t.Errorf("got cron_schedule %q, want %q", resp.GetWorkflowExecution().GetCronSchedule(), "* * * * *")
+	}
+}
+
 func TestCompleteWorkflowTask_InvalidCommand(t *testing.T) {
 	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
 	_, err := h.CompleteWorkflowTask(context.Background(), &apiv1.CompleteWorkflowTaskRequest{

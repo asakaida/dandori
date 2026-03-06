@@ -19,8 +19,8 @@ type WorkflowStore struct {
 
 func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution) error {
 	res, err := s.store.conn(ctx).ExecContext(ctx,
-		`INSERT INTO workflow_executions (id, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at, parent_workflow_id, parent_seq_id)
-		 VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, NOW(), $6, $7)
+		`INSERT INTO workflow_executions (id, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at, parent_workflow_id, parent_seq_id, cron_schedule)
+		 VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, NOW(), $6, $7, $8)
 		 ON CONFLICT (id) DO UPDATE SET
 			workflow_type = EXCLUDED.workflow_type,
 			task_queue = EXCLUDED.task_queue,
@@ -31,9 +31,10 @@ func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution)
 			closed_at = NULL,
 			updated_at = NOW(),
 			parent_workflow_id = EXCLUDED.parent_workflow_id,
-			parent_seq_id = EXCLUDED.parent_seq_id
-		 WHERE workflow_executions.status IN ('COMPLETED', 'FAILED', 'TERMINATED')`,
-		wf.ID, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input, wf.ParentWorkflowID, wf.ParentSeqID,
+			parent_seq_id = EXCLUDED.parent_seq_id,
+			cron_schedule = EXCLUDED.cron_schedule
+		 WHERE workflow_executions.status IN ('COMPLETED', 'FAILED', 'TERMINATED', 'CONTINUED_AS_NEW')`,
+		wf.ID, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input, wf.ParentWorkflowID, wf.ParentSeqID, wf.CronSchedule,
 	)
 	if err != nil {
 		return err
@@ -55,13 +56,15 @@ func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.Workflow
 	var closedAt sql.NullTime
 	var parentWFID sql.NullString
 	var parentSeqID sql.NullInt64
+	var cronSchedule sql.NullString
+	var continuedAsNewID sql.NullString
 	err := s.store.conn(ctx).QueryRowContext(ctx,
-		`SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id
+		`SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
 		 FROM workflow_executions WHERE id = $1`, id,
 	).Scan(
 		&wf.ID, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 		&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
-		&parentWFID, &parentSeqID,
+		&parentWFID, &parentSeqID, &cronSchedule, &continuedAsNewID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrWorkflowNotFound
@@ -87,11 +90,21 @@ func (s *WorkflowStore) Get(ctx context.Context, id uuid.UUID) (*domain.Workflow
 	if parentSeqID.Valid {
 		wf.ParentSeqID = parentSeqID.Int64
 	}
+	if cronSchedule.Valid {
+		wf.CronSchedule = cronSchedule.String
+	}
+	if continuedAsNewID.Valid {
+		parsed, err := uuid.Parse(continuedAsNewID.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse continued_as_new_id: %w", err)
+		}
+		wf.ContinuedAsNewID = &parsed
+	}
 	return &wf, nil
 }
 
 func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
-	query := `SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id
+	query := `SELECT id, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
 		 FROM workflow_executions WHERE 1=1`
 	args := []any{}
 	argIdx := 1
@@ -135,10 +148,12 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 		var closedAt sql.NullTime
 		var parentWFID sql.NullString
 		var parentSeqID sql.NullInt64
+		var cronSchedule sql.NullString
+		var continuedAsNewID sql.NullString
 		if err := rows.Scan(
 			&wf.ID, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 			&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
-			&parentWFID, &parentSeqID,
+			&parentWFID, &parentSeqID, &cronSchedule, &continuedAsNewID,
 		); err != nil {
 			return nil, err
 		}
@@ -160,9 +175,27 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 		if parentSeqID.Valid {
 			wf.ParentSeqID = parentSeqID.Int64
 		}
+		if cronSchedule.Valid {
+			wf.CronSchedule = cronSchedule.String
+		}
+		if continuedAsNewID.Valid {
+			parsed, err := uuid.Parse(continuedAsNewID.String)
+			if err != nil {
+				return nil, fmt.Errorf("parse continued_as_new_id: %w", err)
+			}
+			wf.ContinuedAsNewID = &parsed
+		}
 		workflows = append(workflows, wf)
 	}
 	return workflows, rows.Err()
+}
+
+func (s *WorkflowStore) SetContinuedAsNewID(ctx context.Context, id uuid.UUID, newID uuid.UUID) error {
+	_, err := s.store.conn(ctx).ExecContext(ctx,
+		`UPDATE workflow_executions SET continued_as_new_id = $2 WHERE id = $1`,
+		id, newID,
+	)
+	return err
 }
 
 func (s *WorkflowStore) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.WorkflowStatus, result json.RawMessage, errMsg string) error {

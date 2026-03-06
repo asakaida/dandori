@@ -18,6 +18,7 @@ func init() {
 	cmd.Flags().String("type", "", "Workflow type (required)")
 	cmd.Flags().String("queue", "default", "Task queue")
 	cmd.Flags().String("input", "{}", "Input JSON")
+	cmd.Flags().String("cron", "", "Cron schedule (5-field cron expression)")
 	_ = cmd.MarkFlagRequired("type")
 	rootCmd.AddCommand(cmd)
 }
@@ -33,12 +34,14 @@ func runStart(cmd *cobra.Command, _ []string) error {
 	wfType, _ := cmd.Flags().GetString("type")
 	queue, _ := cmd.Flags().GetString("queue")
 	input, _ := cmd.Flags().GetString("input")
+	cronSchedule, _ := cmd.Flags().GetString("cron")
 
 	resp, err := client.StartWorkflow(context.Background(), &apiv1.StartWorkflowRequest{
 		WorkflowId:   id,
 		WorkflowType: wfType,
 		TaskQueue:    queue,
 		Input:        []byte(input),
+		CronSchedule: cronSchedule,
 	})
 	if err != nil {
 		return err

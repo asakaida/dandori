@@ -13,11 +13,12 @@ const (
 	WorkflowStatusRunning    WorkflowStatus = "RUNNING"
 	WorkflowStatusCompleted  WorkflowStatus = "COMPLETED"
 	WorkflowStatusFailed     WorkflowStatus = "FAILED"
-	WorkflowStatusTerminated WorkflowStatus = "TERMINATED"
+	WorkflowStatusTerminated      WorkflowStatus = "TERMINATED"
+	WorkflowStatusContinuedAsNew  WorkflowStatus = "CONTINUED_AS_NEW"
 )
 
 func (s WorkflowStatus) IsTerminal() bool {
-	return s == WorkflowStatusCompleted || s == WorkflowStatusFailed || s == WorkflowStatusTerminated
+	return s == WorkflowStatusCompleted || s == WorkflowStatusFailed || s == WorkflowStatusTerminated || s == WorkflowStatusContinuedAsNew
 }
 
 type WorkflowExecution struct {
@@ -32,4 +33,6 @@ type WorkflowExecution struct {
 	ClosedAt         *time.Time
 	ParentWorkflowID *uuid.UUID
 	ParentSeqID      int64
+	CronSchedule     string
+	ContinuedAsNewID *uuid.UUID
 }

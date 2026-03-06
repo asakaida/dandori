@@ -27,6 +27,7 @@ const (
 	EventChildWorkflowExecutionCompleted    EventType = "ChildWorkflowExecutionCompleted"
 	EventChildWorkflowExecutionFailed       EventType = "ChildWorkflowExecutionFailed"
 	EventSideEffectRecorded                 EventType = "SideEffectRecorded"
+	EventWorkflowExecutionContinuedAsNew    EventType = "WorkflowExecutionContinuedAsNew"
 )
 
 type HistoryEvent struct {

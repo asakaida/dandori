@@ -54,6 +54,12 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 		params.ID = uuid.New()
 	}
 
+	if params.CronSchedule != "" {
+		if err := ValidateCronSchedule(params.CronSchedule); err != nil {
+			return nil, err
+		}
+	}
+
 	var wf *domain.WorkflowExecution
 	err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
 		existing, err := e.workflows.Get(ctx, params.ID)
@@ -89,6 +95,7 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 			TaskQueue:    params.TaskQueue,
 			Status:       domain.WorkflowStatusRunning,
 			Input:        params.Input,
+			CronSchedule: params.CronSchedule,
 		}
 		if err := e.workflows.Create(ctx, newWF); err != nil {
 			return err

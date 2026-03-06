@@ -47,6 +47,7 @@ func (h *Handler) StartWorkflow(ctx context.Context, req *apiv1.StartWorkflowReq
 		WorkflowType: req.GetWorkflowType(),
 		TaskQueue:    req.GetTaskQueue(),
 		Input:        json.RawMessage(req.GetInput()),
+		CronSchedule: req.GetCronSchedule(),
 	})
 	if err != nil {
 		return nil, domainErrorToGRPC(err)
@@ -306,6 +307,8 @@ func workflowStatusToProto(s domain.WorkflowStatus) apiv1.WorkflowExecutionStatu
 		return apiv1.WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_FAILED
 	case domain.WorkflowStatusTerminated:
 		return apiv1.WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_TERMINATED
+	case domain.WorkflowStatusContinuedAsNew:
+		return apiv1.WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	default:
 		return apiv1.WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_UNSPECIFIED
 	}
@@ -328,6 +331,12 @@ func domainWorkflowToProto(wf *domain.WorkflowExecution) *apiv1.WorkflowExecutio
 	if wf.ParentWorkflowID != nil {
 		pb.ParentWorkflowId = wf.ParentWorkflowID.String()
 		pb.ParentSeqId = wf.ParentSeqID
+	}
+	if wf.CronSchedule != "" {
+		pb.CronSchedule = wf.CronSchedule
+	}
+	if wf.ContinuedAsNewID != nil {
+		pb.ContinuedAsNewId = wf.ContinuedAsNewID.String()
 	}
 	return pb
 }
@@ -395,6 +404,8 @@ func commandTypeFromProto(ct apiv1.CommandType) (domain.CommandType, error) {
 		return domain.CommandRecordSideEffect, nil
 	case apiv1.CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW:
 		return domain.CommandStartChildWorkflow, nil
+	case apiv1.CommandType_COMMAND_TYPE_CONTINUE_AS_NEW:
+		return domain.CommandContinueAsNew, nil
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "unknown command type: %v", ct)
 	}

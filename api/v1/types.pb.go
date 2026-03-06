@@ -26,11 +26,12 @@ const (
 type WorkflowExecutionStatus int32
 
 const (
-	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_UNSPECIFIED WorkflowExecutionStatus = 0
-	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_RUNNING     WorkflowExecutionStatus = 1
-	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_COMPLETED   WorkflowExecutionStatus = 2
-	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_FAILED      WorkflowExecutionStatus = 3
-	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_TERMINATED  WorkflowExecutionStatus = 4
+	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_UNSPECIFIED      WorkflowExecutionStatus = 0
+	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_RUNNING          WorkflowExecutionStatus = 1
+	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_COMPLETED        WorkflowExecutionStatus = 2
+	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_FAILED           WorkflowExecutionStatus = 3
+	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_TERMINATED       WorkflowExecutionStatus = 4
+	WorkflowExecutionStatus_WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW WorkflowExecutionStatus = 5
 )
 
 // Enum value maps for WorkflowExecutionStatus.
@@ -41,13 +42,15 @@ var (
 		2: "WORKFLOW_EXECUTION_STATUS_COMPLETED",
 		3: "WORKFLOW_EXECUTION_STATUS_FAILED",
 		4: "WORKFLOW_EXECUTION_STATUS_TERMINATED",
+		5: "WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW",
 	}
 	WorkflowExecutionStatus_value = map[string]int32{
-		"WORKFLOW_EXECUTION_STATUS_UNSPECIFIED": 0,
-		"WORKFLOW_EXECUTION_STATUS_RUNNING":     1,
-		"WORKFLOW_EXECUTION_STATUS_COMPLETED":   2,
-		"WORKFLOW_EXECUTION_STATUS_FAILED":      3,
-		"WORKFLOW_EXECUTION_STATUS_TERMINATED":  4,
+		"WORKFLOW_EXECUTION_STATUS_UNSPECIFIED":      0,
+		"WORKFLOW_EXECUTION_STATUS_RUNNING":          1,
+		"WORKFLOW_EXECUTION_STATUS_COMPLETED":        2,
+		"WORKFLOW_EXECUTION_STATUS_FAILED":           3,
+		"WORKFLOW_EXECUTION_STATUS_TERMINATED":       4,
+		"WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW": 5,
 	}
 )
 
@@ -89,6 +92,7 @@ const (
 	CommandType_COMMAND_TYPE_CANCEL_TIMER           CommandType = 5
 	CommandType_COMMAND_TYPE_RECORD_SIDE_EFFECT     CommandType = 6
 	CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW   CommandType = 7
+	CommandType_COMMAND_TYPE_CONTINUE_AS_NEW        CommandType = 9
 )
 
 // Enum value maps for CommandType.
@@ -102,6 +106,7 @@ var (
 		5: "COMMAND_TYPE_CANCEL_TIMER",
 		6: "COMMAND_TYPE_RECORD_SIDE_EFFECT",
 		7: "COMMAND_TYPE_START_CHILD_WORKFLOW",
+		9: "COMMAND_TYPE_CONTINUE_AS_NEW",
 	}
 	CommandType_value = map[string]int32{
 		"COMMAND_TYPE_UNSPECIFIED":            0,
@@ -112,6 +117,7 @@ var (
 		"COMMAND_TYPE_CANCEL_TIMER":           5,
 		"COMMAND_TYPE_RECORD_SIDE_EFFECT":     6,
 		"COMMAND_TYPE_START_CHILD_WORKFLOW":   7,
+		"COMMAND_TYPE_CONTINUE_AS_NEW":        9,
 	}
 )
 
@@ -156,6 +162,8 @@ type WorkflowExecution struct {
 	ClosedAt         *timestamppb.Timestamp  `protobuf:"bytes,10,opt,name=closed_at,json=closedAt,proto3" json:"closed_at,omitempty"`
 	ParentWorkflowId string                  `protobuf:"bytes,11,opt,name=parent_workflow_id,json=parentWorkflowId,proto3" json:"parent_workflow_id,omitempty"`
 	ParentSeqId      int64                   `protobuf:"varint,12,opt,name=parent_seq_id,json=parentSeqId,proto3" json:"parent_seq_id,omitempty"`
+	CronSchedule     string                  `protobuf:"bytes,13,opt,name=cron_schedule,json=cronSchedule,proto3" json:"cron_schedule,omitempty"`
+	ContinuedAsNewId string                  `protobuf:"bytes,14,opt,name=continued_as_new_id,json=continuedAsNewId,proto3" json:"continued_as_new_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -272,6 +280,20 @@ func (x *WorkflowExecution) GetParentSeqId() int64 {
 		return x.ParentSeqId
 	}
 	return 0
+}
+
+func (x *WorkflowExecution) GetCronSchedule() string {
+	if x != nil {
+		return x.CronSchedule
+	}
+	return ""
+}
+
+func (x *WorkflowExecution) GetContinuedAsNewId() string {
+	if x != nil {
+		return x.ContinuedAsNewId
+	}
+	return ""
 }
 
 type HistoryEvent struct {
@@ -958,6 +980,66 @@ func (x *RecordSideEffectAttributes) GetValue() []byte {
 	return nil
 }
 
+type ContinueAsNewAttributes struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowType  string                 `protobuf:"bytes,1,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContinueAsNewAttributes) Reset() {
+	*x = ContinueAsNewAttributes{}
+	mi := &file_api_v1_types_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContinueAsNewAttributes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContinueAsNewAttributes) ProtoMessage() {}
+
+func (x *ContinueAsNewAttributes) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_types_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContinueAsNewAttributes.ProtoReflect.Descriptor instead.
+func (*ContinueAsNewAttributes) Descriptor() ([]byte, []int) {
+	return file_api_v1_types_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ContinueAsNewAttributes) GetWorkflowType() string {
+	if x != nil {
+		return x.WorkflowType
+	}
+	return ""
+}
+
+func (x *ContinueAsNewAttributes) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
+}
+
+func (x *ContinueAsNewAttributes) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
 type PendingQuery struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueryId       int64                  `protobuf:"varint,1,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
@@ -969,7 +1051,7 @@ type PendingQuery struct {
 
 func (x *PendingQuery) Reset() {
 	*x = PendingQuery{}
-	mi := &file_api_v1_types_proto_msgTypes[12]
+	mi := &file_api_v1_types_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -981,7 +1063,7 @@ func (x *PendingQuery) String() string {
 func (*PendingQuery) ProtoMessage() {}
 
 func (x *PendingQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_types_proto_msgTypes[12]
+	mi := &file_api_v1_types_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -994,7 +1076,7 @@ func (x *PendingQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PendingQuery.ProtoReflect.Descriptor instead.
 func (*PendingQuery) Descriptor() ([]byte, []int) {
-	return file_api_v1_types_proto_rawDescGZIP(), []int{12}
+	return file_api_v1_types_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PendingQuery) GetQueryId() int64 {
@@ -1028,7 +1110,7 @@ type WorkflowSignaledAttributes struct {
 
 func (x *WorkflowSignaledAttributes) Reset() {
 	*x = WorkflowSignaledAttributes{}
-	mi := &file_api_v1_types_proto_msgTypes[13]
+	mi := &file_api_v1_types_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1040,7 +1122,7 @@ func (x *WorkflowSignaledAttributes) String() string {
 func (*WorkflowSignaledAttributes) ProtoMessage() {}
 
 func (x *WorkflowSignaledAttributes) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_types_proto_msgTypes[13]
+	mi := &file_api_v1_types_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1053,7 +1135,7 @@ func (x *WorkflowSignaledAttributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowSignaledAttributes.ProtoReflect.Descriptor instead.
 func (*WorkflowSignaledAttributes) Descriptor() ([]byte, []int) {
-	return file_api_v1_types_proto_rawDescGZIP(), []int{13}
+	return file_api_v1_types_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *WorkflowSignaledAttributes) GetSignalName() string {
@@ -1074,7 +1156,7 @@ var File_api_v1_types_proto protoreflect.FileDescriptor
 
 const file_api_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xfc\x03\n" +
+	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd0\x04\n" +
 	"\x11WorkflowExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\x12\x1d\n" +
@@ -1091,7 +1173,9 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\tclosed_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\x12,\n" +
 	"\x12parent_workflow_id\x18\v \x01(\tR\x10parentWorkflowId\x12\"\n" +
-	"\rparent_seq_id\x18\f \x01(\x03R\vparentSeqId\"\xda\x01\n" +
+	"\rparent_seq_id\x18\f \x01(\x03R\vparentSeqId\x12#\n" +
+	"\rcron_schedule\x18\r \x01(\tR\fcronSchedule\x12-\n" +
+	"\x13continued_as_new_id\x18\x0e \x01(\tR\x10continuedAsNewId\"\xda\x01\n" +
 	"\fHistoryEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -1146,7 +1230,12 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x05input\x18\x05 \x01(\fR\x05input\"I\n" +
 	"\x1aRecordSideEffectAttributes\x12\x15\n" +
 	"\x06seq_id\x18\x01 \x01(\x03R\x05seqId\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value\"^\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"s\n" +
+	"\x17ContinueAsNewAttributes\x12#\n" +
+	"\rworkflow_type\x18\x01 \x01(\tR\fworkflowType\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\"^\n" +
 	"\fPendingQuery\x12\x19\n" +
 	"\bquery_id\x18\x01 \x01(\x03R\aqueryId\x12\x1d\n" +
 	"\n" +
@@ -1155,13 +1244,14 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x1aWorkflowSignaledAttributes\x12\x1f\n" +
 	"\vsignal_name\x18\x01 \x01(\tR\n" +
 	"signalName\x12\x14\n" +
-	"\x05input\x18\x02 \x01(\fR\x05input*\xe4\x01\n" +
+	"\x05input\x18\x02 \x01(\fR\x05input*\x94\x02\n" +
 	"\x17WorkflowExecutionStatus\x12)\n" +
 	"%WORKFLOW_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12%\n" +
 	"!WORKFLOW_EXECUTION_STATUS_RUNNING\x10\x01\x12'\n" +
 	"#WORKFLOW_EXECUTION_STATUS_COMPLETED\x10\x02\x12$\n" +
 	" WORKFLOW_EXECUTION_STATUS_FAILED\x10\x03\x12(\n" +
-	"$WORKFLOW_EXECUTION_STATUS_TERMINATED\x10\x04*\xa1\x02\n" +
+	"$WORKFLOW_EXECUTION_STATUS_TERMINATED\x10\x04\x12.\n" +
+	"*WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW\x10\x05*\xc3\x02\n" +
 	"\vCommandType\x12\x1c\n" +
 	"\x18COMMAND_TYPE_UNSPECIFIED\x10\x00\x12'\n" +
 	"#COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK\x10\x01\x12\"\n" +
@@ -1170,7 +1260,8 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x18COMMAND_TYPE_START_TIMER\x10\x04\x12\x1d\n" +
 	"\x19COMMAND_TYPE_CANCEL_TIMER\x10\x05\x12#\n" +
 	"\x1fCOMMAND_TYPE_RECORD_SIDE_EFFECT\x10\x06\x12%\n" +
-	"!COMMAND_TYPE_START_CHILD_WORKFLOW\x10\aB*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
+	"!COMMAND_TYPE_START_CHILD_WORKFLOW\x10\a\x12 \n" +
+	"\x1cCOMMAND_TYPE_CONTINUE_AS_NEW\x10\tB*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_types_proto_rawDescOnce sync.Once
@@ -1185,7 +1276,7 @@ func file_api_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_api_v1_types_proto_goTypes = []any{
 	(WorkflowExecutionStatus)(0),           // 0: dandori.api.v1.WorkflowExecutionStatus
 	(CommandType)(0),                       // 1: dandori.api.v1.CommandType
@@ -1201,24 +1292,25 @@ var file_api_v1_types_proto_goTypes = []any{
 	(*ActivityFailure)(nil),                // 11: dandori.api.v1.ActivityFailure
 	(*StartChildWorkflowAttributes)(nil),   // 12: dandori.api.v1.StartChildWorkflowAttributes
 	(*RecordSideEffectAttributes)(nil),     // 13: dandori.api.v1.RecordSideEffectAttributes
-	(*PendingQuery)(nil),                   // 14: dandori.api.v1.PendingQuery
-	(*WorkflowSignaledAttributes)(nil),     // 15: dandori.api.v1.WorkflowSignaledAttributes
-	(*timestamppb.Timestamp)(nil),          // 16: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),            // 17: google.protobuf.Duration
+	(*ContinueAsNewAttributes)(nil),        // 14: dandori.api.v1.ContinueAsNewAttributes
+	(*PendingQuery)(nil),                   // 15: dandori.api.v1.PendingQuery
+	(*WorkflowSignaledAttributes)(nil),     // 16: dandori.api.v1.WorkflowSignaledAttributes
+	(*timestamppb.Timestamp)(nil),          // 17: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),            // 18: google.protobuf.Duration
 }
 var file_api_v1_types_proto_depIdxs = []int32{
 	0,  // 0: dandori.api.v1.WorkflowExecution.status:type_name -> dandori.api.v1.WorkflowExecutionStatus
-	16, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
-	16, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
-	16, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
-	16, // 4: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
+	17, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
+	17, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
+	17, // 4: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
 	1,  // 5: dandori.api.v1.Command.type:type_name -> dandori.api.v1.CommandType
-	17, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
+	18, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
 	8,  // 7: dandori.api.v1.ScheduleActivityTaskAttributes.retry_policy:type_name -> dandori.api.v1.RetryPolicy
-	17, // 8: dandori.api.v1.ScheduleActivityTaskAttributes.heartbeat_timeout:type_name -> google.protobuf.Duration
-	17, // 9: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
-	17, // 10: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
-	17, // 11: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
+	18, // 8: dandori.api.v1.ScheduleActivityTaskAttributes.heartbeat_timeout:type_name -> google.protobuf.Duration
+	18, // 9: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
+	18, // 10: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
+	18, // 11: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
 	12, // [12:12] is the sub-list for method output_type
 	12, // [12:12] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name
@@ -1237,7 +1329,7 @@ func file_api_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_types_proto_rawDesc), len(file_api_v1_types_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   14,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

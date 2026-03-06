@@ -42,6 +42,7 @@ message StartWorkflowRequest {
   string workflow_type = 2;
   string task_queue = 3;
   bytes input = 4;
+  string cron_schedule = 5;
 }
 
 message StartWorkflowResponse {

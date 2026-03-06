@@ -39,6 +39,7 @@ type StartWorkflowParams struct {
 	WorkflowType string
 	TaskQueue    string
 	Input        json.RawMessage
+	CronSchedule string
 }
 
 type WorkflowTaskResult struct {

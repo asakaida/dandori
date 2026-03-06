@@ -648,41 +648,44 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 15 - Cron / Schedule + Continue-as-New
 
-ステータス: `未着手`
+ステータス: `完了`
 
 ゴール: Continue-as-New（ワークフローの引き継ぎ再起動）とCronスケジュールを実装する
 
 設計判断:
 
-- Continue-as-New: `ContinueAsNew` コマンド → 現ワークフローを `CONTINUED_AS_NEW` ステータスに変更 → 新ワークフロー作成（同一ID + 新run_id、もしくは新規ID）
+- Continue-as-New: `ContinueAsNew` コマンド → 現ワークフローを `CONTINUED_AS_NEW` ステータスに変更 → 新ワークフロー作成（新規ID）
 - Cron: `StartWorkflowRequest.cron_schedule` に cron式を設定 → ワークフロー完了時（`processCompleteWorkflow`）に自動でContinue-as-New
-- migration 000007: `workflow_executions` に `cron_schedule`, `continued_as_new_id` カラム追加
+- migration 000006: `workflow_executions` に `cron_schedule`, `continued_as_new_id` カラム追加
 
 タスク:
 
-- [ ] internal/adapter/postgres/migration/000007_cron.up.sql — `workflow_executions` に `cron_schedule VARCHAR(255)`, `continued_as_new_id UUID` カラム追加（カラム存在チェック）
-- [ ] internal/adapter/postgres/migration/000007_cron.down.sql
-- [ ] internal/domain/workflow.go — `WorkflowStatus` に `ContinuedAsNew` 追加。`WorkflowExecution` に `CronSchedule`, `ContinuedAsNewID` フィールド追加。`IsTerminal()` に `ContinuedAsNew` 追加
-- [ ] internal/domain/command.go — 新CommandType追加: `ContinueAsNew`。`ContinueAsNewAttributes`（workflow_type, task_queue, input）定義
-- [ ] internal/domain/event.go — 新EventType追加: `WorkflowExecutionContinuedAsNew`
-- [ ] internal/adapter/postgres/workflow.go — `Create` で `cron_schedule` 保存。`UpdateStatus` で `continued_as_new_id` 設定対応
-- [ ] internal/engine/command_processor.go — `processContinueAsNew`: 現WFをCONTINUED_AS_NEWステータス + continued_as_new_id設定 → 新WF作成 + WorkflowTask投入
-- [ ] internal/engine/engine.go — `processCompleteWorkflow` 内でcron_scheduleが設定されている場合、次回実行時刻を計算して自動Continue-as-New
-- [ ] internal/engine/cron.go（新規）— cron式パース + 次回実行時刻計算。外部ライブラリ（`robfig/cron/v3`）使用
-- [ ] api/v1/types.proto — `CommandType` に `CONTINUE_AS_NEW = 9` 追加。`EventType` に `WORKFLOW_EXECUTION_CONTINUED_AS_NEW` 追加。`StartWorkflowRequest` に `cron_schedule` フィールド追加
-- [ ] internal/adapter/grpc/handler.go — ContinueAsNew関連マッピング追加。StartWorkflowでcron_schedule伝搬
-- [ ] internal/adapter/postgres/workflow_test.go — ContinuedAsNew / CronSchedule テスト
-- [ ] internal/engine/engine_test.go — ContinueAsNew / Cron ユニットテスト
-- [ ] test/e2e/ — ContinueAsNew手動実行、Cron自動再起動のE2Eテスト
+- [x] internal/adapter/postgres/migration/000006_cron.up.sql — `workflow_executions` に `cron_schedule VARCHAR(255)`, `continued_as_new_id UUID` カラム追加（カラム存在チェック）
+- [x] internal/adapter/postgres/migration/000006_cron.down.sql
+- [x] internal/domain/workflow.go — `WorkflowStatus` に `ContinuedAsNew` 追加。`WorkflowExecution` に `CronSchedule`, `ContinuedAsNewID` フィールド追加。`IsTerminal()` に `ContinuedAsNew` 追加
+- [x] internal/domain/command.go — 新CommandType追加: `ContinueAsNew`。`ContinueAsNewAttributes`（workflow_type, task_queue, input）定義
+- [x] internal/domain/event.go — 新EventType追加: `WorkflowExecutionContinuedAsNew`
+- [x] internal/adapter/postgres/workflow.go — `Create` で `cron_schedule` 保存。`SetContinuedAsNewID` メソッド追加
+- [x] internal/engine/command_processor.go — `processContinueAsNew`: 現WFをCONTINUED_AS_NEWステータス + continued_as_new_id設定 → 新WF作成 + WorkflowTask投入
+- [x] internal/engine/engine.go — `processCompleteWorkflow` 内でcron_scheduleが設定されている場合、自動Continue-as-New
+- [x] internal/engine/cron.go（新規）— cron式バリデーション。外部ライブラリ（`robfig/cron/v3`）使用
+- [x] api/v1/types.proto — `CommandType` に `CONTINUE_AS_NEW = 9` 追加。`WorkflowExecutionStatus` に `CONTINUED_AS_NEW = 5` 追加。`WorkflowExecution` に `cron_schedule`, `continued_as_new_id` 追加。`ContinueAsNewAttributes` message追加
+- [x] api/v1/service.proto — `StartWorkflowRequest` に `cron_schedule` フィールド追加
+- [x] internal/adapter/grpc/handler.go — ContinueAsNew関連マッピング追加。StartWorkflowでcron_schedule伝搬
+- [x] cmd/dandori-cli/cmd/start.go — `--cron` フラグ追加
+- [x] internal/adapter/postgres/workflow_test.go — ContinuedAsNew / CronSchedule テスト
+- [x] internal/engine/engine_test.go — ContinueAsNew / Cron ユニットテスト
+- [x] internal/adapter/grpc/handler_test.go — ContinueAsNew proto変換テスト
+- [x] test/e2e/ — ContinueAsNew手動実行、Cron自動再起動のE2Eテスト
 
 完了条件:
 
-- [ ] ContinueAsNewコマンド → 現WF CONTINUED_AS_NEW + 新WF作成・開始
-- [ ] Cronスケジュール設定 → ワークフロー完了時に自動Continue-as-New
-- [ ] CONTINUED_AS_NEW状態がIsTerminal()でtrueを返す
-- [ ] migration 000007 が冪等に適用される
-- [ ] `go test -v -race ./...` — 全テスト通過
-- [ ] `go vet ./...` — クリーン
+- [x] ContinueAsNewコマンド → 現WF CONTINUED_AS_NEW + 新WF作成・開始
+- [x] Cronスケジュール設定 → ワークフロー完了時に自動Continue-as-New
+- [x] CONTINUED_AS_NEW状態がIsTerminal()でtrueを返す
+- [x] migration 000006 が冪等に適用される
+- [x] `go test -v -race ./...` — 全テスト通過
+- [x] `go vet ./...` — クリーン
 
 ### Sprint 16 - HTTP API (grpc-gateway)
 
@@ -806,7 +809,7 @@ Sprint 12の位置づけの根拠:
 設計判断:
 
 - SPA（Single Page Application）を `embed.FS` でバイナリに組み込み
-- HTTP API（Sprint 15のgrpc-gateway）経由でデータ取得
+- HTTP API（Sprint 16のgrpc-gateway）経由でデータ取得
 - `/ui/` パスで提供。最小限の機能に絞る（閲覧のみ、操作は将来拡張）
 
 タスク:
