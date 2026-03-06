@@ -398,6 +398,102 @@ func (*TerminateWorkflowResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_service_proto_rawDescGZIP(), []int{7}
 }
 
+type SignalWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	SignalName    string                 `protobuf:"bytes,2,opt,name=signal_name,json=signalName,proto3" json:"signal_name,omitempty"`
+	Input         []byte                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalWorkflowRequest) Reset() {
+	*x = SignalWorkflowRequest{}
+	mi := &file_api_v1_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalWorkflowRequest) ProtoMessage() {}
+
+func (x *SignalWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*SignalWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SignalWorkflowRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *SignalWorkflowRequest) GetSignalName() string {
+	if x != nil {
+		return x.SignalName
+	}
+	return ""
+}
+
+func (x *SignalWorkflowRequest) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+type SignalWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalWorkflowResponse) Reset() {
+	*x = SignalWorkflowResponse{}
+	mi := &file_api_v1_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalWorkflowResponse) ProtoMessage() {}
+
+func (x *SignalWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*SignalWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_service_proto_rawDescGZIP(), []int{9}
+}
+
 type PollWorkflowTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
@@ -408,7 +504,7 @@ type PollWorkflowTaskRequest struct {
 
 func (x *PollWorkflowTaskRequest) Reset() {
 	*x = PollWorkflowTaskRequest{}
-	mi := &file_api_v1_service_proto_msgTypes[8]
+	mi := &file_api_v1_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -420,7 +516,7 @@ func (x *PollWorkflowTaskRequest) String() string {
 func (*PollWorkflowTaskRequest) ProtoMessage() {}
 
 func (x *PollWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[8]
+	mi := &file_api_v1_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -433,7 +529,7 @@ func (x *PollWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollWorkflowTaskRequest.ProtoReflect.Descriptor instead.
 func (*PollWorkflowTaskRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{8}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PollWorkflowTaskRequest) GetQueueName() string {
@@ -462,7 +558,7 @@ type PollWorkflowTaskResponse struct {
 
 func (x *PollWorkflowTaskResponse) Reset() {
 	*x = PollWorkflowTaskResponse{}
-	mi := &file_api_v1_service_proto_msgTypes[9]
+	mi := &file_api_v1_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +570,7 @@ func (x *PollWorkflowTaskResponse) String() string {
 func (*PollWorkflowTaskResponse) ProtoMessage() {}
 
 func (x *PollWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[9]
+	mi := &file_api_v1_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +583,7 @@ func (x *PollWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollWorkflowTaskResponse.ProtoReflect.Descriptor instead.
 func (*PollWorkflowTaskResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{9}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PollWorkflowTaskResponse) GetTaskId() int64 {
@@ -528,7 +624,7 @@ type CompleteWorkflowTaskRequest struct {
 
 func (x *CompleteWorkflowTaskRequest) Reset() {
 	*x = CompleteWorkflowTaskRequest{}
-	mi := &file_api_v1_service_proto_msgTypes[10]
+	mi := &file_api_v1_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -540,7 +636,7 @@ func (x *CompleteWorkflowTaskRequest) String() string {
 func (*CompleteWorkflowTaskRequest) ProtoMessage() {}
 
 func (x *CompleteWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[10]
+	mi := &file_api_v1_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -553,7 +649,7 @@ func (x *CompleteWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteWorkflowTaskRequest.ProtoReflect.Descriptor instead.
 func (*CompleteWorkflowTaskRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{10}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CompleteWorkflowTaskRequest) GetTaskId() int64 {
@@ -578,7 +674,7 @@ type CompleteWorkflowTaskResponse struct {
 
 func (x *CompleteWorkflowTaskResponse) Reset() {
 	*x = CompleteWorkflowTaskResponse{}
-	mi := &file_api_v1_service_proto_msgTypes[11]
+	mi := &file_api_v1_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -590,7 +686,7 @@ func (x *CompleteWorkflowTaskResponse) String() string {
 func (*CompleteWorkflowTaskResponse) ProtoMessage() {}
 
 func (x *CompleteWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[11]
+	mi := &file_api_v1_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -603,7 +699,7 @@ func (x *CompleteWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteWorkflowTaskResponse.ProtoReflect.Descriptor instead.
 func (*CompleteWorkflowTaskResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{11}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{13}
 }
 
 type FailWorkflowTaskRequest struct {
@@ -617,7 +713,7 @@ type FailWorkflowTaskRequest struct {
 
 func (x *FailWorkflowTaskRequest) Reset() {
 	*x = FailWorkflowTaskRequest{}
-	mi := &file_api_v1_service_proto_msgTypes[12]
+	mi := &file_api_v1_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -629,7 +725,7 @@ func (x *FailWorkflowTaskRequest) String() string {
 func (*FailWorkflowTaskRequest) ProtoMessage() {}
 
 func (x *FailWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[12]
+	mi := &file_api_v1_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -642,7 +738,7 @@ func (x *FailWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailWorkflowTaskRequest.ProtoReflect.Descriptor instead.
 func (*FailWorkflowTaskRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{12}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *FailWorkflowTaskRequest) GetTaskId() int64 {
@@ -674,7 +770,7 @@ type FailWorkflowTaskResponse struct {
 
 func (x *FailWorkflowTaskResponse) Reset() {
 	*x = FailWorkflowTaskResponse{}
-	mi := &file_api_v1_service_proto_msgTypes[13]
+	mi := &file_api_v1_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -686,7 +782,7 @@ func (x *FailWorkflowTaskResponse) String() string {
 func (*FailWorkflowTaskResponse) ProtoMessage() {}
 
 func (x *FailWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[13]
+	mi := &file_api_v1_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -699,7 +795,7 @@ func (x *FailWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailWorkflowTaskResponse.ProtoReflect.Descriptor instead.
 func (*FailWorkflowTaskResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{13}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{15}
 }
 
 type PollActivityTaskRequest struct {
@@ -712,7 +808,7 @@ type PollActivityTaskRequest struct {
 
 func (x *PollActivityTaskRequest) Reset() {
 	*x = PollActivityTaskRequest{}
-	mi := &file_api_v1_service_proto_msgTypes[14]
+	mi := &file_api_v1_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +820,7 @@ func (x *PollActivityTaskRequest) String() string {
 func (*PollActivityTaskRequest) ProtoMessage() {}
 
 func (x *PollActivityTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[14]
+	mi := &file_api_v1_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +833,7 @@ func (x *PollActivityTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollActivityTaskRequest.ProtoReflect.Descriptor instead.
 func (*PollActivityTaskRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{14}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PollActivityTaskRequest) GetQueueName() string {
@@ -768,7 +864,7 @@ type PollActivityTaskResponse struct {
 
 func (x *PollActivityTaskResponse) Reset() {
 	*x = PollActivityTaskResponse{}
-	mi := &file_api_v1_service_proto_msgTypes[15]
+	mi := &file_api_v1_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -780,7 +876,7 @@ func (x *PollActivityTaskResponse) String() string {
 func (*PollActivityTaskResponse) ProtoMessage() {}
 
 func (x *PollActivityTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[15]
+	mi := &file_api_v1_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -793,7 +889,7 @@ func (x *PollActivityTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollActivityTaskResponse.ProtoReflect.Descriptor instead.
 func (*PollActivityTaskResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{15}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PollActivityTaskResponse) GetTaskId() int64 {
@@ -848,7 +944,7 @@ type CompleteActivityTaskRequest struct {
 
 func (x *CompleteActivityTaskRequest) Reset() {
 	*x = CompleteActivityTaskRequest{}
-	mi := &file_api_v1_service_proto_msgTypes[16]
+	mi := &file_api_v1_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -860,7 +956,7 @@ func (x *CompleteActivityTaskRequest) String() string {
 func (*CompleteActivityTaskRequest) ProtoMessage() {}
 
 func (x *CompleteActivityTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[16]
+	mi := &file_api_v1_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -873,7 +969,7 @@ func (x *CompleteActivityTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteActivityTaskRequest.ProtoReflect.Descriptor instead.
 func (*CompleteActivityTaskRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{16}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CompleteActivityTaskRequest) GetTaskId() int64 {
@@ -898,7 +994,7 @@ type CompleteActivityTaskResponse struct {
 
 func (x *CompleteActivityTaskResponse) Reset() {
 	*x = CompleteActivityTaskResponse{}
-	mi := &file_api_v1_service_proto_msgTypes[17]
+	mi := &file_api_v1_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -910,7 +1006,7 @@ func (x *CompleteActivityTaskResponse) String() string {
 func (*CompleteActivityTaskResponse) ProtoMessage() {}
 
 func (x *CompleteActivityTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[17]
+	mi := &file_api_v1_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -923,7 +1019,7 @@ func (x *CompleteActivityTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteActivityTaskResponse.ProtoReflect.Descriptor instead.
 func (*CompleteActivityTaskResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{17}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{19}
 }
 
 type FailActivityTaskRequest struct {
@@ -936,7 +1032,7 @@ type FailActivityTaskRequest struct {
 
 func (x *FailActivityTaskRequest) Reset() {
 	*x = FailActivityTaskRequest{}
-	mi := &file_api_v1_service_proto_msgTypes[18]
+	mi := &file_api_v1_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -948,7 +1044,7 @@ func (x *FailActivityTaskRequest) String() string {
 func (*FailActivityTaskRequest) ProtoMessage() {}
 
 func (x *FailActivityTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[18]
+	mi := &file_api_v1_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +1057,7 @@ func (x *FailActivityTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailActivityTaskRequest.ProtoReflect.Descriptor instead.
 func (*FailActivityTaskRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{18}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *FailActivityTaskRequest) GetTaskId() int64 {
@@ -986,7 +1082,7 @@ type FailActivityTaskResponse struct {
 
 func (x *FailActivityTaskResponse) Reset() {
 	*x = FailActivityTaskResponse{}
-	mi := &file_api_v1_service_proto_msgTypes[19]
+	mi := &file_api_v1_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -998,7 +1094,7 @@ func (x *FailActivityTaskResponse) String() string {
 func (*FailActivityTaskResponse) ProtoMessage() {}
 
 func (x *FailActivityTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_service_proto_msgTypes[19]
+	mi := &file_api_v1_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1011,7 +1107,7 @@ func (x *FailActivityTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailActivityTaskResponse.ProtoReflect.Descriptor instead.
 func (*FailActivityTaskResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_service_proto_rawDescGZIP(), []int{19}
+	return file_api_v1_service_proto_rawDescGZIP(), []int{21}
 }
 
 var File_api_v1_service_proto protoreflect.FileDescriptor
@@ -1043,7 +1139,14 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x1b\n" +
-	"\x19TerminateWorkflowResponse\"U\n" +
+	"\x19TerminateWorkflowResponse\"o\n" +
+	"\x15SignalWorkflowRequest\x12\x1f\n" +
+	"\vworkflow_id\x18\x01 \x01(\tR\n" +
+	"workflowId\x12\x1f\n" +
+	"\vsignal_name\x18\x02 \x01(\tR\n" +
+	"signalName\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\fR\x05input\"\x18\n" +
+	"\x16SignalWorkflowResponse\"U\n" +
 	"\x17PollWorkflowTaskRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1b\n" +
@@ -1082,12 +1185,13 @@ const file_api_v1_service_proto_rawDesc = "" +
 	"\x17FailActivityTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x129\n" +
 	"\afailure\x18\x02 \x01(\v2\x1f.dandori.api.v1.ActivityFailureR\afailure\"\x1a\n" +
-	"\x18FailActivityTaskResponse2\xae\b\n" +
+	"\x18FailActivityTaskResponse2\x8f\t\n" +
 	"\x0eDandoriService\x12\\\n" +
 	"\rStartWorkflow\x12$.dandori.api.v1.StartWorkflowRequest\x1a%.dandori.api.v1.StartWorkflowResponse\x12e\n" +
 	"\x10DescribeWorkflow\x12'.dandori.api.v1.DescribeWorkflowRequest\x1a(.dandori.api.v1.DescribeWorkflowResponse\x12k\n" +
 	"\x12GetWorkflowHistory\x12).dandori.api.v1.GetWorkflowHistoryRequest\x1a*.dandori.api.v1.GetWorkflowHistoryResponse\x12h\n" +
-	"\x11TerminateWorkflow\x12(.dandori.api.v1.TerminateWorkflowRequest\x1a).dandori.api.v1.TerminateWorkflowResponse\x12e\n" +
+	"\x11TerminateWorkflow\x12(.dandori.api.v1.TerminateWorkflowRequest\x1a).dandori.api.v1.TerminateWorkflowResponse\x12_\n" +
+	"\x0eSignalWorkflow\x12%.dandori.api.v1.SignalWorkflowRequest\x1a&.dandori.api.v1.SignalWorkflowResponse\x12e\n" +
 	"\x10PollWorkflowTask\x12'.dandori.api.v1.PollWorkflowTaskRequest\x1a(.dandori.api.v1.PollWorkflowTaskResponse\x12q\n" +
 	"\x14CompleteWorkflowTask\x12+.dandori.api.v1.CompleteWorkflowTaskRequest\x1a,.dandori.api.v1.CompleteWorkflowTaskResponse\x12e\n" +
 	"\x10FailWorkflowTask\x12'.dandori.api.v1.FailWorkflowTaskRequest\x1a(.dandori.api.v1.FailWorkflowTaskResponse\x12e\n" +
@@ -1107,7 +1211,7 @@ func file_api_v1_service_proto_rawDescGZIP() []byte {
 	return file_api_v1_service_proto_rawDescData
 }
 
-var file_api_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_api_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_api_v1_service_proto_goTypes = []any{
 	(*StartWorkflowRequest)(nil),         // 0: dandori.api.v1.StartWorkflowRequest
 	(*StartWorkflowResponse)(nil),        // 1: dandori.api.v1.StartWorkflowResponse
@@ -1117,53 +1221,57 @@ var file_api_v1_service_proto_goTypes = []any{
 	(*GetWorkflowHistoryResponse)(nil),   // 5: dandori.api.v1.GetWorkflowHistoryResponse
 	(*TerminateWorkflowRequest)(nil),     // 6: dandori.api.v1.TerminateWorkflowRequest
 	(*TerminateWorkflowResponse)(nil),    // 7: dandori.api.v1.TerminateWorkflowResponse
-	(*PollWorkflowTaskRequest)(nil),      // 8: dandori.api.v1.PollWorkflowTaskRequest
-	(*PollWorkflowTaskResponse)(nil),     // 9: dandori.api.v1.PollWorkflowTaskResponse
-	(*CompleteWorkflowTaskRequest)(nil),  // 10: dandori.api.v1.CompleteWorkflowTaskRequest
-	(*CompleteWorkflowTaskResponse)(nil), // 11: dandori.api.v1.CompleteWorkflowTaskResponse
-	(*FailWorkflowTaskRequest)(nil),      // 12: dandori.api.v1.FailWorkflowTaskRequest
-	(*FailWorkflowTaskResponse)(nil),     // 13: dandori.api.v1.FailWorkflowTaskResponse
-	(*PollActivityTaskRequest)(nil),      // 14: dandori.api.v1.PollActivityTaskRequest
-	(*PollActivityTaskResponse)(nil),     // 15: dandori.api.v1.PollActivityTaskResponse
-	(*CompleteActivityTaskRequest)(nil),  // 16: dandori.api.v1.CompleteActivityTaskRequest
-	(*CompleteActivityTaskResponse)(nil), // 17: dandori.api.v1.CompleteActivityTaskResponse
-	(*FailActivityTaskRequest)(nil),      // 18: dandori.api.v1.FailActivityTaskRequest
-	(*FailActivityTaskResponse)(nil),     // 19: dandori.api.v1.FailActivityTaskResponse
-	(*WorkflowExecution)(nil),            // 20: dandori.api.v1.WorkflowExecution
-	(*HistoryEvent)(nil),                 // 21: dandori.api.v1.HistoryEvent
-	(*Command)(nil),                      // 22: dandori.api.v1.Command
-	(*timestamppb.Timestamp)(nil),        // 23: google.protobuf.Timestamp
-	(*ActivityFailure)(nil),              // 24: dandori.api.v1.ActivityFailure
+	(*SignalWorkflowRequest)(nil),        // 8: dandori.api.v1.SignalWorkflowRequest
+	(*SignalWorkflowResponse)(nil),       // 9: dandori.api.v1.SignalWorkflowResponse
+	(*PollWorkflowTaskRequest)(nil),      // 10: dandori.api.v1.PollWorkflowTaskRequest
+	(*PollWorkflowTaskResponse)(nil),     // 11: dandori.api.v1.PollWorkflowTaskResponse
+	(*CompleteWorkflowTaskRequest)(nil),  // 12: dandori.api.v1.CompleteWorkflowTaskRequest
+	(*CompleteWorkflowTaskResponse)(nil), // 13: dandori.api.v1.CompleteWorkflowTaskResponse
+	(*FailWorkflowTaskRequest)(nil),      // 14: dandori.api.v1.FailWorkflowTaskRequest
+	(*FailWorkflowTaskResponse)(nil),     // 15: dandori.api.v1.FailWorkflowTaskResponse
+	(*PollActivityTaskRequest)(nil),      // 16: dandori.api.v1.PollActivityTaskRequest
+	(*PollActivityTaskResponse)(nil),     // 17: dandori.api.v1.PollActivityTaskResponse
+	(*CompleteActivityTaskRequest)(nil),  // 18: dandori.api.v1.CompleteActivityTaskRequest
+	(*CompleteActivityTaskResponse)(nil), // 19: dandori.api.v1.CompleteActivityTaskResponse
+	(*FailActivityTaskRequest)(nil),      // 20: dandori.api.v1.FailActivityTaskRequest
+	(*FailActivityTaskResponse)(nil),     // 21: dandori.api.v1.FailActivityTaskResponse
+	(*WorkflowExecution)(nil),            // 22: dandori.api.v1.WorkflowExecution
+	(*HistoryEvent)(nil),                 // 23: dandori.api.v1.HistoryEvent
+	(*Command)(nil),                      // 24: dandori.api.v1.Command
+	(*timestamppb.Timestamp)(nil),        // 25: google.protobuf.Timestamp
+	(*ActivityFailure)(nil),              // 26: dandori.api.v1.ActivityFailure
 }
 var file_api_v1_service_proto_depIdxs = []int32{
-	20, // 0: dandori.api.v1.DescribeWorkflowResponse.workflow_execution:type_name -> dandori.api.v1.WorkflowExecution
-	21, // 1: dandori.api.v1.GetWorkflowHistoryResponse.events:type_name -> dandori.api.v1.HistoryEvent
-	21, // 2: dandori.api.v1.PollWorkflowTaskResponse.events:type_name -> dandori.api.v1.HistoryEvent
-	22, // 3: dandori.api.v1.CompleteWorkflowTaskRequest.commands:type_name -> dandori.api.v1.Command
-	23, // 4: dandori.api.v1.PollActivityTaskResponse.scheduled_at:type_name -> google.protobuf.Timestamp
-	24, // 5: dandori.api.v1.FailActivityTaskRequest.failure:type_name -> dandori.api.v1.ActivityFailure
+	22, // 0: dandori.api.v1.DescribeWorkflowResponse.workflow_execution:type_name -> dandori.api.v1.WorkflowExecution
+	23, // 1: dandori.api.v1.GetWorkflowHistoryResponse.events:type_name -> dandori.api.v1.HistoryEvent
+	23, // 2: dandori.api.v1.PollWorkflowTaskResponse.events:type_name -> dandori.api.v1.HistoryEvent
+	24, // 3: dandori.api.v1.CompleteWorkflowTaskRequest.commands:type_name -> dandori.api.v1.Command
+	25, // 4: dandori.api.v1.PollActivityTaskResponse.scheduled_at:type_name -> google.protobuf.Timestamp
+	26, // 5: dandori.api.v1.FailActivityTaskRequest.failure:type_name -> dandori.api.v1.ActivityFailure
 	0,  // 6: dandori.api.v1.DandoriService.StartWorkflow:input_type -> dandori.api.v1.StartWorkflowRequest
 	2,  // 7: dandori.api.v1.DandoriService.DescribeWorkflow:input_type -> dandori.api.v1.DescribeWorkflowRequest
 	4,  // 8: dandori.api.v1.DandoriService.GetWorkflowHistory:input_type -> dandori.api.v1.GetWorkflowHistoryRequest
 	6,  // 9: dandori.api.v1.DandoriService.TerminateWorkflow:input_type -> dandori.api.v1.TerminateWorkflowRequest
-	8,  // 10: dandori.api.v1.DandoriService.PollWorkflowTask:input_type -> dandori.api.v1.PollWorkflowTaskRequest
-	10, // 11: dandori.api.v1.DandoriService.CompleteWorkflowTask:input_type -> dandori.api.v1.CompleteWorkflowTaskRequest
-	12, // 12: dandori.api.v1.DandoriService.FailWorkflowTask:input_type -> dandori.api.v1.FailWorkflowTaskRequest
-	14, // 13: dandori.api.v1.DandoriService.PollActivityTask:input_type -> dandori.api.v1.PollActivityTaskRequest
-	16, // 14: dandori.api.v1.DandoriService.CompleteActivityTask:input_type -> dandori.api.v1.CompleteActivityTaskRequest
-	18, // 15: dandori.api.v1.DandoriService.FailActivityTask:input_type -> dandori.api.v1.FailActivityTaskRequest
-	1,  // 16: dandori.api.v1.DandoriService.StartWorkflow:output_type -> dandori.api.v1.StartWorkflowResponse
-	3,  // 17: dandori.api.v1.DandoriService.DescribeWorkflow:output_type -> dandori.api.v1.DescribeWorkflowResponse
-	5,  // 18: dandori.api.v1.DandoriService.GetWorkflowHistory:output_type -> dandori.api.v1.GetWorkflowHistoryResponse
-	7,  // 19: dandori.api.v1.DandoriService.TerminateWorkflow:output_type -> dandori.api.v1.TerminateWorkflowResponse
-	9,  // 20: dandori.api.v1.DandoriService.PollWorkflowTask:output_type -> dandori.api.v1.PollWorkflowTaskResponse
-	11, // 21: dandori.api.v1.DandoriService.CompleteWorkflowTask:output_type -> dandori.api.v1.CompleteWorkflowTaskResponse
-	13, // 22: dandori.api.v1.DandoriService.FailWorkflowTask:output_type -> dandori.api.v1.FailWorkflowTaskResponse
-	15, // 23: dandori.api.v1.DandoriService.PollActivityTask:output_type -> dandori.api.v1.PollActivityTaskResponse
-	17, // 24: dandori.api.v1.DandoriService.CompleteActivityTask:output_type -> dandori.api.v1.CompleteActivityTaskResponse
-	19, // 25: dandori.api.v1.DandoriService.FailActivityTask:output_type -> dandori.api.v1.FailActivityTaskResponse
-	16, // [16:26] is the sub-list for method output_type
-	6,  // [6:16] is the sub-list for method input_type
+	8,  // 10: dandori.api.v1.DandoriService.SignalWorkflow:input_type -> dandori.api.v1.SignalWorkflowRequest
+	10, // 11: dandori.api.v1.DandoriService.PollWorkflowTask:input_type -> dandori.api.v1.PollWorkflowTaskRequest
+	12, // 12: dandori.api.v1.DandoriService.CompleteWorkflowTask:input_type -> dandori.api.v1.CompleteWorkflowTaskRequest
+	14, // 13: dandori.api.v1.DandoriService.FailWorkflowTask:input_type -> dandori.api.v1.FailWorkflowTaskRequest
+	16, // 14: dandori.api.v1.DandoriService.PollActivityTask:input_type -> dandori.api.v1.PollActivityTaskRequest
+	18, // 15: dandori.api.v1.DandoriService.CompleteActivityTask:input_type -> dandori.api.v1.CompleteActivityTaskRequest
+	20, // 16: dandori.api.v1.DandoriService.FailActivityTask:input_type -> dandori.api.v1.FailActivityTaskRequest
+	1,  // 17: dandori.api.v1.DandoriService.StartWorkflow:output_type -> dandori.api.v1.StartWorkflowResponse
+	3,  // 18: dandori.api.v1.DandoriService.DescribeWorkflow:output_type -> dandori.api.v1.DescribeWorkflowResponse
+	5,  // 19: dandori.api.v1.DandoriService.GetWorkflowHistory:output_type -> dandori.api.v1.GetWorkflowHistoryResponse
+	7,  // 20: dandori.api.v1.DandoriService.TerminateWorkflow:output_type -> dandori.api.v1.TerminateWorkflowResponse
+	9,  // 21: dandori.api.v1.DandoriService.SignalWorkflow:output_type -> dandori.api.v1.SignalWorkflowResponse
+	11, // 22: dandori.api.v1.DandoriService.PollWorkflowTask:output_type -> dandori.api.v1.PollWorkflowTaskResponse
+	13, // 23: dandori.api.v1.DandoriService.CompleteWorkflowTask:output_type -> dandori.api.v1.CompleteWorkflowTaskResponse
+	15, // 24: dandori.api.v1.DandoriService.FailWorkflowTask:output_type -> dandori.api.v1.FailWorkflowTaskResponse
+	17, // 25: dandori.api.v1.DandoriService.PollActivityTask:output_type -> dandori.api.v1.PollActivityTaskResponse
+	19, // 26: dandori.api.v1.DandoriService.CompleteActivityTask:output_type -> dandori.api.v1.CompleteActivityTaskResponse
+	21, // 27: dandori.api.v1.DandoriService.FailActivityTask:output_type -> dandori.api.v1.FailActivityTaskResponse
+	17, // [17:28] is the sub-list for method output_type
+	6,  // [6:17] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -1181,7 +1289,7 @@ func file_api_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_service_proto_rawDesc), len(file_api_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -235,6 +235,85 @@ func TestTerminateWorkflow_NotRunning(t *testing.T) {
 	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
 }
 
+// --- SignalWorkflow ---
+
+func TestSignalWorkflow(t *testing.T) {
+	wfID := uuid.New()
+	var appendedEvents []domain.HistoryEvent
+	var enqueuedTask domain.WorkflowTask
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, events []domain.HistoryEvent) error { appendedEvents = events; return nil },
+		},
+		&mockWorkflowTaskRepo{
+			EnqueueFn: func(_ context.Context, task domain.WorkflowTask) error { enqueuedTask = task; return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	err := e.SignalWorkflow(context.Background(), wfID, "approval", json.RawMessage(`{"approved":true}`))
+	require.NoError(t, err)
+	require.Len(t, appendedEvents, 1)
+	assert.Equal(t, domain.EventWorkflowSignaled, appendedEvents[0].Type)
+	assert.Equal(t, wfID, appendedEvents[0].WorkflowID)
+	assert.Equal(t, wfID, enqueuedTask.WorkflowID)
+	assert.Equal(t, "default", enqueuedTask.QueueName)
+}
+
+func TestSignalWorkflow_NotRunning(t *testing.T) {
+	wfID := uuid.New()
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, Status: domain.WorkflowStatusCompleted}, nil
+			},
+		},
+		&mockEventRepo{},
+		&mockWorkflowTaskRepo{},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	err := e.SignalWorkflow(context.Background(), wfID, "approval", json.RawMessage(`{}`))
+	assert.ErrorIs(t, err, domain.ErrWorkflowNotRunning)
+}
+
+func TestSignalWorkflow_MultipleSignals(t *testing.T) {
+	wfID := uuid.New()
+	var appendCount int
+	var enqueueCount int
+
+	e := newTestEngine(
+		&mockWorkflowRepo{
+			GetFn: func(_ context.Context, _ uuid.UUID) (*domain.WorkflowExecution, error) {
+				return &domain.WorkflowExecution{ID: wfID, TaskQueue: "default", Status: domain.WorkflowStatusRunning}, nil
+			},
+		},
+		&mockEventRepo{
+			AppendFn: func(_ context.Context, _ []domain.HistoryEvent) error { appendCount++; return nil },
+		},
+		&mockWorkflowTaskRepo{
+			EnqueueFn: func(_ context.Context, _ domain.WorkflowTask) error { enqueueCount++; return nil },
+		},
+		&mockActivityTaskRepo{},
+		&mockTimerRepo{},
+	)
+
+	for i := 0; i < 3; i++ {
+		err := e.SignalWorkflow(context.Background(), wfID, "signal", json.RawMessage(`{}`))
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 3, appendCount)
+	assert.Equal(t, 3, enqueueCount)
+}
+
 // --- PollWorkflowTask ---
 
 func TestPollWorkflowTask_NoTask(t *testing.T) {

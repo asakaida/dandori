@@ -89,3 +89,8 @@ message ActivityFailure {
   string type = 2;
   bool non_retryable = 3;
 }
+
+message WorkflowSignaledAttributes {
+  string signal_name = 1;
+  bytes input = 2;
+}

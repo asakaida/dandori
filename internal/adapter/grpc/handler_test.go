@@ -230,6 +230,42 @@ func TestPollActivityTask_NoTask(t *testing.T) {
 	}
 }
 
+func TestSignalWorkflow_InvalidUUID(t *testing.T) {
+	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
+	_, err := h.SignalWorkflow(context.Background(), &apiv1.SignalWorkflowRequest{
+		WorkflowId: "not-a-uuid",
+		SignalName: "test",
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.InvalidArgument {
+		t.Errorf("got code %v, want InvalidArgument", st.Code())
+	}
+}
+
+func TestSignalWorkflow_NotRunning(t *testing.T) {
+	h := adaptgrpc.NewHandler(
+		&mockClientService{SignalWorkflowFn: func(_ context.Context, _ uuid.UUID, _ string, _ json.RawMessage) error {
+			return domain.ErrWorkflowNotRunning
+		}},
+		&mockWorkflowTaskService{},
+		&mockActivityTaskService{},
+	)
+	_, err := h.SignalWorkflow(context.Background(), &apiv1.SignalWorkflowRequest{
+		WorkflowId: uuid.New().String(),
+		SignalName: "test",
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.FailedPrecondition {
+		t.Errorf("got code %v, want FailedPrecondition", st.Code())
+	}
+}
+
 func TestCompleteWorkflowTask_InvalidCommand(t *testing.T) {
 	h := adaptgrpc.NewHandler(&mockClientService{}, &mockWorkflowTaskService{}, &mockActivityTaskService{})
 	_, err := h.CompleteWorkflowTask(context.Background(), &apiv1.CompleteWorkflowTaskRequest{

@@ -784,6 +784,58 @@ func (x *ActivityFailure) GetNonRetryable() bool {
 	return false
 }
 
+type WorkflowSignaledAttributes struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SignalName    string                 `protobuf:"bytes,1,opt,name=signal_name,json=signalName,proto3" json:"signal_name,omitempty"`
+	Input         []byte                 `protobuf:"bytes,2,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowSignaledAttributes) Reset() {
+	*x = WorkflowSignaledAttributes{}
+	mi := &file_api_v1_types_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowSignaledAttributes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowSignaledAttributes) ProtoMessage() {}
+
+func (x *WorkflowSignaledAttributes) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_types_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowSignaledAttributes.ProtoReflect.Descriptor instead.
+func (*WorkflowSignaledAttributes) Descriptor() ([]byte, []int) {
+	return file_api_v1_types_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *WorkflowSignaledAttributes) GetSignalName() string {
+	if x != nil {
+		return x.SignalName
+	}
+	return ""
+}
+
+func (x *WorkflowSignaledAttributes) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
 var File_api_v1_types_proto protoreflect.FileDescriptor
 
 const file_api_v1_types_proto_rawDesc = "" +
@@ -844,7 +896,11 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x0fActivityFailure\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12#\n" +
-	"\rnon_retryable\x18\x03 \x01(\bR\fnonRetryable*\xe4\x01\n" +
+	"\rnon_retryable\x18\x03 \x01(\bR\fnonRetryable\"S\n" +
+	"\x1aWorkflowSignaledAttributes\x12\x1f\n" +
+	"\vsignal_name\x18\x01 \x01(\tR\n" +
+	"signalName\x12\x14\n" +
+	"\x05input\x18\x02 \x01(\fR\x05input*\xe4\x01\n" +
 	"\x17WorkflowExecutionStatus\x12)\n" +
 	"%WORKFLOW_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12%\n" +
 	"!WORKFLOW_EXECUTION_STATUS_RUNNING\x10\x01\x12'\n" +
@@ -872,7 +928,7 @@ func file_api_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_api_v1_types_proto_goTypes = []any{
 	(WorkflowExecutionStatus)(0),           // 0: dandori.api.v1.WorkflowExecutionStatus
 	(CommandType)(0),                       // 1: dandori.api.v1.CommandType
@@ -886,21 +942,22 @@ var file_api_v1_types_proto_goTypes = []any{
 	(*StartTimerAttributes)(nil),           // 9: dandori.api.v1.StartTimerAttributes
 	(*CancelTimerAttributes)(nil),          // 10: dandori.api.v1.CancelTimerAttributes
 	(*ActivityFailure)(nil),                // 11: dandori.api.v1.ActivityFailure
-	(*timestamppb.Timestamp)(nil),          // 12: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),            // 13: google.protobuf.Duration
+	(*WorkflowSignaledAttributes)(nil),     // 12: dandori.api.v1.WorkflowSignaledAttributes
+	(*timestamppb.Timestamp)(nil),          // 13: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),            // 14: google.protobuf.Duration
 }
 var file_api_v1_types_proto_depIdxs = []int32{
 	0,  // 0: dandori.api.v1.WorkflowExecution.status:type_name -> dandori.api.v1.WorkflowExecutionStatus
-	12, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
-	12, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
-	12, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
-	12, // 4: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
+	13, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
+	13, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
+	13, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
+	13, // 4: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
 	1,  // 5: dandori.api.v1.Command.type:type_name -> dandori.api.v1.CommandType
-	13, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
+	14, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
 	8,  // 7: dandori.api.v1.ScheduleActivityTaskAttributes.retry_policy:type_name -> dandori.api.v1.RetryPolicy
-	13, // 8: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
-	13, // 9: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
-	13, // 10: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
+	14, // 8: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
+	14, // 9: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
+	14, // 10: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
 	11, // [11:11] is the sub-list for method output_type
 	11, // [11:11] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
@@ -919,7 +976,7 @@ func file_api_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_types_proto_rawDesc), len(file_api_v1_types_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

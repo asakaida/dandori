@@ -13,6 +13,7 @@ type ClientService interface {
 	DescribeWorkflow(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
 	GetWorkflowHistory(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
 	TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error
+	SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
 }
 
 type WorkflowTaskService interface {

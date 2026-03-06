@@ -145,6 +145,37 @@ func (e *Engine) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason str
 	})
 }
 
+func (e *Engine) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error {
+	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+		wf, err := e.workflows.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if wf.Status != domain.WorkflowStatusRunning {
+			return domain.ErrWorkflowNotRunning
+		}
+
+		eventData, err := json.Marshal(map[string]any{
+			"signal_name": signalName,
+			"input":       input,
+		})
+		if err != nil {
+			return err
+		}
+		if err := e.events.Append(ctx, []domain.HistoryEvent{
+			{WorkflowID: id, Type: domain.EventWorkflowSignaled, Data: eventData},
+		}); err != nil {
+			return err
+		}
+
+		return e.workflowTasks.Enqueue(ctx, domain.WorkflowTask{
+			QueueName:   wf.TaskQueue,
+			WorkflowID:  id,
+			ScheduledAt: time.Now(),
+		})
+	})
+}
+
 // --- WorkflowTaskService ---
 
 func (e *Engine) PollWorkflowTask(ctx context.Context, queueName string, workerID string) (*port.WorkflowTaskResult, error) {

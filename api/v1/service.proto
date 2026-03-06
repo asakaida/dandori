@@ -13,6 +13,7 @@ service DandoriService {
   rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse);
   rpc GetWorkflowHistory(GetWorkflowHistoryRequest) returns (GetWorkflowHistoryResponse);
   rpc TerminateWorkflow(TerminateWorkflowRequest) returns (TerminateWorkflowResponse);
+  rpc SignalWorkflow(SignalWorkflowRequest) returns (SignalWorkflowResponse);
 
   // Worker API: Workflow Task
   rpc PollWorkflowTask(PollWorkflowTaskRequest) returns (PollWorkflowTaskResponse);
@@ -60,6 +61,14 @@ message TerminateWorkflowRequest {
 }
 
 message TerminateWorkflowResponse {}
+
+message SignalWorkflowRequest {
+  string workflow_id = 1;
+  string signal_name = 2;
+  bytes input = 3;
+}
+
+message SignalWorkflowResponse {}
 
 // === Worker API: Workflow Task Messages ===
 

@@ -23,6 +23,7 @@ const (
 	DandoriService_DescribeWorkflow_FullMethodName     = "/dandori.api.v1.DandoriService/DescribeWorkflow"
 	DandoriService_GetWorkflowHistory_FullMethodName   = "/dandori.api.v1.DandoriService/GetWorkflowHistory"
 	DandoriService_TerminateWorkflow_FullMethodName    = "/dandori.api.v1.DandoriService/TerminateWorkflow"
+	DandoriService_SignalWorkflow_FullMethodName       = "/dandori.api.v1.DandoriService/SignalWorkflow"
 	DandoriService_PollWorkflowTask_FullMethodName     = "/dandori.api.v1.DandoriService/PollWorkflowTask"
 	DandoriService_CompleteWorkflowTask_FullMethodName = "/dandori.api.v1.DandoriService/CompleteWorkflowTask"
 	DandoriService_FailWorkflowTask_FullMethodName     = "/dandori.api.v1.DandoriService/FailWorkflowTask"
@@ -40,6 +41,7 @@ type DandoriServiceClient interface {
 	DescribeWorkflow(ctx context.Context, in *DescribeWorkflowRequest, opts ...grpc.CallOption) (*DescribeWorkflowResponse, error)
 	GetWorkflowHistory(ctx context.Context, in *GetWorkflowHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowHistoryResponse, error)
 	TerminateWorkflow(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*TerminateWorkflowResponse, error)
+	SignalWorkflow(ctx context.Context, in *SignalWorkflowRequest, opts ...grpc.CallOption) (*SignalWorkflowResponse, error)
 	// Worker API: Workflow Task
 	PollWorkflowTask(ctx context.Context, in *PollWorkflowTaskRequest, opts ...grpc.CallOption) (*PollWorkflowTaskResponse, error)
 	CompleteWorkflowTask(ctx context.Context, in *CompleteWorkflowTaskRequest, opts ...grpc.CallOption) (*CompleteWorkflowTaskResponse, error)
@@ -92,6 +94,16 @@ func (c *dandoriServiceClient) TerminateWorkflow(ctx context.Context, in *Termin
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TerminateWorkflowResponse)
 	err := c.cc.Invoke(ctx, DandoriService_TerminateWorkflow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *dandoriServiceClient) SignalWorkflow(ctx context.Context, in *SignalWorkflowRequest, opts ...grpc.CallOption) (*SignalWorkflowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SignalWorkflowResponse)
+	err := c.cc.Invoke(ctx, DandoriService_SignalWorkflow_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +179,7 @@ type DandoriServiceServer interface {
 	DescribeWorkflow(context.Context, *DescribeWorkflowRequest) (*DescribeWorkflowResponse, error)
 	GetWorkflowHistory(context.Context, *GetWorkflowHistoryRequest) (*GetWorkflowHistoryResponse, error)
 	TerminateWorkflow(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error)
+	SignalWorkflow(context.Context, *SignalWorkflowRequest) (*SignalWorkflowResponse, error)
 	// Worker API: Workflow Task
 	PollWorkflowTask(context.Context, *PollWorkflowTaskRequest) (*PollWorkflowTaskResponse, error)
 	CompleteWorkflowTask(context.Context, *CompleteWorkflowTaskRequest) (*CompleteWorkflowTaskResponse, error)
@@ -196,6 +209,9 @@ func (UnimplementedDandoriServiceServer) GetWorkflowHistory(context.Context, *Ge
 }
 func (UnimplementedDandoriServiceServer) TerminateWorkflow(context.Context, *TerminateWorkflowRequest) (*TerminateWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateWorkflow not implemented")
+}
+func (UnimplementedDandoriServiceServer) SignalWorkflow(context.Context, *SignalWorkflowRequest) (*SignalWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SignalWorkflow not implemented")
 }
 func (UnimplementedDandoriServiceServer) PollWorkflowTask(context.Context, *PollWorkflowTaskRequest) (*PollWorkflowTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowTask not implemented")
@@ -304,6 +320,24 @@ func _DandoriService_TerminateWorkflow_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DandoriServiceServer).TerminateWorkflow(ctx, req.(*TerminateWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DandoriService_SignalWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DandoriServiceServer).SignalWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DandoriService_SignalWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DandoriServiceServer).SignalWorkflow(ctx, req.(*SignalWorkflowRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -438,6 +472,10 @@ var DandoriService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TerminateWorkflow",
 			Handler:    _DandoriService_TerminateWorkflow_Handler,
+		},
+		{
+			MethodName: "SignalWorkflow",
+			Handler:    _DandoriService_SignalWorkflow_Handler,
 		},
 		{
 			MethodName: "PollWorkflowTask",

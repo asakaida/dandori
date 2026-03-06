@@ -91,6 +91,18 @@ func (h *Handler) TerminateWorkflow(ctx context.Context, req *apiv1.TerminateWor
 	return &apiv1.TerminateWorkflowResponse{}, nil
 }
 
+func (h *Handler) SignalWorkflow(ctx context.Context, req *apiv1.SignalWorkflowRequest) (*apiv1.SignalWorkflowResponse, error) {
+	id, err := uuid.Parse(req.GetWorkflowId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid workflow_id: %v", err)
+	}
+
+	if err := h.client.SignalWorkflow(ctx, id, req.GetSignalName(), json.RawMessage(req.GetInput())); err != nil {
+		return nil, domainErrorToGRPC(err)
+	}
+	return &apiv1.SignalWorkflowResponse{}, nil
+}
+
 // --- Workflow Task API ---
 
 func (h *Handler) PollWorkflowTask(ctx context.Context, req *apiv1.PollWorkflowTaskRequest) (*apiv1.PollWorkflowTaskResponse, error) {

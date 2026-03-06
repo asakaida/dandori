@@ -16,6 +16,7 @@ type mockClientService struct {
 	DescribeWorkflowFn  func(ctx context.Context, id uuid.UUID) (*domain.WorkflowExecution, error)
 	GetWorkflowHistoryFn func(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)
 	TerminateWorkflowFn func(ctx context.Context, id uuid.UUID, reason string) error
+	SignalWorkflowFn    func(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error
 }
 
 func (m *mockClientService) StartWorkflow(ctx context.Context, params port.StartWorkflowParams) (*domain.WorkflowExecution, error) {
@@ -42,6 +43,13 @@ func (m *mockClientService) GetWorkflowHistory(ctx context.Context, workflowID u
 func (m *mockClientService) TerminateWorkflow(ctx context.Context, id uuid.UUID, reason string) error {
 	if m.TerminateWorkflowFn != nil {
 		return m.TerminateWorkflowFn(ctx, id, reason)
+	}
+	return nil
+}
+
+func (m *mockClientService) SignalWorkflow(ctx context.Context, id uuid.UUID, signalName string, input json.RawMessage) error {
+	if m.SignalWorkflowFn != nil {
+		return m.SignalWorkflowFn(ctx, id, signalName, input)
 	}
 	return nil
 }
