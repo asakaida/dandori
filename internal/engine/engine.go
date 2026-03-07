@@ -21,6 +21,7 @@ type Engine struct {
 	namespaces    port.NamespaceRepository
 	tx            port.TxManager
 	queryTimeout  time.Duration
+	broadcaster   *Broadcaster
 }
 
 var _ port.ClientService = (*Engine)(nil)
@@ -36,6 +37,7 @@ func New(
 	queries port.QueryRepository,
 	namespaces port.NamespaceRepository,
 	tx port.TxManager,
+	broadcaster *Broadcaster,
 ) *Engine {
 	return &Engine{
 		workflows:     workflows,
@@ -47,6 +49,7 @@ func New(
 		namespaces:    namespaces,
 		tx:            tx,
 		queryTimeout:  10 * time.Second,
+		broadcaster:   broadcaster,
 	}
 }
 
@@ -139,6 +142,12 @@ func (e *Engine) StartWorkflow(ctx context.Context, params port.StartWorkflowPar
 	if err != nil {
 		return nil, err
 	}
+
+	e.broadcaster.Publish(WorkflowNotification{
+		WorkflowID: wf.ID.String(),
+		Namespace:  wf.Namespace,
+	})
+
 	return wf, nil
 }
 
@@ -157,7 +166,7 @@ func (e *Engine) GetWorkflowHistory(ctx context.Context, namespace string, workf
 
 func (e *Engine) TerminateWorkflow(ctx context.Context, namespace string, id uuid.UUID, reason string) error {
 	namespace = resolveNamespace(namespace)
-	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+	err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
 		wf, err := e.workflows.Get(ctx, namespace, id)
 		if err != nil {
 			return err
@@ -178,6 +187,13 @@ func (e *Engine) TerminateWorkflow(ctx context.Context, namespace string, id uui
 			{WorkflowID: id, Type: domain.EventWorkflowExecutionTerminated, Data: eventData},
 		})
 	})
+	if err == nil {
+		e.broadcaster.Publish(WorkflowNotification{
+			WorkflowID: id.String(),
+			Namespace:  namespace,
+		})
+	}
+	return err
 }
 
 func (e *Engine) SignalWorkflow(ctx context.Context, namespace string, id uuid.UUID, signalName string, input json.RawMessage) error {
@@ -307,11 +323,15 @@ func (e *Engine) PollWorkflowTask(ctx context.Context, namespace string, queueNa
 }
 
 func (e *Engine) CompleteWorkflowTask(ctx context.Context, taskID int64, commands []domain.Command) error {
-	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+	var wfID uuid.UUID
+	var ns string
+	err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
 		task, err := e.workflowTasks.GetByID(ctx, taskID)
 		if err != nil {
 			return err
 		}
+		wfID = task.WorkflowID
+		ns = task.Namespace
 
 		if err := e.workflowTasks.Complete(ctx, taskID); err != nil {
 			return err
@@ -324,14 +344,25 @@ func (e *Engine) CompleteWorkflowTask(ctx context.Context, taskID int64, command
 
 		return e.processCommands(ctx, wf, commands)
 	})
+	if err == nil {
+		e.broadcaster.Publish(WorkflowNotification{
+			WorkflowID: wfID.String(),
+			Namespace:  ns,
+		})
+	}
+	return err
 }
 
 func (e *Engine) FailWorkflowTask(ctx context.Context, taskID int64, cause string, message string) error {
-	return e.tx.RunInTx(ctx, func(ctx context.Context) error {
+	var wfID uuid.UUID
+	var ns string
+	err := e.tx.RunInTx(ctx, func(ctx context.Context) error {
 		task, err := e.workflowTasks.GetByID(ctx, taskID)
 		if err != nil {
 			return err
 		}
+		wfID = task.WorkflowID
+		ns = task.Namespace
 
 		if err := e.workflowTasks.Complete(ctx, taskID); err != nil {
 			return err
@@ -361,6 +392,13 @@ func (e *Engine) FailWorkflowTask(ctx context.Context, taskID int64, cause strin
 			"error_message":     message,
 		})
 	})
+	if err == nil {
+		e.broadcaster.Publish(WorkflowNotification{
+			WorkflowID: wfID.String(),
+			Namespace:  ns,
+		})
+	}
+	return err
 }
 
 func (e *Engine) RespondQueryTask(ctx context.Context, queryID int64, result json.RawMessage, errMsg string) error {

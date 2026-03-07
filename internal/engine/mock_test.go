@@ -365,5 +365,5 @@ func newTestEngine(
 	tm *mockTimerRepo,
 	qr *mockQueryRepo,
 ) *Engine {
-	return New(wf, ev, wt, at, tm, qr, &mockNamespaceRepo{}, &mockTxManager{})
+	return New(wf, ev, wt, at, tm, qr, &mockNamespaceRepo{}, &mockTxManager{}, NewBroadcaster())
 }

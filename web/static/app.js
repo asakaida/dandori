@@ -127,6 +127,7 @@ var router = {
   },
 
   resolve: function() {
+    cleanupSSE();
     var raw = location.pathname;
     var path = raw.replace(new RegExp('^' + UI_BASE + '/?'), '/').replace(/\/+$/, '') || '/';
 
@@ -170,6 +171,25 @@ function renderError(msg) {
 
 // --- Workflow List ---
 
+function buildWorkflowRows(workflows) {
+  if (workflows.length === 0) {
+    return '<tr><td colspan="6" class="py-8 text-center text-sm text-gray-500">No workflows found</td></tr>';
+  }
+  return workflows.map(function(wf) {
+    var ns = wf.namespace && wf.namespace !== 'default' ? '?namespace=' + encodeURIComponent(wf.namespace) : '';
+    return '<tr>' +
+      '<td class="border-b border-gray-200 py-4 pr-3 pl-4 text-sm whitespace-nowrap sm:pl-6 lg:pl-8"><span class="font-mono text-xs text-gray-900">' + escapeHtml(wf.id) + '</span></td>' +
+      '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 sm:table-cell">' + escapeHtml(wf.workflowType) + '</td>' +
+      '<td class="border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap">' + statusBadge(wf.status) + '</td>' +
+      '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 lg:table-cell">' + escapeHtml(wf.taskQueue) + '</td>' +
+      '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 sm:table-cell">' + formatTime(wf.createdAt) + '</td>' +
+      '<td class="border-b border-gray-200 py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-6 lg:pr-8">' +
+        '<a href="/workflows/' + wf.id + ns + '" data-link class="text-indigo-600 hover:text-indigo-900">Detail</a>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
 async function viewWorkflowList() {
   var app = document.getElementById('app');
   app.innerHTML = renderLoading();
@@ -187,24 +207,7 @@ async function viewWorkflowList() {
     var data = await api('/workflows?' + query.toString());
     var workflows = data.workflows || [];
 
-    var rows = '';
-    if (workflows.length === 0) {
-      rows = '<tr><td colspan="6" class="py-8 text-center text-sm text-gray-500">No workflows found</td></tr>';
-    } else {
-      rows = workflows.map(function(wf) {
-        var ns = wf.namespace && wf.namespace !== 'default' ? '?namespace=' + encodeURIComponent(wf.namespace) : '';
-        return '<tr>' +
-          '<td class="border-b border-gray-200 py-4 pr-3 pl-4 text-sm whitespace-nowrap sm:pl-6 lg:pl-8"><span class="font-mono text-xs text-gray-900">' + escapeHtml(wf.id) + '</span></td>' +
-          '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 sm:table-cell">' + escapeHtml(wf.workflowType) + '</td>' +
-          '<td class="border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap">' + statusBadge(wf.status) + '</td>' +
-          '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 lg:table-cell">' + escapeHtml(wf.taskQueue) + '</td>' +
-          '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 sm:table-cell">' + formatTime(wf.createdAt) + '</td>' +
-          '<td class="border-b border-gray-200 py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-6 lg:pr-8">' +
-            '<a href="/workflows/' + wf.id + ns + '" data-link class="text-indigo-600 hover:text-indigo-900">Detail</a>' +
-          '</td>' +
-        '</tr>';
-      }).join('');
-    }
+    var rows = buildWorkflowRows(workflows);
 
     var statusOptions = Object.keys(STATUS_CONFIG).map(function(k) {
       var selected = statusFilter === k ? ' selected' : '';
@@ -236,7 +239,7 @@ async function viewWorkflowList() {
         '<div class="mt-8 flow-root">' +
           '<div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">' +
             '<div class="inline-block min-w-full py-2 align-middle">' +
-              '<table class="min-w-full border-separate border-spacing-0">' +
+              '<table id="workflow-table" class="min-w-full border-separate border-spacing-0">' +
                 '<thead>' +
                   '<tr>' +
                     '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm sm:pl-6 lg:pl-8">Workflow ID</th>' +
@@ -266,6 +269,22 @@ async function viewWorkflowList() {
         router.navigate('/' + (qs ? '?' + qs : ''));
       });
     }
+
+    // SSE for live updates
+    var sseUrl = '/v1/sse/workflows';
+    if (namespace) sseUrl += '?namespace=' + encodeURIComponent(namespace);
+    var queryStr = query.toString();
+    currentEventSource = new EventSource(sseUrl);
+    currentEventSource.onmessage = async function() {
+      try {
+        var freshData = await api('/workflows?' + queryStr);
+        var freshWorkflows = freshData.workflows || [];
+        var tbody = document.querySelector('#workflow-table tbody');
+        if (tbody) {
+          tbody.innerHTML = buildWorkflowRows(freshWorkflows);
+        }
+      } catch (e) {}
+    };
   } catch (err) {
     app.innerHTML = renderError(err.message);
   }
@@ -275,7 +294,9 @@ async function viewWorkflowList() {
 
 async function viewWorkflowDetail(match) {
   var app = document.getElementById('app');
-  app.innerHTML = renderLoading();
+  if (!app.querySelector('[data-workflow-detail]')) {
+    app.innerHTML = renderLoading();
+  }
 
   var workflowId = match[1];
   var params = new URLSearchParams(location.search);
@@ -393,7 +414,7 @@ async function viewWorkflowDetail(match) {
     }
 
     app.innerHTML =
-      '<div class="px-4 sm:px-6 lg:px-8">' +
+      '<div data-workflow-detail class="px-4 sm:px-6 lg:px-8">' +
         breadcrumb +
         descriptionList +
         '<div class="mt-8">' +
@@ -401,6 +422,21 @@ async function viewWorkflowDetail(match) {
           timeline +
         '</div>' +
       '</div>';
+
+    // SSE for live updates on this workflow
+    if (!currentEventSource) {
+      var sseUrl = '/v1/sse/workflows';
+      if (namespace) sseUrl += '?namespace=' + encodeURIComponent(namespace);
+      currentEventSource = new EventSource(sseUrl);
+      currentEventSource.onmessage = function(e) {
+        try {
+          var notification = JSON.parse(e.data);
+          if (notification.workflowId === workflowId) {
+            viewWorkflowDetail(match);
+          }
+        } catch (ex) {}
+      };
+    }
 
   } catch (err) {
     app.innerHTML = renderError(err.message);
@@ -412,6 +448,17 @@ function dlRow(label, value) {
     '<dt class="text-sm font-medium text-gray-900">' + label + '</dt>' +
     '<dd class="mt-1 text-sm text-gray-700 sm:col-span-2 sm:mt-0">' + value + '</dd>' +
   '</div>';
+}
+
+// --- SSE ---
+
+var currentEventSource = null;
+
+function cleanupSSE() {
+  if (currentEventSource) {
+    currentEventSource.close();
+    currentEventSource = null;
+  }
 }
 
 // --- Init ---

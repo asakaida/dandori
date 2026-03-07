@@ -78,6 +78,7 @@ func main() {
 	slog.Info("migrations complete")
 
 	store := postgres.New(db)
+	broadcaster := engine.NewBroadcaster()
 	eng := engine.New(
 		store.Workflows(),
 		store.Events(),
@@ -87,6 +88,7 @@ func main() {
 		store.Queries(),
 		store.Namespaces(),
 		store,
+		broadcaster,
 	)
 	bgWorker := engine.NewBackgroundWorker(
 		store.Workflows(),
@@ -159,9 +161,10 @@ func main() {
 	}
 
 	extraHandlers := map[string]http.Handler{
-		"/healthz": httpadapter.NewHealthHandler(db),
-		"/metrics": promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
-		"/ui/":     httpadapter.NewUIHandler(),
+		"/healthz":            httpadapter.NewHealthHandler(db),
+		"/metrics":            promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+		"/ui/":                httpadapter.NewUIHandler(),
+		"/v1/sse/workflows":   httpadapter.NewSSEHandler(broadcaster),
 	}
 
 	if os.Getenv("ENABLE_PPROF") == "true" {

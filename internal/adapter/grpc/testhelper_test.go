@@ -74,6 +74,7 @@ func newTestHandler(t *testing.T) *adaptgrpc.Handler {
 		store.Queries(),
 		store.Namespaces(),
 		store,
+		engine.NewBroadcaster(),
 	)
 	return adaptgrpc.NewHandler(eng, eng, eng)
 }

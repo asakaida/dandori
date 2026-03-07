@@ -81,6 +81,7 @@ func TestMain(m *testing.M) {
 		store.Queries(),
 		store.Namespaces(),
 		store,
+		engine.NewBroadcaster(),
 	)
 	bgWorker := engine.NewBackgroundWorker(
 		store.Workflows(),
