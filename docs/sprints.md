@@ -909,7 +909,7 @@ Sprint 12の位置づけの根拠:
 
 ### Sprint 21 - ドキュメント整備
 
-ステータス: `未着手`
+ステータス: `進行中`
 
 ゴール: ユーザー・開発者・運用者向けの包括的なドキュメントを整備し、プロジェクトの利用・貢献・運用を容易にする
 
@@ -921,11 +921,11 @@ Sprint 12の位置づけの根拠:
 
 タスク:
 
-- [ ] docs/getting-started.md（新規）— クイックスタートガイド: Docker Compose起動、最初のワークフロー実行、CLIの使い方
+- [x] docs/getting-started.md（新規）— クイックスタートガイド: Docker Compose起動、最初のワークフロー実行、CLIの使い方
 - [ ] docs/concepts.md（新規）— コンセプトガイド: ワークフロー、アクティビティ、タスクキュー、シグナル、タイマー、子ワークフロー等の概念説明
-- [ ] docs/cli-reference.md（新規）— CLIリファレンス: 全サブコマンド・フラグの説明と使用例
+- [x] docs/cli-reference.md（新規）— CLIリファレンス: 全サブコマンド・フラグの説明と使用例
 - [ ] docs/api-reference.md（新規）— API リファレンス: 全gRPC RPC / HTTP APIの仕様（Swagger JSONへのリンク含む）
-- [ ] docs/configuration.md（新規）— 設定リファレンス: 環境変数一覧、デフォルト値、推奨設定
+- [x] docs/configuration.md（新規）— 設定リファレンス: 環境変数一覧、デフォルト値、推奨設定
 - [ ] docs/architecture.md（新規）— アーキテクチャガイド: Hexagonal Architecture、ディレクトリ構成、データフロー図
 - [ ] docs/contributing.md（新規）— コントリビューションガイド: 開発環境構築、テスト実行、コーディング規約、PR手順
 - [ ] docs/sdk-guide.md（新規）— SDK開発ガイド: Go SDK連携方法、カスタムSDK開発のためのプロトコル仕様
