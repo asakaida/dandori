@@ -26,6 +26,7 @@ enum CommandType {
   COMMAND_TYPE_RECORD_SIDE_EFFECT = 6;
   COMMAND_TYPE_START_CHILD_WORKFLOW = 7;
   COMMAND_TYPE_CONTINUE_AS_NEW = 9;
+  COMMAND_TYPE_UPSERT_SEARCH_ATTRIBUTES = 10;
 }
 
 message WorkflowExecution {
@@ -44,6 +45,7 @@ message WorkflowExecution {
   string cron_schedule = 13;
   string continued_as_new_id = 14;
   string namespace = 15;
+  map<string, string> search_attributes = 16;
 }
 
 message HistoryEvent {

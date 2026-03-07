@@ -18,9 +18,14 @@ type WorkflowStore struct {
 }
 
 func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution) error {
+	searchAttrs := "{}"
+	if len(wf.SearchAttributes) > 0 {
+		b, _ := json.Marshal(wf.SearchAttributes)
+		searchAttrs = string(b)
+	}
 	res, err := s.store.conn(ctx).ExecContext(ctx,
-		`INSERT INTO workflow_executions (id, namespace, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at, parent_workflow_id, parent_seq_id, cron_schedule)
-		 VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, NULL, NOW(), $7, $8, $9)
+		`INSERT INTO workflow_executions (id, namespace, workflow_type, task_queue, status, input, result, error_message, closed_at, updated_at, parent_workflow_id, parent_seq_id, cron_schedule, search_attributes)
+		 VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, NULL, NOW(), $7, $8, $9, $10)
 		 ON CONFLICT (id) DO UPDATE SET
 			namespace = EXCLUDED.namespace,
 			workflow_type = EXCLUDED.workflow_type,
@@ -33,9 +38,10 @@ func (s *WorkflowStore) Create(ctx context.Context, wf domain.WorkflowExecution)
 			updated_at = NOW(),
 			parent_workflow_id = EXCLUDED.parent_workflow_id,
 			parent_seq_id = EXCLUDED.parent_seq_id,
-			cron_schedule = EXCLUDED.cron_schedule
+			cron_schedule = EXCLUDED.cron_schedule,
+			search_attributes = EXCLUDED.search_attributes
 		 WHERE workflow_executions.status IN ('COMPLETED', 'FAILED', 'TERMINATED', 'CONTINUED_AS_NEW')`,
-		wf.ID, wf.Namespace, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input, wf.ParentWorkflowID, wf.ParentSeqID, wf.CronSchedule,
+		wf.ID, wf.Namespace, wf.WorkflowType, wf.TaskQueue, wf.Status, wf.Input, wf.ParentWorkflowID, wf.ParentSeqID, wf.CronSchedule, searchAttrs,
 	)
 	if err != nil {
 		return err
@@ -59,13 +65,15 @@ func (s *WorkflowStore) Get(ctx context.Context, namespace string, id uuid.UUID)
 	var parentSeqID sql.NullInt64
 	var cronSchedule sql.NullString
 	var continuedAsNewID sql.NullString
+	var searchAttrsJSON []byte
 	err := s.store.conn(ctx).QueryRowContext(ctx,
-		`SELECT id, namespace, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
+		`SELECT id, namespace, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id, search_attributes
 		 FROM workflow_executions WHERE id = $1 AND namespace = $2`, id, namespace,
 	).Scan(
 		&wf.ID, &wf.Namespace, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 		&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
 		&parentWFID, &parentSeqID, &cronSchedule, &continuedAsNewID,
+		&searchAttrsJSON,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrWorkflowNotFound
@@ -101,11 +109,14 @@ func (s *WorkflowStore) Get(ctx context.Context, namespace string, id uuid.UUID)
 		}
 		wf.ContinuedAsNewID = &parsed
 	}
+	if len(searchAttrsJSON) > 0 {
+		json.Unmarshal(searchAttrsJSON, &wf.SearchAttributes)
+	}
 	return &wf, nil
 }
 
 func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParams) ([]domain.WorkflowExecution, error) {
-	query := `SELECT id, namespace, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id
+	query := `SELECT id, namespace, workflow_type, task_queue, status, input, result, error_message, created_at, closed_at, parent_workflow_id, parent_seq_id, cron_schedule, continued_as_new_id, search_attributes
 		 FROM workflow_executions WHERE namespace = $1`
 	args := []any{params.Namespace}
 	argIdx := 2
@@ -151,10 +162,12 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 		var parentSeqID sql.NullInt64
 		var cronSchedule sql.NullString
 		var continuedAsNewID sql.NullString
+		var searchAttrsJSON []byte
 		if err := rows.Scan(
 			&wf.ID, &wf.Namespace, &wf.WorkflowType, &wf.TaskQueue, &wf.Status,
 			&input, &result, &errMsg, &wf.CreatedAt, &closedAt,
 			&parentWFID, &parentSeqID, &cronSchedule, &continuedAsNewID,
+			&searchAttrsJSON,
 		); err != nil {
 			return nil, err
 		}
@@ -186,6 +199,9 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 			}
 			wf.ContinuedAsNewID = &parsed
 		}
+		if len(searchAttrsJSON) > 0 {
+			json.Unmarshal(searchAttrsJSON, &wf.SearchAttributes)
+		}
 		workflows = append(workflows, wf)
 	}
 	return workflows, rows.Err()
@@ -195,6 +211,18 @@ func (s *WorkflowStore) SetContinuedAsNewID(ctx context.Context, id uuid.UUID, n
 	_, err := s.store.conn(ctx).ExecContext(ctx,
 		`UPDATE workflow_executions SET continued_as_new_id = $2 WHERE id = $1`,
 		id, newID,
+	)
+	return err
+}
+
+func (s *WorkflowStore) UpsertSearchAttributes(ctx context.Context, id uuid.UUID, attrs map[string]string) error {
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return fmt.Errorf("marshal search_attributes: %w", err)
+	}
+	_, err = s.store.conn(ctx).ExecContext(ctx,
+		`UPDATE workflow_executions SET search_attributes = search_attributes || $2, updated_at = NOW() WHERE id = $1`,
+		id, attrsJSON,
 	)
 	return err
 }

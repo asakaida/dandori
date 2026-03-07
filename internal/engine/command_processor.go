@@ -45,6 +45,10 @@ func (e *Engine) processCommands(ctx context.Context, wf *domain.WorkflowExecuti
 			if err := e.processContinueAsNew(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
 				return err
 			}
+		case domain.CommandUpsertSearchAttributes:
+			if err := e.processUpsertSearchAttributes(ctx, wf, cmd.Attributes, cmd.Metadata); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown command type: %s", cmd.Type)
 		}
@@ -380,6 +384,25 @@ func (e *Engine) continueAsNew(ctx context.Context, wf *domain.WorkflowExecution
 		QueueName:   taskQueue,
 		WorkflowID:  newID,
 		ScheduledAt: time.Now(),
+	})
+}
+
+func (e *Engine) processUpsertSearchAttributes(ctx context.Context, wf *domain.WorkflowExecution, attrs json.RawMessage, metadata map[string]string) error {
+	var a domain.UpsertSearchAttributesAttributes
+	if err := json.Unmarshal(attrs, &a); err != nil {
+		return fmt.Errorf("unmarshal UpsertSearchAttributesAttributes: %w", err)
+	}
+
+	if err := e.workflows.UpsertSearchAttributes(ctx, wf.ID, a.SearchAttributes); err != nil {
+		return err
+	}
+
+	eventData, err := marshalEventData(a, metadata)
+	if err != nil {
+		return err
+	}
+	return e.events.Append(ctx, []domain.HistoryEvent{
+		{WorkflowID: wf.ID, Type: domain.EventSearchAttributesUpserted, Data: eventData},
 	})
 }
 

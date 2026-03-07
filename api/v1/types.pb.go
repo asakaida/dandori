@@ -84,40 +84,43 @@ func (WorkflowExecutionStatus) EnumDescriptor() ([]byte, []int) {
 type CommandType int32
 
 const (
-	CommandType_COMMAND_TYPE_UNSPECIFIED            CommandType = 0
-	CommandType_COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK CommandType = 1
-	CommandType_COMMAND_TYPE_COMPLETE_WORKFLOW      CommandType = 2
-	CommandType_COMMAND_TYPE_FAIL_WORKFLOW          CommandType = 3
-	CommandType_COMMAND_TYPE_START_TIMER            CommandType = 4
-	CommandType_COMMAND_TYPE_CANCEL_TIMER           CommandType = 5
-	CommandType_COMMAND_TYPE_RECORD_SIDE_EFFECT     CommandType = 6
-	CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW   CommandType = 7
-	CommandType_COMMAND_TYPE_CONTINUE_AS_NEW        CommandType = 9
+	CommandType_COMMAND_TYPE_UNSPECIFIED              CommandType = 0
+	CommandType_COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK   CommandType = 1
+	CommandType_COMMAND_TYPE_COMPLETE_WORKFLOW        CommandType = 2
+	CommandType_COMMAND_TYPE_FAIL_WORKFLOW            CommandType = 3
+	CommandType_COMMAND_TYPE_START_TIMER              CommandType = 4
+	CommandType_COMMAND_TYPE_CANCEL_TIMER             CommandType = 5
+	CommandType_COMMAND_TYPE_RECORD_SIDE_EFFECT       CommandType = 6
+	CommandType_COMMAND_TYPE_START_CHILD_WORKFLOW     CommandType = 7
+	CommandType_COMMAND_TYPE_CONTINUE_AS_NEW          CommandType = 9
+	CommandType_COMMAND_TYPE_UPSERT_SEARCH_ATTRIBUTES CommandType = 10
 )
 
 // Enum value maps for CommandType.
 var (
 	CommandType_name = map[int32]string{
-		0: "COMMAND_TYPE_UNSPECIFIED",
-		1: "COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK",
-		2: "COMMAND_TYPE_COMPLETE_WORKFLOW",
-		3: "COMMAND_TYPE_FAIL_WORKFLOW",
-		4: "COMMAND_TYPE_START_TIMER",
-		5: "COMMAND_TYPE_CANCEL_TIMER",
-		6: "COMMAND_TYPE_RECORD_SIDE_EFFECT",
-		7: "COMMAND_TYPE_START_CHILD_WORKFLOW",
-		9: "COMMAND_TYPE_CONTINUE_AS_NEW",
+		0:  "COMMAND_TYPE_UNSPECIFIED",
+		1:  "COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK",
+		2:  "COMMAND_TYPE_COMPLETE_WORKFLOW",
+		3:  "COMMAND_TYPE_FAIL_WORKFLOW",
+		4:  "COMMAND_TYPE_START_TIMER",
+		5:  "COMMAND_TYPE_CANCEL_TIMER",
+		6:  "COMMAND_TYPE_RECORD_SIDE_EFFECT",
+		7:  "COMMAND_TYPE_START_CHILD_WORKFLOW",
+		9:  "COMMAND_TYPE_CONTINUE_AS_NEW",
+		10: "COMMAND_TYPE_UPSERT_SEARCH_ATTRIBUTES",
 	}
 	CommandType_value = map[string]int32{
-		"COMMAND_TYPE_UNSPECIFIED":            0,
-		"COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK": 1,
-		"COMMAND_TYPE_COMPLETE_WORKFLOW":      2,
-		"COMMAND_TYPE_FAIL_WORKFLOW":          3,
-		"COMMAND_TYPE_START_TIMER":            4,
-		"COMMAND_TYPE_CANCEL_TIMER":           5,
-		"COMMAND_TYPE_RECORD_SIDE_EFFECT":     6,
-		"COMMAND_TYPE_START_CHILD_WORKFLOW":   7,
-		"COMMAND_TYPE_CONTINUE_AS_NEW":        9,
+		"COMMAND_TYPE_UNSPECIFIED":              0,
+		"COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK":   1,
+		"COMMAND_TYPE_COMPLETE_WORKFLOW":        2,
+		"COMMAND_TYPE_FAIL_WORKFLOW":            3,
+		"COMMAND_TYPE_START_TIMER":              4,
+		"COMMAND_TYPE_CANCEL_TIMER":             5,
+		"COMMAND_TYPE_RECORD_SIDE_EFFECT":       6,
+		"COMMAND_TYPE_START_CHILD_WORKFLOW":     7,
+		"COMMAND_TYPE_CONTINUE_AS_NEW":          9,
+		"COMMAND_TYPE_UPSERT_SEARCH_ATTRIBUTES": 10,
 	}
 )
 
@@ -165,6 +168,7 @@ type WorkflowExecution struct {
 	CronSchedule     string                  `protobuf:"bytes,13,opt,name=cron_schedule,json=cronSchedule,proto3" json:"cron_schedule,omitempty"`
 	ContinuedAsNewId string                  `protobuf:"bytes,14,opt,name=continued_as_new_id,json=continuedAsNewId,proto3" json:"continued_as_new_id,omitempty"`
 	Namespace        string                  `protobuf:"bytes,15,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	SearchAttributes map[string]string       `protobuf:"bytes,16,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -302,6 +306,13 @@ func (x *WorkflowExecution) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *WorkflowExecution) GetSearchAttributes() map[string]string {
+	if x != nil {
+		return x.SearchAttributes
+	}
+	return nil
 }
 
 type HistoryEvent struct {
@@ -1164,7 +1175,7 @@ var File_api_v1_types_proto protoreflect.FileDescriptor
 
 const file_api_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\xee\x04\n" +
+	"\x12api/v1/types.proto\x12\x0edandori.api.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\x99\x06\n" +
 	"\x11WorkflowExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\x12\x1d\n" +
@@ -1184,7 +1195,11 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\rparent_seq_id\x18\f \x01(\x03R\vparentSeqId\x12#\n" +
 	"\rcron_schedule\x18\r \x01(\tR\fcronSchedule\x12-\n" +
 	"\x13continued_as_new_id\x18\x0e \x01(\tR\x10continuedAsNewId\x12\x1c\n" +
-	"\tnamespace\x18\x0f \x01(\tR\tnamespace\"\xda\x01\n" +
+	"\tnamespace\x18\x0f \x01(\tR\tnamespace\x12d\n" +
+	"\x11search_attributes\x18\x10 \x03(\v27.dandori.api.v1.WorkflowExecution.SearchAttributesEntryR\x10searchAttributes\x1aC\n" +
+	"\x15SearchAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xda\x01\n" +
 	"\fHistoryEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -1260,7 +1275,7 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"#WORKFLOW_EXECUTION_STATUS_COMPLETED\x10\x02\x12$\n" +
 	" WORKFLOW_EXECUTION_STATUS_FAILED\x10\x03\x12(\n" +
 	"$WORKFLOW_EXECUTION_STATUS_TERMINATED\x10\x04\x12.\n" +
-	"*WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW\x10\x05*\xc3\x02\n" +
+	"*WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW\x10\x05*\xee\x02\n" +
 	"\vCommandType\x12\x1c\n" +
 	"\x18COMMAND_TYPE_UNSPECIFIED\x10\x00\x12'\n" +
 	"#COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK\x10\x01\x12\"\n" +
@@ -1270,7 +1285,9 @@ const file_api_v1_types_proto_rawDesc = "" +
 	"\x19COMMAND_TYPE_CANCEL_TIMER\x10\x05\x12#\n" +
 	"\x1fCOMMAND_TYPE_RECORD_SIDE_EFFECT\x10\x06\x12%\n" +
 	"!COMMAND_TYPE_START_CHILD_WORKFLOW\x10\a\x12 \n" +
-	"\x1cCOMMAND_TYPE_CONTINUE_AS_NEW\x10\tB*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
+	"\x1cCOMMAND_TYPE_CONTINUE_AS_NEW\x10\t\x12)\n" +
+	"%COMMAND_TYPE_UPSERT_SEARCH_ATTRIBUTES\x10\n" +
+	"B*Z(github.com/asakaida/dandori/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_types_proto_rawDescOnce sync.Once
@@ -1285,7 +1302,7 @@ func file_api_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_api_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_api_v1_types_proto_goTypes = []any{
 	(WorkflowExecutionStatus)(0),           // 0: dandori.api.v1.WorkflowExecutionStatus
 	(CommandType)(0),                       // 1: dandori.api.v1.CommandType
@@ -1304,27 +1321,29 @@ var file_api_v1_types_proto_goTypes = []any{
 	(*ContinueAsNewAttributes)(nil),        // 14: dandori.api.v1.ContinueAsNewAttributes
 	(*PendingQuery)(nil),                   // 15: dandori.api.v1.PendingQuery
 	(*WorkflowSignaledAttributes)(nil),     // 16: dandori.api.v1.WorkflowSignaledAttributes
-	(*timestamppb.Timestamp)(nil),          // 17: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),            // 18: google.protobuf.Duration
+	nil,                                    // 17: dandori.api.v1.WorkflowExecution.SearchAttributesEntry
+	(*timestamppb.Timestamp)(nil),          // 18: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),            // 19: google.protobuf.Duration
 }
 var file_api_v1_types_proto_depIdxs = []int32{
 	0,  // 0: dandori.api.v1.WorkflowExecution.status:type_name -> dandori.api.v1.WorkflowExecutionStatus
-	17, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
-	17, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
-	17, // 4: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
-	1,  // 5: dandori.api.v1.Command.type:type_name -> dandori.api.v1.CommandType
-	18, // 6: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
-	8,  // 7: dandori.api.v1.ScheduleActivityTaskAttributes.retry_policy:type_name -> dandori.api.v1.RetryPolicy
-	18, // 8: dandori.api.v1.ScheduleActivityTaskAttributes.heartbeat_timeout:type_name -> google.protobuf.Duration
-	18, // 9: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
-	18, // 10: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
-	18, // 11: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	18, // 1: dandori.api.v1.WorkflowExecution.created_at:type_name -> google.protobuf.Timestamp
+	18, // 2: dandori.api.v1.WorkflowExecution.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 3: dandori.api.v1.WorkflowExecution.closed_at:type_name -> google.protobuf.Timestamp
+	17, // 4: dandori.api.v1.WorkflowExecution.search_attributes:type_name -> dandori.api.v1.WorkflowExecution.SearchAttributesEntry
+	18, // 5: dandori.api.v1.HistoryEvent.timestamp:type_name -> google.protobuf.Timestamp
+	1,  // 6: dandori.api.v1.Command.type:type_name -> dandori.api.v1.CommandType
+	19, // 7: dandori.api.v1.ScheduleActivityTaskAttributes.start_to_close_timeout:type_name -> google.protobuf.Duration
+	8,  // 8: dandori.api.v1.ScheduleActivityTaskAttributes.retry_policy:type_name -> dandori.api.v1.RetryPolicy
+	19, // 9: dandori.api.v1.ScheduleActivityTaskAttributes.heartbeat_timeout:type_name -> google.protobuf.Duration
+	19, // 10: dandori.api.v1.RetryPolicy.initial_interval:type_name -> google.protobuf.Duration
+	19, // 11: dandori.api.v1.RetryPolicy.max_interval:type_name -> google.protobuf.Duration
+	19, // 12: dandori.api.v1.StartTimerAttributes.duration:type_name -> google.protobuf.Duration
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_types_proto_init() }
@@ -1338,7 +1357,7 @@ func file_api_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_types_proto_rawDesc), len(file_api_v1_types_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

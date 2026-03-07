@@ -59,6 +59,10 @@ func (m *mockWorkflowRepo) SetContinuedAsNewID(ctx context.Context, id uuid.UUID
 	return nil
 }
 
+func (m *mockWorkflowRepo) UpsertSearchAttributes(ctx context.Context, id uuid.UUID, attrs map[string]string) error {
+	return nil
+}
+
 type mockEventRepo struct {
 	AppendFn             func(ctx context.Context, events []domain.HistoryEvent) error
 	GetByWorkflowIDFn    func(ctx context.Context, workflowID uuid.UUID) ([]domain.HistoryEvent, error)

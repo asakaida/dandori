@@ -32,6 +32,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		{version: 6, name: "cron", file: "migration/000006_cron.up.sql"},
 		{version: 7, name: "namespace", file: "migration/000007_namespace.up.sql"},
 		{version: 9, name: "partitioning", file: "migration/000009_partitioning.up.sql"},
+		{version: 10, name: "search_attributes", file: "migration/000010_search_attributes.up.sql"},
 	}
 	sort.Slice(migrations, func(i, j int) bool { return migrations[i].version < migrations[j].version })
 

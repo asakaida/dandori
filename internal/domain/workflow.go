@@ -36,4 +36,5 @@ type WorkflowExecution struct {
 	ParentSeqID      int64
 	CronSchedule     string
 	ContinuedAsNewID *uuid.UUID
+	SearchAttributes map[string]string
 }

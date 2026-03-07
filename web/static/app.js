@@ -62,6 +62,26 @@ function statusBadge(status) {
     '</span>';
 }
 
+// --- Search Attributes ---
+
+var SEARCH_ATTR_STYLES = {
+  waiting_for_human:     { bg: 'bg-amber-100',  text: 'text-amber-800' },
+  retrying:              { bg: 'bg-blue-100',   text: 'text-blue-800' },
+  paid:                  { bg: 'bg-green-100',  text: 'text-green-800' },
+  cancelled_by_operator: { bg: 'bg-orange-100', text: 'text-orange-800' },
+};
+
+function searchAttrBadges(attrs) {
+  if (!attrs || Object.keys(attrs).length === 0) return '';
+  return Object.keys(attrs).map(function(key) {
+    var val = attrs[key];
+    var style = SEARCH_ATTR_STYLES[val] || { bg: 'bg-gray-100', text: 'text-gray-700' };
+    return '<span class="inline-flex items-center rounded-full ' + style.bg + ' px-2 py-0.5 text-xs font-medium ' + style.text + '">' +
+      escapeHtml(key) + ': ' + escapeHtml(val) +
+    '</span>';
+  }).join(' ');
+}
+
 // --- Event Timeline ---
 
 var EVENT_COLORS = {
@@ -79,6 +99,7 @@ var EVENT_COLORS = {
   ChildWorkflowExecutionStarted:   'bg-cyan-500',
   ChildWorkflowExecutionCompleted: 'bg-cyan-600',
   WorkflowExecutionContinuedAsNew: 'bg-purple-400',
+  SearchAttributesUpserted:        'bg-amber-500',
 };
 
 function eventIcon(eventType) {
@@ -91,7 +112,7 @@ function eventIcon(eventType) {
   if (eventType.includes('Timer')) {
     return '<svg viewBox="0 0 20 20" fill="currentColor" class="size-5 text-white"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" fill-rule="evenodd" /></svg>';
   }
-  if (eventType.includes('Signal')) {
+  if (eventType.includes('Signal') || eventType.includes('SearchAttributes')) {
     return '<svg viewBox="0 0 20 20" fill="currentColor" class="size-5 text-white"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg>';
   }
   if (eventType.includes('Started') || eventType.includes('Scheduled')) {
@@ -107,6 +128,19 @@ async function api(path) {
   if (!res.ok) {
     var body = await res.text();
     throw new Error('API ' + res.status + ': ' + body);
+  }
+  return res.json();
+}
+
+async function apiPost(path, body) {
+  var res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    var text = await res.text();
+    throw new Error('API ' + res.status + ': ' + text);
   }
   return res.json();
 }
@@ -173,14 +207,16 @@ function renderError(msg) {
 
 function buildWorkflowRows(workflows) {
   if (workflows.length === 0) {
-    return '<tr><td colspan="6" class="py-8 text-center text-sm text-gray-500">No workflows found</td></tr>';
+    return '<tr><td colspan="7" class="py-8 text-center text-sm text-gray-500">No workflows found</td></tr>';
   }
   return workflows.map(function(wf) {
     var ns = wf.namespace && wf.namespace !== 'default' ? '?namespace=' + encodeURIComponent(wf.namespace) : '';
+    var attrHtml = searchAttrBadges(wf.searchAttributes);
     return '<tr>' +
       '<td class="border-b border-gray-200 py-4 pr-3 pl-4 text-sm whitespace-nowrap sm:pl-6 lg:pl-8"><span class="font-mono text-xs text-gray-900">' + escapeHtml(wf.id) + '</span></td>' +
       '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 sm:table-cell">' + escapeHtml(wf.workflowType) + '</td>' +
       '<td class="border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap">' + statusBadge(wf.status) + '</td>' +
+      '<td class="border-b border-gray-200 px-3 py-4 text-sm">' + (attrHtml || '<span class="text-gray-300">-</span>') + '</td>' +
       '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 lg:table-cell">' + escapeHtml(wf.taskQueue) + '</td>' +
       '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 sm:table-cell">' + formatTime(wf.createdAt) + '</td>' +
       '<td class="border-b border-gray-200 py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-6 lg:pr-8">' +
@@ -245,6 +281,7 @@ async function viewWorkflowList() {
                     '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm sm:pl-6 lg:pl-8">Workflow ID</th>' +
                     '<th scope="col" class="sticky top-0 z-10 hidden border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm sm:table-cell">Type</th>' +
                     '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm">Status</th>' +
+                    '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm">Attributes</th>' +
                     '<th scope="col" class="sticky top-0 z-10 hidden border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm lg:table-cell">Task Queue</th>' +
                     '<th scope="col" class="sticky top-0 z-10 hidden border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm sm:table-cell">Created</th>' +
                     '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 py-3.5 pr-4 pl-3 backdrop-blur-sm sm:pr-6 lg:pr-8"><span class="sr-only">Detail</span></th>' +
@@ -348,6 +385,9 @@ async function viewWorkflowDetail(match) {
     if (wf.errorMessage) {
       dlRows += dlRow('Error', '<span class="text-red-700">' + escapeHtml(wf.errorMessage) + '</span>');
     }
+    if (wf.searchAttributes && Object.keys(wf.searchAttributes).length > 0) {
+      dlRows += dlRow('Search Attributes', searchAttrBadges(wf.searchAttributes));
+    }
     if (wf.parentWorkflowId) {
       dlRows += dlRow('Parent Workflow', '<a href="/workflows/' + wf.parentWorkflowId + nsQuery + '" data-link class="text-indigo-600 hover:text-indigo-900 font-mono">' + escapeHtml(wf.parentWorkflowId) + '</a>');
     }
@@ -364,11 +404,25 @@ async function viewWorkflowDetail(match) {
       dlRows += dlRow('Result', '<pre class="bg-gray-50 rounded-md p-2 overflow-x-auto text-xs">' + formatJson(result) + '</pre>');
     }
 
+    // Actions for running workflows
+    var isRunning = wf.status === 'WORKFLOW_EXECUTION_STATUS_RUNNING';
+    var actionsHtml = '';
+    if (isRunning) {
+      actionsHtml =
+        '<div class="flex gap-3">' +
+          '<button id="btn-cancel" class="rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-400">Cancel</button>' +
+          '<button id="btn-terminate" class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Terminate</button>' +
+        '</div>';
+    }
+
     var descriptionList =
       '<div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">' +
-        '<div class="px-4 py-6 sm:px-6">' +
-          '<h3 class="text-base font-semibold text-gray-900">Workflow Information</h3>' +
-          '<p class="mt-1 max-w-2xl text-sm text-gray-500">' + escapeHtml(wf.workflowType) + '</p>' +
+        '<div class="px-4 py-6 sm:px-6 flex justify-between items-start">' +
+          '<div>' +
+            '<h3 class="text-base font-semibold text-gray-900">Workflow Information</h3>' +
+            '<p class="mt-1 max-w-2xl text-sm text-gray-500">' + escapeHtml(wf.workflowType) + '</p>' +
+          '</div>' +
+          actionsHtml +
         '</div>' +
         '<div class="border-t border-gray-100">' +
           '<dl class="divide-y divide-gray-100">' + dlRows + '</dl>' +
@@ -422,6 +476,33 @@ async function viewWorkflowDetail(match) {
           timeline +
         '</div>' +
       '</div>';
+
+    // Bind action buttons
+    var btnCancel = document.getElementById('btn-cancel');
+    if (btnCancel) {
+      btnCancel.addEventListener('click', async function() {
+        if (!confirm('Cancel this workflow? The workflow can run compensation logic before stopping.')) return;
+        try {
+          await apiPost('/workflows/' + workflowId + '/cancellation', { namespace: namespace || 'default' });
+          viewWorkflowDetail(match);
+        } catch (e) {
+          alert('Cancel failed: ' + e.message);
+        }
+      });
+    }
+    var btnTerminate = document.getElementById('btn-terminate');
+    if (btnTerminate) {
+      btnTerminate.addEventListener('click', async function() {
+        var reason = prompt('Terminate reason (optional):');
+        if (reason === null) return;
+        try {
+          await apiPost('/workflows/' + workflowId + '/termination', { reason: reason, namespace: namespace || 'default' });
+          viewWorkflowDetail(match);
+        } catch (e) {
+          alert('Terminate failed: ' + e.message);
+        }
+      });
+    }
 
     // SSE for live updates on this workflow
     if (!currentEventSource) {

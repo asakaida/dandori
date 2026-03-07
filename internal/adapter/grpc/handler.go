@@ -348,6 +348,9 @@ func domainWorkflowToProto(wf *domain.WorkflowExecution) *apiv1.WorkflowExecutio
 	if wf.ContinuedAsNewID != nil {
 		pb.ContinuedAsNewId = wf.ContinuedAsNewID.String()
 	}
+	if len(wf.SearchAttributes) > 0 {
+		pb.SearchAttributes = wf.SearchAttributes
+	}
 	return pb
 }
 
@@ -416,6 +419,8 @@ func commandTypeFromProto(ct apiv1.CommandType) (domain.CommandType, error) {
 		return domain.CommandStartChildWorkflow, nil
 	case apiv1.CommandType_COMMAND_TYPE_CONTINUE_AS_NEW:
 		return domain.CommandContinueAsNew, nil
+	case apiv1.CommandType_COMMAND_TYPE_UPSERT_SEARCH_ATTRIBUTES:
+		return domain.CommandUpsertSearchAttributes, nil
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "unknown command type: %v", ct)
 	}
