@@ -60,20 +60,9 @@ go build -o dandori-server ./cmd/dandori
 
 dandori-sdk-goリポジトリにサンプルが含まれている。
 
-### ワーカーの起動（ターミナル2）
-
 ```bash
 cd dandori-sdk-go
-go run ./examples/hello/worker/
-```
-
-ワーカーがサーバーに接続し、タスクキュー `hello-queue` のポーリングを開始する。
-
-### ワークフローの開始（ターミナル3）
-
-```bash
-cd dandori-sdk-go
-go run ./examples/hello/starter/
+go run ./examples/hello
 ```
 
 出力例:
@@ -83,10 +72,20 @@ Started workflow: 550e8400-e29b-41d4-a716-446655440000
 Result: Hello, dandori!
 ```
 
-ワークフローIDはUUIDが自動生成される。
-このIDを使って以降の確認を行う。
+ワーカーの起動、ワークフローの実行、結果の取得がすべて1つのコマンドで完了する。
 
-## 5. CLIで状態を確認
+## 5. 旅行予約サンプルの実行
+
+Sagaパターンによる補償トランザクションの実装例。
+
+```bash
+cd dandori-sdk-go
+go run ./examples/travel
+```
+
+Sequential Saga（順次予約）とParallel Saga（並列予約 + 失敗時の補償）の2つが実行される。
+
+## 6. CLIで状態を確認
 
 dandori-cliでワークフローの状態を確認できる。
 `<workflow-id>` は上の出力で表示されたIDに置き換える。
@@ -98,12 +97,12 @@ go run ./cmd/dandori-cli history <workflow-id>
 go run ./cmd/dandori-cli list
 ```
 
-## 6. Web UIで確認
+## 7. Web UIで確認
 
 ブラウザで `http://localhost:8080/ui/` を開くと、
 ワークフロー一覧と詳細を確認できる。
 
-## 7. HTTP APIで確認
+## 8. HTTP APIで確認
 
 ```bash
 # ワークフロー一覧
@@ -119,7 +118,7 @@ curl -s http://localhost:8080/v1/workflows/<workflow-id>/history | jq .
 ## 処理の流れ
 
 ```text
-starter (Go)              dandori-server              worker (Go)
+example (Go)             dandori-server              worker (Go)
   |                            |                         |
   |-- ExecuteWorkflow -------->|                         |
   |   (gRPC: StartWorkflow)    |                         |
@@ -142,4 +141,4 @@ starter (Go)              dandori-server              worker (Go)
 - 独自のワークフローとアクティビティを書く → dandori-sdk-go/README.md のAPIリファレンス
 - 複数アクティビティの順次/並列実行を試す
 - Sagaパターンで補償トランザクションを実装する
-- dandori本体のREADMEにある旅行予約サンプルを参考にする
+- `examples/travel` のコードを参考にする
