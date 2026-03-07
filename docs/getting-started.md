@@ -76,22 +76,26 @@ cd dandori-sdk-go
 go run ./examples/hello/starter/
 ```
 
-出力:
+出力例:
 
 ```text
-Started workflow: hello-world-1
+Started workflow: 550e8400-e29b-41d4-a716-446655440000
 Result: Hello, dandori!
 ```
 
-ワークフローが正常に実行された。
+ワークフローIDはUUIDが自動生成される。
+このIDを使って以降の確認を行う。
 
 ## 5. CLIで状態を確認
 
 dandori-cliでワークフローの状態を確認できる。
+`<workflow-id>` は上の出力で表示されたIDに置き換える。
 
 ```bash
 cd dandori
-go run ./cmd/dandori-cli describe hello-world-1
+go run ./cmd/dandori-cli describe <workflow-id>
+go run ./cmd/dandori-cli history <workflow-id>
+go run ./cmd/dandori-cli list
 ```
 
 ## 6. Web UIで確認
@@ -105,11 +109,11 @@ go run ./cmd/dandori-cli describe hello-world-1
 # ワークフロー一覧
 curl -s http://localhost:8080/v1/workflows | jq .
 
-# ワークフロー詳細
-curl -s http://localhost:8080/v1/workflows/hello-world-1 | jq .
+# ワークフロー詳細（IDを置き換える）
+curl -s http://localhost:8080/v1/workflows/<workflow-id> | jq .
 
 # イベント履歴
-curl -s http://localhost:8080/v1/workflows/hello-world-1/history | jq .
+curl -s http://localhost:8080/v1/workflows/<workflow-id>/history | jq .
 ```
 
 ## 処理の流れ
