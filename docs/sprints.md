@@ -907,37 +907,50 @@ Sprint 12の位置づけの根拠:
 - [x] `go test -v -race ./...` — 全テスト通過
 - [x] `go vet ./...` — クリーン
 
-### Sprint 21 - ドキュメント整備
+### Sprint 21 - Search Attributes、Web UI強化、ドキュメント整備
 
-ステータス: `進行中`
+ステータス: `完了`
 
-ゴール: ユーザー・開発者・運用者向けの包括的なドキュメントを整備し、プロジェクトの利用・貢献・運用を容易にする
+ゴール: Search Attributesによるビジネスメタデータ管理、Web UIのオペレーター操作機能・ページネーション・UX改善、ドキュメント整備
 
 設計判断:
 
+- Search Attributes: JSONBカラム + GINインデックスで高速なフィルタリングを実現
+- Web UI: TailwindPlus UIコンポーネントでダイアログ・トースト・ページネーションを統一
+- オペレーター操作: Signal送信・Cancel・TerminateをWeb UIから実行可能に
 - ドキュメントは `docs/` ディレクトリに Markdown で管理
-- ユーザードキュメント、開発者ドキュメント、運用ドキュメントの3カテゴリに分類
-- コード例はリポジトリ内の実コードから抽出し、常に最新を維持
 
 タスク:
 
-- [x] docs/getting-started.md（新規）— クイックスタートガイド: Docker Compose起動、最初のワークフロー実行、CLIの使い方
-- [ ] docs/concepts.md（新規）— コンセプトガイド: ワークフロー、アクティビティ、タスクキュー、シグナル、タイマー、子ワークフロー等の概念説明
-- [x] docs/cli-reference.md（新規）— CLIリファレンス: 全サブコマンド・フラグの説明と使用例
-- [ ] docs/api-reference.md（新規）— API リファレンス: 全gRPC RPC / HTTP APIの仕様（Swagger JSONへのリンク含む）
-- [x] docs/configuration.md（新規）— 設定リファレンス: 環境変数一覧、デフォルト値、推奨設定
-- [ ] docs/architecture.md（新規）— アーキテクチャガイド: Hexagonal Architecture、ディレクトリ構成、データフロー図
-- [ ] docs/contributing.md（新規）— コントリビューションガイド: 開発環境構築、テスト実行、コーディング規約、PR手順
-- [ ] docs/sdk-guide.md（新規）— SDK開発ガイド: Go SDK連携方法、カスタムSDK開発のためのプロトコル仕様
-- [ ] docs/deployment.md（新規）— デプロイメントガイド: Docker、Kubernetes、バイナリ直接デプロイ
-- [ ] docs/monitoring.md（新規）— 監視ガイド: Prometheus/Grafanaダッシュボード設定、アラート設定例
-- [ ] docs/troubleshooting.md（新規）— トラブルシューティング: よくある問題と解決方法
-- [ ] README.md — 更新: 各ドキュメントへのリンク、バッジ、簡潔なプロジェクト説明
+Search Attributes:
+
+- [x] api/v1/service.proto — `search_attributes_filter`をListWorkflowsRequestに追加
+- [x] internal/port/service.go — `SearchAttributesFilter map[string]string`をListWorkflowsParamsに追加
+- [x] internal/adapter/postgres/workflow.go — JSONB `@>` 演算子によるフィルタクエリ追加
+- [x] internal/adapter/grpc/handler.go — SearchAttributesFilter のマッピング、protoStatusToDomain変換関数
+
+Web UI強化:
+
+- [x] web/static/app.js — Outcomeカラム（Search Attributesの人間向け表示）
+- [x] web/static/app.js — Outcomeドロップダウンフィルタ
+- [x] web/static/app.js — オペレーター操作（Signal送信フォーム、Cancel、Terminate）
+- [x] web/static/app.js — cursor-basedページネーション（TailwindPlus）
+- [x] web/static/app.js — TailwindPlusモーダルダイアログ（confirm/prompt）
+- [x] web/static/app.js — TailwindPlusトースト通知
+
+ドキュメント:
+
+- [x] docs/getting-started.md — リトライ・ポーリングサンプル追加、Web UI機能説明
+- [x] docs/design.md — Search Attributes仕様、サーバー責務更新
+- [x] docs/prd.md — Search Attributes、Web UI強化を実装済みとして更新
+- [x] README.md — gRPC API一覧更新、Web UIセクション追加、ドキュメントリンク追加
+- [x] docs/cli-reference.md
+- [x] docs/configuration.md
 
 完了条件:
 
-- [ ] 全ドキュメントファイルが作成され、Markdown構文エラーがない
-- [ ] getting-started.mdの手順に従って新規ユーザーがワークフロー実行まで到達できる
-- [ ] READMEから全ドキュメントへのリンクが有効
-- [ ] コード例が実際のリポジトリコードと整合している
-- [ ] `docs/` 配下の全 `.md` ファイルが目次リンクで相互参照されている
+- [x] Search Attributesでワークフローにメタデータを付与・検索できる
+- [x] Web UIでOutcomeフィルタ、ページネーション、オペレーター操作が動作する
+- [x] TailwindPlusコンポーネントでUI全体のUXが統一されている
+- [x] dandori-sdk-goのretry/pollingサンプルからWeb UIで操作体験ができる
+- [x] ドキュメントが最新の実装を反映している

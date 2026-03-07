@@ -136,6 +136,12 @@ func (s *WorkflowStore) List(ctx context.Context, params port.ListWorkflowsParam
 		args = append(args, params.QueueFilter)
 		argIdx++
 	}
+	if len(params.SearchAttributesFilter) > 0 {
+		filterJSON, _ := json.Marshal(params.SearchAttributesFilter)
+		query += fmt.Sprintf(" AND search_attributes @> $%d::jsonb", argIdx)
+		args = append(args, string(filterJSON))
+		argIdx++
+	}
 	if params.Cursor != nil {
 		query += fmt.Sprintf(" AND (created_at < $%d OR (created_at = $%d AND id < $%d))", argIdx, argIdx, argIdx+1)
 		args = append(args, params.Cursor.CreatedAt, params.Cursor.ID)

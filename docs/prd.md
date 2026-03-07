@@ -172,7 +172,8 @@ Phase 3:
 
 Phase 4:
 
-- Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供、ワークフロー一覧/詳細/履歴タイムライン）
+- Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供、ワークフロー一覧/詳細/履歴タイムライン、ページネーション、オペレーター操作（Signal/Cancel/Terminate））
+- Search Attributes（実装済み: JSONBカラム + GINインデックス、UpsertSearchAttributesコマンド、ListWorkflowsでの`@>`演算子によるフィルタリング、Web UIにOutcomeフィルタ）
 - イベントテーブルのパーティショニング（実装済み: workflow_eventsのハッシュパーティショニング、workflow_idベース16分割）
 - パフォーマンスベンチマーク（実装済み: ワークフロー作成/イベント追記/タスクPoll・Complete、並行ワーカースループット）
 - pprofエンドポイント（実装済み: `ENABLE_PPROF=true` で `/debug/pprof/` 有効化）
@@ -432,7 +433,8 @@ sagaパッケージはSDK側で提供する。サーバーにとっては補償A
 
 ### Phase 4: 運用性と最適化
 
-- Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供）
+- Web UI（実装済み: vanilla JS + Tailwind CSS v4 SPA、embed.FSでバイナリ組み込み、`/ui/`パスで提供、ページネーション、オペレーター操作）
+- Search Attributes（実装済み: JSONBカラム + GINインデックス、UpsertSearchAttributesコマンド、ListWorkflowsフィルタ）
 - イベントテーブルのパーティショニング（実装済み: workflow_eventsハッシュパーティショニング16分割、冪等マイグレーション）
 - パフォーマンスベンチマーク（実装済み: test/bench/、ワークフロー作成/イベント追記/タスクPoll・Complete/並行ワーカースループット）
 - pprofエンドポイント（実装済み: `ENABLE_PPROF=true` で `/debug/pprof/` 有効化）

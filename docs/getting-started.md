@@ -85,6 +85,33 @@ go run ./examples/travel
 
 Sequential Saga（順次予約）とParallel Saga（並列予約 + 失敗時の補償）の2つが実行される。
 
+## 5a. リトライとオペレーター介入サンプル
+
+リトライが上限に達した場合にオペレーターの介入を待つパターン。
+
+```bash
+cd dandori-sdk-go
+go run ./examples/retry
+```
+
+ワークフローが3回リトライに失敗し、シグナル待ち状態になる。
+Web UI（`http://localhost:8080/ui/`）を開いて、以下の操作で介入できる。
+
+- Signal送信: ワークフロー詳細画面のActionsセクションから、signal名 `human-decision`、入力 `{"action":"retry"}` または `{"action":"cancel"}` を送信
+- Cancel: ワークフローのグレースフルキャンセルを要求
+- Terminate: ワークフローを即座に強制終了
+
+## 5b. Continue-as-Newサンプル（ポーリング）
+
+外部システムをポーリングし、各ラウンドでContinue-as-Newを使い新しい実行として再起動するパターン。
+
+```bash
+cd dandori-sdk-go
+go run ./examples/polling
+```
+
+Web UIでワークフローチェーンを追跡できる。各ラウンドが「Continued As New」ステータスで連鎖した独立したワークフロー実行になる。
+
 ## 6. CLIで状態を確認
 
 dandori-cliでワークフローの状態を確認できる。
@@ -101,6 +128,12 @@ go run ./cmd/dandori-cli list
 
 ブラウザで `http://localhost:8080/ui/` を開くと、
 ワークフロー一覧と詳細を確認できる。
+
+Web UIの機能:
+
+- ワークフロー一覧: Status / Type / Queue / Outcomeでフィルタ、ページネーション対応
+- ワークフロー詳細: メタデータ、Outcome（Search Attributes）、イベントタイムライン
+- オペレーター操作: 実行中のワークフローに対してSignal送信、Cancel、Terminateが可能
 
 ## 8. HTTP APIで確認
 
@@ -141,4 +174,6 @@ example (Go)             dandori-server              worker (Go)
 - 独自のワークフローとアクティビティを書く → dandori-sdk-go/README.md のAPIリファレンス
 - 複数アクティビティの順次/並列実行を試す
 - Sagaパターンで補償トランザクションを実装する
-- `examples/travel` のコードを参考にする
+- Search Attributesでワークフローにビジネスメタデータを付与する
+- Web UIからオペレーター操作を試す（Signal送信、Cancel、Terminate）
+- `examples/` のコードを参考にする（hello, travel, retry, polling）

@@ -115,11 +115,12 @@ func (h *Handler) SignalWorkflow(ctx context.Context, req *apiv1.SignalWorkflowR
 
 func (h *Handler) ListWorkflows(ctx context.Context, req *apiv1.ListWorkflowsRequest) (*apiv1.ListWorkflowsResponse, error) {
 	params := port.ListWorkflowsParams{
-		Namespace:    resolveNamespace(req.GetNamespace()),
-		PageSize:     int(req.GetPageSize()),
-		StatusFilter: req.GetStatusFilter(),
-		TypeFilter:   req.GetTypeFilter(),
-		QueueFilter:  req.GetQueueFilter(),
+		Namespace:              resolveNamespace(req.GetNamespace()),
+		PageSize:               int(req.GetPageSize()),
+		StatusFilter:           protoStatusToDomain(req.GetStatusFilter()),
+		TypeFilter:             req.GetTypeFilter(),
+		QueueFilter:            req.GetQueueFilter(),
+		SearchAttributesFilter: req.GetSearchAttributesFilter(),
 	}
 
 	if token := req.GetNextPageToken(); token != "" {
@@ -305,6 +306,23 @@ func domainErrorToGRPC(err error) error {
 }
 
 // --- Type conversion helpers ---
+
+func protoStatusToDomain(s string) string {
+	switch s {
+	case "WORKFLOW_EXECUTION_STATUS_RUNNING":
+		return string(domain.WorkflowStatusRunning)
+	case "WORKFLOW_EXECUTION_STATUS_COMPLETED":
+		return string(domain.WorkflowStatusCompleted)
+	case "WORKFLOW_EXECUTION_STATUS_FAILED":
+		return string(domain.WorkflowStatusFailed)
+	case "WORKFLOW_EXECUTION_STATUS_TERMINATED":
+		return string(domain.WorkflowStatusTerminated)
+	case "WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW":
+		return string(domain.WorkflowStatusContinuedAsNew)
+	default:
+		return s
+	}
+}
 
 func workflowStatusToProto(s domain.WorkflowStatus) apiv1.WorkflowExecutionStatus {
 	switch s {

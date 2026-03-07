@@ -51,12 +51,13 @@ type WorkflowTaskResult struct {
 }
 
 type ListWorkflowsParams struct {
-	Namespace    string
-	PageSize     int
-	Cursor       *ListWorkflowsCursor
-	StatusFilter string
-	TypeFilter   string
-	QueueFilter  string
+	Namespace              string
+	PageSize               int
+	Cursor                 *ListWorkflowsCursor
+	StatusFilter           string
+	TypeFilter             string
+	QueueFilter            string
+	SearchAttributesFilter map[string]string
 }
 
 type ListWorkflowsCursor struct {

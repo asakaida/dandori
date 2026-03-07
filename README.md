@@ -452,6 +452,14 @@ go build ./cmd/dandori
 
 マイグレーションはサーバー起動時に自動実行される。
 
+## Web UI
+
+`http://localhost:8080/ui/` でワークフローの管理画面を提供する。
+
+- ワークフロー一覧: Status / Type / Queue / Outcomeでフィルタ、cursor-basedページネーション
+- ワークフロー詳細: メタデータ、Outcome（Search Attributes）、イベント履歴タイムライン
+- オペレーター操作: 実行中ワークフローへのSignal送信、Cancel、Terminate
+
 ## gRPC API
 
 | カテゴリ | RPC | 説明 |
@@ -459,13 +467,19 @@ go build ./cmd/dandori
 | Client | `StartWorkflow` | ワークフロー開始（冪等） |
 | Client | `DescribeWorkflow` | ワークフロー状態取得 |
 | Client | `GetWorkflowHistory` | イベント履歴取得 |
+| Client | `ListWorkflows` | ワークフロー一覧（フィルタ・ページネーション対応） |
+| Client | `SignalWorkflow` | ワークフローにシグナル送信 |
+| Client | `CancelWorkflow` | ワークフローキャンセル要求 |
 | Client | `TerminateWorkflow` | ワークフロー強制終了 |
+| Client | `QueryWorkflow` | ワークフロー状態問い合わせ |
 | Worker | `PollWorkflowTask` | Workflow Taskの取得 |
 | Worker | `CompleteWorkflowTask` | Workflow Task完了（コマンド返却） |
 | Worker | `FailWorkflowTask` | Workflow Task失敗報告 |
 | Worker | `PollActivityTask` | Activity Taskの取得 |
 | Worker | `CompleteActivityTask` | Activity Task完了（結果返却） |
 | Worker | `FailActivityTask` | Activity Task失敗報告 |
+| Worker | `RecordActivityHeartbeat` | Activityハートビート報告 |
+| Worker | `RespondQueryTask` | Query結果返却 |
 
 gRPC reflectionが有効なため、grpcurlで直接操作可能:
 
@@ -499,16 +513,19 @@ go test -v -race ./test/e2e/...                  # E2Eテスト
 
 ## ドキュメント
 
+- [クイックスタートガイド](docs/getting-started.md) - セットアップからサンプル実行まで
 - [設計書](docs/design.md) - アーキテクチャ、データモデル、API仕様の詳細
 - [プロダクト要求仕様書](docs/prd.md) - コアコンセプト、機能要件、フェーズ計画
+- [CLI リファレンス](docs/cli-reference.md) - dandori-cliコマンド一覧
+- [設定リファレンス](docs/configuration.md) - 環境変数と設定項目
 - [スプリント管理](docs/sprints.md) - Sprint 1-21の詳細タスクと進捗
 
 ## 開発状況
 
-- **Phase 1 (MVP)**: 完了 - Sprint 1-5 + E2Eテスト（104テスト通過）
-- **Phase 2 (信頼性と機能拡張)**: Sprint 6-11（Timer, Signal, Cancel, Heartbeat, LISTEN/NOTIFY, CLI）
-- **Phase 3 (高度な機能)**: Sprint 12-17（Saga, Child Workflow, SideEffect, Cron, HTTP API, Observability）
-- **Phase 4 (運用性と最適化)**: Sprint 18-21（Namespace, Web UI, パフォーマンス, ドキュメント）
+- Phase 1 (MVP): 完了 - Sprint 1-5 + E2Eテスト
+- Phase 2 (信頼性と機能拡張): Sprint 6-11（Timer, Signal, Cancel, Heartbeat, LISTEN/NOTIFY, CLI）
+- Phase 3 (高度な機能): Sprint 12-17（Saga, Child Workflow, SideEffect, Cron, HTTP API, Observability）
+- Phase 4 (運用性と最適化): Sprint 18-21（Namespace, Web UI, Search Attributes, パフォーマンス, ドキュメント）
 
 ## ライセンス
 

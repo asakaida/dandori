@@ -240,6 +240,7 @@ message ListWorkflowsRequest {
   string type_filter = 4;
   string queue_filter = 5;
   string namespace = 6;
+  map<string, string> search_attributes_filter = 7;
 }
 
 message ListWorkflowsResponse {

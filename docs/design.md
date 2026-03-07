@@ -37,7 +37,8 @@ dandori-worker (Go SDK側で実装, 1..N instances)
 12. HTTP API提供（grpc-gatewayによるRESTful HTTPエンドポイント、OpenAPI仕様の提供）
 13. Observability提供（OpenTelemetryトレーシング、Prometheusメトリクス、gRPC/HTTPヘルスチェック、pprofプロファイリング）
 14. Namespace管理（マルチテナント分離、デフォルトnamespace "default"、全エンティティにnamespaceを付与）
-15. Web UI提供（embed.FSでバイナリに組み込んだSPAを`/ui/`パスで配信、ワークフロー一覧・詳細・履歴の閲覧）
+15. Web UI提供（embed.FSでバイナリに組み込んだSPAを`/ui/`パスで配信、ワークフロー一覧・詳細・履歴の閲覧、ページネーション、Search Attributesフィルタ、オペレーター操作（Signal/Cancel/Terminate））
+16. Search Attributes管理（JSONBカラム + GINインデックス、UpsertSearchAttributesコマンド処理、ListWorkflowsでの`@>`フィルタ）
 16. pprofプロファイリング（`ENABLE_PPROF=true`で`/debug/pprof/`エンドポイントを有効化）
 
 サーバーは「次に何をすべきか」を知らない。イベントが発生するたびにWorkflow Taskを生成し、ワーカーに判断を委ねる。
@@ -2127,7 +2128,22 @@ Activityスケジュール時にschedule_to_start_timeout_atを設定する。PE
 
 ### ListWorkflows API
 
-cursor-based paginationによるワークフロー一覧取得。カーソルは`created_at` + `id`の組み合わせをbase64 JSON化したトークン。フィルタ（status, workflow_type, task_queue）は動的WHERE句で構築。PageSizeデフォルト20、上限100。Engine層でPageSize+1件取得し、超過分で次ページ有無を判定する。DBマイグレーション不要（既存テーブルをそのまま使用）。
+cursor-based paginationによるワークフロー一覧取得。カーソルは`created_at` + `id`の組み合わせをbase64 JSON化したトークン。フィルタ（status, workflow_type, task_queue, search_attributes）は動的WHERE句で構築。PageSizeデフォルト20、上限100。Engine層でPageSize+1件取得し、超過分で次ページ有無を判定する。
+
+### Search Attributes
+
+ワークフローに任意のキー-バリューペアをビジネスメタデータとして付与する機能。`workflow_executions`テーブルにJSONB型の`search_attributes`カラムを追加し、GINインデックスで高速な検索を実現する。
+
+データモデル:
+
+- `search_attributes JSONB DEFAULT '{}'::jsonb`: ワークフロー実行テーブルのカラム
+- `idx_workflow_executions_search_attributes`: GINインデックス
+
+コマンド: `UpsertSearchAttributes` - ワーカーがワークフロー実行中にSearch Attributesを追加・更新する。既存のattributesにマージされる（`search_attributes || $1::jsonb`）。
+
+フィルタリング: ListWorkflows APIの`search_attributes_filter`パラメータで、JSONB `@>` 演算子による包含検索を行う。例: `{"outcome":"payment_success"}` を指定すると、そのキー-バリューを含むワークフローのみが返る。
+
+Web UIでは「Outcome」カラムとしてSearch Attributesのうち`outcome`キーの値を人間に分かりやすいラベルで表示する。Outcomeドロップダウンでフィルタリングも可能。
 
 ### CLIツール（dandori-cli）
 

@@ -64,22 +64,21 @@ function statusBadge(status) {
 
 // --- Search Attributes ---
 
-var SEARCH_ATTR_STYLES = {
-  waiting_for_human:     { bg: 'bg-amber-100',  text: 'text-amber-800' },
-  retrying:              { bg: 'bg-blue-100',   text: 'text-blue-800' },
-  paid:                  { bg: 'bg-green-100',  text: 'text-green-800' },
-  cancelled_by_operator: { bg: 'bg-orange-100', text: 'text-orange-800' },
+var OUTCOME_CONFIG = {
+  waiting_for_human:     { label: 'Waiting for Operator', dot: 'fill-amber-500',  bg: 'bg-amber-100',  text: 'text-amber-800' },
+  retrying:              { label: 'Retrying',             dot: 'fill-blue-500',   bg: 'bg-blue-100',   text: 'text-blue-800' },
+  paid:                  { label: 'Paid',                 dot: 'fill-green-500',  bg: 'bg-green-100',  text: 'text-green-800' },
+  cancelled_by_operator: { label: 'Cancelled by Operator', dot: 'fill-orange-500', bg: 'bg-orange-100', text: 'text-orange-800' },
 };
 
-function searchAttrBadges(attrs) {
-  if (!attrs || Object.keys(attrs).length === 0) return '';
-  return Object.keys(attrs).map(function(key) {
-    var val = attrs[key];
-    var style = SEARCH_ATTR_STYLES[val] || { bg: 'bg-gray-100', text: 'text-gray-700' };
-    return '<span class="inline-flex items-center rounded-full ' + style.bg + ' px-2 py-0.5 text-xs font-medium ' + style.text + '">' +
-      escapeHtml(key) + ': ' + escapeHtml(val) +
-    '</span>';
-  }).join(' ');
+function outcomeBadge(attrs) {
+  if (!attrs || !attrs.outcome) return '';
+  var val = attrs.outcome;
+  var c = OUTCOME_CONFIG[val] || { label: val, dot: 'fill-gray-400', bg: 'bg-gray-100', text: 'text-gray-700' };
+  return '<span class="inline-flex items-center gap-x-1.5 rounded-full ' + c.bg + ' px-2 py-1 text-xs font-medium ' + c.text + '">' +
+    '<svg viewBox="0 0 6 6" aria-hidden="true" class="size-1.5 ' + c.dot + '"><circle r="3" cx="3" cy="3" /></svg>' +
+    c.label +
+  '</span>';
 }
 
 // --- Event Timeline ---
@@ -143,6 +142,122 @@ async function apiPost(path, body) {
     throw new Error('API ' + res.status + ': ' + text);
   }
   return res.json();
+}
+
+// --- Toast Notification ---
+
+var TOAST_ICONS = {
+  success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-6 text-green-400"><path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke-linecap="round" stroke-linejoin="round" /></svg>',
+  error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-6 text-red-400"><path d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke-linecap="round" stroke-linejoin="round" /></svg>',
+  warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-6 text-yellow-400"><path d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" stroke-linecap="round" stroke-linejoin="round" /></svg>',
+};
+
+function showToast(message, type) {
+  var container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.setAttribute('aria-live', 'assertive');
+    container.className = 'pointer-events-none fixed inset-0 z-50 flex items-end px-4 py-6 sm:items-start sm:p-6';
+    container.innerHTML = '<div class="flex w-full flex-col items-center space-y-4 sm:items-end"></div>';
+    document.body.appendChild(container);
+  }
+  var list = container.firstElementChild;
+  var icon = TOAST_ICONS[type] || TOAST_ICONS.success;
+  var toast = document.createElement('div');
+  toast.className = 'pointer-events-auto w-full max-w-sm rounded-lg bg-white shadow-lg ring-1 ring-black/5 transition-all duration-300 ease-out';
+  toast.innerHTML =
+    '<div class="p-4">' +
+      '<div class="flex items-start">' +
+        '<div class="shrink-0">' + icon + '</div>' +
+        '<div class="ml-3 w-0 flex-1 pt-0.5">' +
+          '<p class="text-sm font-medium text-gray-900">' + escapeHtml(message) + '</p>' +
+        '</div>' +
+        '<div class="ml-4 flex shrink-0">' +
+          '<button type="button" class="toast-close inline-flex rounded-md text-gray-400 hover:text-gray-500">' +
+            '<span class="sr-only">Close</span>' +
+            '<svg viewBox="0 0 20 20" fill="currentColor" class="size-5"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  list.appendChild(toast);
+  toast.querySelector('.toast-close').addEventListener('click', function() {
+    toast.style.opacity = '0';
+    setTimeout(function() { toast.remove(); }, 300);
+  });
+  setTimeout(function() {
+    toast.style.opacity = '0';
+    setTimeout(function() { toast.remove(); }, 300);
+  }, 4000);
+}
+
+var DIALOG_ICONS = {
+  warning: '<div class="mx-auto flex size-12 shrink-0 items-center justify-center rounded-full bg-yellow-100 sm:mx-0 sm:size-10">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-6 text-yellow-600"><path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" stroke-linecap="round" stroke-linejoin="round" /></svg></div>',
+  danger: '<div class="mx-auto flex size-12 shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:size-10">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-6 text-red-600"><path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" stroke-linecap="round" stroke-linejoin="round" /></svg></div>',
+};
+
+function showConfirmDialog(title, message, confirmLabel, confirmClass, onConfirm) {
+  var overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-50 overflow-y-auto';
+  var iconType = confirmClass && confirmClass.includes('red') ? 'danger' : 'warning';
+  overlay.innerHTML =
+    '<div class="fixed inset-0 bg-gray-500/75 transition-opacity"></div>' +
+    '<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">' +
+      '<div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">' +
+        '<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">' +
+          '<div class="sm:flex sm:items-start">' +
+            DIALOG_ICONS[iconType] +
+            '<div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">' +
+              '<h3 class="text-base font-semibold text-gray-900">' + escapeHtml(title) + '</h3>' +
+              '<div class="mt-2"><p class="text-sm text-gray-500">' + escapeHtml(message) + '</p></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">' +
+          '<button type="button" id="dlg-confirm" class="inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-xs sm:ml-3 sm:w-auto ' + (confirmClass || 'bg-indigo-600 hover:bg-indigo-500') + '">' + escapeHtml(confirmLabel) + '</button>' +
+          '<button type="button" id="dlg-cancel" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('dlg-cancel').addEventListener('click', function() { overlay.remove(); });
+  document.getElementById('dlg-confirm').addEventListener('click', function() { overlay.remove(); onConfirm(); });
+}
+
+function showPromptDialog(title, message, placeholder, confirmLabel, confirmClass, onConfirm) {
+  var overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-50 overflow-y-auto';
+  var iconType = confirmClass && confirmClass.includes('red') ? 'danger' : 'warning';
+  overlay.innerHTML =
+    '<div class="fixed inset-0 bg-gray-500/75 transition-opacity"></div>' +
+    '<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">' +
+      '<div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">' +
+        '<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">' +
+          '<div class="sm:flex sm:items-start">' +
+            DIALOG_ICONS[iconType] +
+            '<div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">' +
+              '<h3 class="text-base font-semibold text-gray-900">' + escapeHtml(title) + '</h3>' +
+              '<div class="mt-2"><p class="text-sm text-gray-500">' + escapeHtml(message) + '</p></div>' +
+              '<input type="text" id="dlg-input" placeholder="' + escapeHtml(placeholder || '') + '" class="mt-3 block w-full rounded-md border-0 py-1.5 text-sm text-gray-900 shadow-xs ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600">' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">' +
+          '<button type="button" id="dlg-confirm" class="inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-xs sm:ml-3 sm:w-auto ' + (confirmClass || 'bg-indigo-600 hover:bg-indigo-500') + '">' + escapeHtml(confirmLabel) + '</button>' +
+          '<button type="button" id="dlg-cancel" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('dlg-cancel').addEventListener('click', function() { overlay.remove(); });
+  document.getElementById('dlg-confirm').addEventListener('click', function() {
+    var val = document.getElementById('dlg-input').value;
+    overlay.remove();
+    onConfirm(val);
+  });
 }
 
 // --- Router ---
@@ -211,7 +326,7 @@ function buildWorkflowRows(workflows) {
   }
   return workflows.map(function(wf) {
     var ns = wf.namespace && wf.namespace !== 'default' ? '?namespace=' + encodeURIComponent(wf.namespace) : '';
-    var attrHtml = searchAttrBadges(wf.searchAttributes);
+    var attrHtml = outcomeBadge(wf.searchAttributes);
     return '<tr>' +
       '<td class="border-b border-gray-200 py-4 pr-3 pl-4 text-sm whitespace-nowrap sm:pl-6 lg:pl-8"><span class="font-mono text-xs text-gray-900">' + escapeHtml(wf.id) + '</span></td>' +
       '<td class="hidden border-b border-gray-200 px-3 py-4 text-sm whitespace-nowrap text-gray-500 sm:table-cell">' + escapeHtml(wf.workflowType) + '</td>' +
@@ -234,14 +349,21 @@ async function viewWorkflowList() {
     var params = new URLSearchParams(location.search);
     var namespace = params.get('namespace') || '';
     var statusFilter = params.get('status') || '';
+    var outcomeFilter = params.get('outcome') || '';
+
+    var pageToken = params.get('page') || '';
+    var PAGE_SIZE = 15;
 
     var query = new URLSearchParams();
-    query.set('page_size', '100');
+    query.set('page_size', String(PAGE_SIZE));
     if (namespace) query.set('namespace', namespace);
     if (statusFilter) query.set('status_filter', statusFilter);
+    if (outcomeFilter) query.set('search_attributes_filter[outcome]', outcomeFilter);
+    if (pageToken) query.set('next_page_token', pageToken);
 
     var data = await api('/workflows?' + query.toString());
     var workflows = data.workflows || [];
+    var nextPageToken = data.nextPageToken || '';
 
     var rows = buildWorkflowRows(workflows);
 
@@ -270,6 +392,16 @@ async function viewWorkflowList() {
               statusOptions +
             '</select>' +
           '</div>' +
+          '<div>' +
+            '<label for="oc" class="block text-sm font-medium text-gray-700">Outcome</label>' +
+            '<select id="oc" class="mt-1 block w-52 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">' +
+              '<option value="">All</option>' +
+              Object.keys(OUTCOME_CONFIG).map(function(val) {
+                var selected = outcomeFilter === val ? ' selected' : '';
+                return '<option value="' + val + '"' + selected + '>' + OUTCOME_CONFIG[val].label + '</option>';
+              }).join('') +
+            '</select>' +
+          '</div>' +
           '<button id="btn-filter" class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Filter</button>' +
         '</div>' +
         '<div class="mt-8 flow-root">' +
@@ -281,7 +413,7 @@ async function viewWorkflowList() {
                     '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm sm:pl-6 lg:pl-8">Workflow ID</th>' +
                     '<th scope="col" class="sticky top-0 z-10 hidden border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm sm:table-cell">Type</th>' +
                     '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm">Status</th>' +
-                    '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm">Attributes</th>' +
+                    '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm">Outcome</th>' +
                     '<th scope="col" class="sticky top-0 z-10 hidden border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm lg:table-cell">Task Queue</th>' +
                     '<th scope="col" class="sticky top-0 z-10 hidden border-b border-gray-300 bg-white/75 px-3 py-3.5 text-left text-sm font-semibold text-gray-900 backdrop-blur-sm sm:table-cell">Created</th>' +
                     '<th scope="col" class="sticky top-0 z-10 border-b border-gray-300 bg-white/75 py-3.5 pr-4 pl-3 backdrop-blur-sm sm:pr-6 lg:pr-8"><span class="sr-only">Detail</span></th>' +
@@ -292,6 +424,19 @@ async function viewWorkflowList() {
             '</div>' +
           '</div>' +
         '</div>' +
+        '<nav aria-label="Pagination" class="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">' +
+          '<div class="hidden sm:block">' +
+            '<p class="text-sm text-gray-700">Showing <span class="font-medium">' + (workflows.length === 0 ? '0' : String((pageToken ? '...' : '1'))) + '</span> to <span class="font-medium">' + workflows.length + '</span> results</p>' +
+          '</div>' +
+          '<div class="flex flex-1 justify-between sm:justify-end">' +
+            (pageToken
+              ? '<button id="btn-prev" class="relative inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Previous</button>'
+              : '') +
+            (nextPageToken
+              ? '<button id="btn-next" class="relative ml-3 inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Next</button>'
+              : '') +
+          '</div>' +
+        '</nav>' +
       '</div>';
 
     var btnFilter = document.getElementById('btn-filter');
@@ -300,10 +445,27 @@ async function viewWorkflowList() {
         var p = new URLSearchParams();
         var nsVal = document.getElementById('ns').value.trim();
         var stVal = document.getElementById('st').value;
+        var ocVal = document.getElementById('oc').value;
         if (nsVal) p.set('namespace', nsVal);
         if (stVal) p.set('status', stVal);
+        if (ocVal) p.set('outcome', ocVal);
         var qs = p.toString();
         router.navigate('/' + (qs ? '?' + qs : ''));
+      });
+    }
+
+    var btnNext = document.getElementById('btn-next');
+    if (btnNext) {
+      btnNext.addEventListener('click', function() {
+        var p = new URLSearchParams(location.search);
+        p.set('page', nextPageToken);
+        router.navigate('/?' + p.toString());
+      });
+    }
+    var btnPrev = document.getElementById('btn-prev');
+    if (btnPrev) {
+      btnPrev.addEventListener('click', function() {
+        history.back();
       });
     }
 
@@ -385,8 +547,8 @@ async function viewWorkflowDetail(match) {
     if (wf.errorMessage) {
       dlRows += dlRow('Error', '<span class="text-red-700">' + escapeHtml(wf.errorMessage) + '</span>');
     }
-    if (wf.searchAttributes && Object.keys(wf.searchAttributes).length > 0) {
-      dlRows += dlRow('Search Attributes', searchAttrBadges(wf.searchAttributes));
+    if (wf.searchAttributes && wf.searchAttributes.outcome) {
+      dlRows += dlRow('Outcome', outcomeBadge(wf.searchAttributes));
     }
     if (wf.parentWorkflowId) {
       dlRows += dlRow('Parent Workflow', '<a href="/workflows/' + wf.parentWorkflowId + nsQuery + '" data-link class="text-indigo-600 hover:text-indigo-900 font-mono">' + escapeHtml(wf.parentWorkflowId) + '</a>');
@@ -409,24 +571,41 @@ async function viewWorkflowDetail(match) {
     var actionsHtml = '';
     if (isRunning) {
       actionsHtml =
-        '<div class="flex gap-3">' +
-          '<button id="btn-cancel" class="rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-400">Cancel</button>' +
-          '<button id="btn-terminate" class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Terminate</button>' +
+        '<div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">' +
+          '<h4 class="text-sm font-semibold text-gray-900 mb-3">Actions</h4>' +
+          '<div class="space-y-3">' +
+            '<div>' +
+              '<p class="text-xs text-gray-500 mb-2">Send a signal to the workflow</p>' +
+              '<div class="flex gap-2 items-end">' +
+                '<div>' +
+                  '<label for="sig-name" class="block text-xs text-gray-600">Signal Name</label>' +
+                  '<input type="text" id="sig-name" placeholder="human-decision" class="mt-0.5 block w-40 rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">' +
+                '</div>' +
+                '<div class="flex-1">' +
+                  '<label for="sig-input" class="block text-xs text-gray-600">Input (JSON)</label>' +
+                  '<input type="text" id="sig-input" placeholder=\'{"action":"retry"}\' class="mt-0.5 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm font-mono shadow-sm focus:border-indigo-500 focus:ring-indigo-500">' +
+                '</div>' +
+                '<button id="btn-signal" class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Send Signal</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="flex gap-3 border-t border-gray-200 pt-3">' +
+              '<button id="btn-cancel" class="rounded-md bg-yellow-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-yellow-400">Cancel Workflow</button>' +
+              '<button id="btn-terminate" class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Terminate Workflow</button>' +
+            '</div>' +
+          '</div>' +
         '</div>';
     }
 
     var descriptionList =
       '<div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">' +
-        '<div class="px-4 py-6 sm:px-6 flex justify-between items-start">' +
-          '<div>' +
-            '<h3 class="text-base font-semibold text-gray-900">Workflow Information</h3>' +
-            '<p class="mt-1 max-w-2xl text-sm text-gray-500">' + escapeHtml(wf.workflowType) + '</p>' +
-          '</div>' +
-          actionsHtml +
+        '<div class="px-4 py-6 sm:px-6">' +
+          '<h3 class="text-base font-semibold text-gray-900">Workflow Information</h3>' +
+          '<p class="mt-1 max-w-2xl text-sm text-gray-500">' + escapeHtml(wf.workflowType) + '</p>' +
         '</div>' +
         '<div class="border-t border-gray-100">' +
           '<dl class="divide-y divide-gray-100">' + dlRows + '</dl>' +
         '</div>' +
+        actionsHtml +
       '</div>';
 
     // Event timeline
@@ -478,29 +657,65 @@ async function viewWorkflowDetail(match) {
       '</div>';
 
     // Bind action buttons
-    var btnCancel = document.getElementById('btn-cancel');
-    if (btnCancel) {
-      btnCancel.addEventListener('click', async function() {
-        if (!confirm('Cancel this workflow? The workflow can run compensation logic before stopping.')) return;
+    var btnSignal = document.getElementById('btn-signal');
+    if (btnSignal) {
+      btnSignal.addEventListener('click', async function() {
+        var sigName = document.getElementById('sig-name').value.trim();
+        if (!sigName) { showToast('Signal name is required', 'warning'); return; }
+        var sigInputRaw = document.getElementById('sig-input').value.trim() || '{}';
+        try { JSON.parse(sigInputRaw); } catch (e) { showToast('Invalid JSON: ' + e.message, 'error'); return; }
         try {
-          await apiPost('/workflows/' + workflowId + '/cancellation', { namespace: namespace || 'default' });
+          await apiPost('/workflows/' + workflowId + '/signals', {
+            signalName: sigName,
+            input: btoa(sigInputRaw),
+            namespace: namespace || 'default',
+          });
+          showToast('Signal "' + sigName + '" sent successfully', 'success');
           viewWorkflowDetail(match);
         } catch (e) {
-          alert('Cancel failed: ' + e.message);
+          showToast('Signal failed: ' + e.message, 'error');
         }
+      });
+    }
+    var btnCancel = document.getElementById('btn-cancel');
+    if (btnCancel) {
+      btnCancel.addEventListener('click', function() {
+        showConfirmDialog(
+          'Cancel Workflow',
+          'The workflow will receive a cancellation request and can run compensation logic before stopping.',
+          'Cancel Workflow',
+          'bg-yellow-500 hover:bg-yellow-400',
+          async function() {
+            try {
+              await apiPost('/workflows/' + workflowId + '/cancellation', { namespace: namespace || 'default' });
+              showToast('Cancellation request sent', 'success');
+              viewWorkflowDetail(match);
+            } catch (e) {
+              showToast('Cancel failed: ' + e.message, 'error');
+            }
+          }
+        );
       });
     }
     var btnTerminate = document.getElementById('btn-terminate');
     if (btnTerminate) {
-      btnTerminate.addEventListener('click', async function() {
-        var reason = prompt('Terminate reason (optional):');
-        if (reason === null) return;
-        try {
-          await apiPost('/workflows/' + workflowId + '/termination', { reason: reason, namespace: namespace || 'default' });
-          viewWorkflowDetail(match);
-        } catch (e) {
-          alert('Terminate failed: ' + e.message);
-        }
+      btnTerminate.addEventListener('click', function() {
+        showPromptDialog(
+          'Terminate Workflow',
+          'This will immediately stop the workflow. This action cannot be undone.',
+          'Reason (optional)',
+          'Terminate',
+          'bg-red-600 hover:bg-red-500',
+          async function(reason) {
+            try {
+              await apiPost('/workflows/' + workflowId + '/termination', { reason: reason, namespace: namespace || 'default' });
+              showToast('Workflow terminated', 'success');
+              viewWorkflowDetail(match);
+            } catch (e) {
+              showToast('Terminate failed: ' + e.message, 'error');
+            }
+          }
+        );
       });
     }
 
